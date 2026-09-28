@@ -165,10 +165,11 @@ def policy_overview(state: str | None = None, db: Session = Depends(get_db), _=D
         trend = round((latest / four_wk - 1) * 100, 1) if latest and four_wk else None
         fc = forecast_block(db, m.id)
         typ = typical_daily_arrivals(db, m.id)
-        last7 = db.scalar(select(func.sum(Arrival.tonnes)).where(
-            Arrival.mandi_id == m.id, Arrival.date > today - timedelta(days=7),
-            (Arrival.source == "synthetic") if typ["is_synthetic"] else (Arrival.source != "synthetic")))
-        anomaly = round((last7 / 7) / typ["tons"] - 1, 2) if last7 and typ["tons"] else None
+        # last 7 complete days (today's arrivals are still coming in), mean over reporting days
+        tot, ndays = db.execute(select(func.sum(Arrival.tonnes), func.count(func.distinct(Arrival.date))).where(
+            Arrival.mandi_id == m.id, Arrival.date >= today - timedelta(days=7), Arrival.date < today,
+            (Arrival.source == "synthetic") if typ["is_synthetic"] else (Arrival.source != "synthetic"))).one()
+        anomaly = round((tot / ndays) / typ["tons"] - 1, 2) if tot and ndays and typ["tons"] else None
         it = moving.get(m.id, {}).get("tons_in_transit", 0.0)
         row = {"mandi_id": m.id, "mandi": m.name, "district": m.district, "state": m.state, "lat": m.lat, "lon": m.lon,
                "latest_price": round(latest) if latest else None, "price_date": rows[-1][0] if rows else None,
@@ -195,7 +196,7 @@ def policy_overview(state: str | None = None, db: Session = Depends(get_db), _=D
         districts.append(d)
     districts.sort(key=lambda d: -(d["max_spike_prob"] or 0))
     return {"mandis": mandis, "districts": districts,
-            "notes": ["Arrival anomaly = last-7-day mean vs 28-day typical (-0.3 = 30% below normal).",
+            "notes": ["Arrival anomaly = mean daily arrivals over the last 7 complete days vs the 28-day typical (-0.3 = 30% below normal).",
                       "Tons in transit counts tracked vehicles only.", "Scenario simulator arrives in V3."]}
 
 
