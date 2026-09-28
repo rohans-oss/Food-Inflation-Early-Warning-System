@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14532d">
+  <title>AgriPulse Driver</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header>
+    <strong>AgriPulse Driver</strong>
+    <span id="net" class="pill">online</span>
+    <button id="logout" class="link" hidden>Log out</button>
+  </header>
+
+  <!-- tracking indicator: visible whenever GPS is being shared (privacy rule) -->
+  <div id="trackingBar" class="tracking" hidden>
+    <span class="dot"></span> TRACKING ON — location shared for trip <b id="trackingTrip"></b>
+    <span id="queue" class="queue"></span>
+  </div>
+
+  <main>
+    <section id="loginView" hidden>
+      <h1>Sign in</h1>
+      <form id="loginForm">
+        <label>Email <input name="email" type="email" required autocomplete="username"></label>
+        <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+        <button type="submit">Sign in</button>
+        <p id="loginErr" class="err"></p>
+      </form>
+    </section>
+
+    <section id="listView" hidden>
+      <h1>My trips</h1>
+      <div id="trips"></div>
+      <button id="refresh" class="secondary">Refresh</button>
+    </section>
+
+    <section id="tripView" hidden>
+      <button id="back" class="link">← All trips</button>
+      <h1 id="tTitle"></h1>
+      <div id="tMeta" class="meta"></div>
+
+      <div id="consentBox" class="card" hidden>
+        <p><b>Location sharing</b><br>
+        While this trip is in progress your phone's location is shared with the farmer, the FPO, your fleet owner
+        and the destination mandi. Sharing stops automatically when you end the trip. Nothing is tracked outside a trip.</p>
+        <label class="row"><input type="checkbox" id="consent"> I agree to share my location for this trip only</label>
+      </div>
+
+      <div class="actions" id="actions"></div>
+
+      <div id="scanBox" class="card" hidden>
+        <p><b>Pickup QR</b> — scan the code on the farmer's / FPO's screen.</p>
+        <video id="video" playsinline muted hidden></video>
+        <div class="row">
+          <button id="scanBtn">Open camera</button>
+          <input id="manualToken" placeholder="…or type the code">
+          <button id="manualBtn" class="secondary">Submit</button>
+        </div>
+        <p id="scanMsg" class="meta"></p>
+      </div>
+
+      <div id="deliveryBox" class="card" hidden>
+        <p><b>Delivery QR</b> — show this to the trader at the mandi gate.</p>
+        <div id="qr"></div>
+        <p class="meta mono" id="qrText"></p>
+      </div>
+
+      <div class="card">
+        <div class="row between"><span>Remaining</span><b id="tRemaining">–</b></div>
+        <div class="row between"><span>ETA</span><b id="tEta">–</b></div>
+        <div class="row between"><span>Last fix</span><b id="tFix">–</b></div>
+        <div class="row between"><span>Points queued offline</span><b id="tQueued">0</b></div>
+      </div>
+      <p class="meta">Keep this screen open during the trip. Browsers pause location in the background; the app holds a
+        screen wake lock while tracking and flushes anything recorded offline when the network returns.</p>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -219,3 +219,37 @@ def patch_mandi(mandi_id: int, body: MandiPatch, db: Session = Depends(get_db), 
             setattr(m, field, v)
     db.commit()
     return {"id": m.id, "lat": m.lat, "lon": m.lon, "coords_verified": m.coords_verified}
+
+
+# ---------------------------------------------------------------- simulator (synthetic trips)
+
+
+class SimIn(BaseModel):
+    trips: int = 8
+    speedup: float = 1.0
+
+
+@router.post("/simulator/start")
+async def sim_start(body: SimIn, _=Depends(admin_only)):
+    from tracking import simulator
+
+    if not 1 <= body.trips <= 100 or not 0.5 <= body.speedup <= 120:
+        raise HTTPException(400, "trips 1-100, speedup 0.5-120")
+    try:
+        return simulator.start(body.trips, body.speedup)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc))
+
+
+@router.post("/simulator/stop")
+def sim_stop(db: Session = Depends(get_db), _=Depends(admin_only)):
+    from tracking import simulator
+
+    return simulator.stop(db)
+
+
+@router.get("/simulator")
+def sim_status(_=Depends(admin_only)):
+    from tracking import simulator
+
+    return simulator.state.status()

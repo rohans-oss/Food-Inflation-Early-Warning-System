@@ -102,10 +102,14 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
         org_id=org_id,
         mandi_id=body.mandi_id if body.role == "trader" else None,
         preferred_lang=body.preferred_lang,
+        # A driver joining an existing fleet waits for the fleet owner's approval.
+        is_active=not (body.role == "driver" and body.org_id),
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    if not user.is_active:
+        raise HTTPException(202, "Registered. Your fleet owner must approve you before you can log in.")
     return TokenOut(access_token=create_access_token(user.id, user.role, user.org_id), user=user_out(user))
 
 

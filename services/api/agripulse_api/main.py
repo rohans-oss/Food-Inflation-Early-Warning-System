@@ -1,16 +1,21 @@
 """AgriPulse API entrypoint: `uvicorn agripulse_api.main:app --reload`."""
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import admin, auth, mandis, prices
+from tracking.hub import hub
+
+from .routers import admin, auth, lots, mandis, prices, roles, trips
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    await hub.start()
     scheduler = None
     if settings.enable_scheduler:
         from ingest.scheduler import start_scheduler
@@ -19,6 +24,7 @@ async def lifespan(app: FastAPI):
     yield
     if scheduler:
         scheduler.shutdown(wait=False)
+    await hub.stop()
 
 
 app = FastAPI(title="AgriPulse API", version="1.0.0", lifespan=lifespan)
@@ -30,8 +36,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, admin, mandis, prices):
+for r in (auth, admin, mandis, prices, lots, trips, roles):
     app.include_router(r.router)
+
+
+# Driver PWA served same-origin with the API at /driver/ (works on a phone over one URL).
+_pwa = Path(__file__).resolve().parents[3] / "apps" / "driver-pwa"
+if _pwa.is_dir():
+    app.mount("/driver", StaticFiles(directory=_pwa, html=True), name="driver-pwa")
 
 
 @app.get("/health")

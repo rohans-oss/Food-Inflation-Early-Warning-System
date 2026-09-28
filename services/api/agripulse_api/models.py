@@ -202,11 +202,13 @@ class Shipment(Base):
     org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)  # FPO
     mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"))
     status: Mapped[str] = mapped_column(String(16), default="planned")  # planned|booked|in_transit|delivered
+    fleet_org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)  # booked with
+    booked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
-    lots: Mapped[list["Lot"]] = relationship(back_populates="shipment")
+    lots: Mapped[list["Lot"]] = relationship(back_populates="shipment", foreign_keys="Lot.shipment_id")
     mandi: Mapped[Mandi] = relationship()
 
 
@@ -224,7 +226,7 @@ class Lot(Base):
     pickup_lat: Mapped[float] = mapped_column(Float)
     pickup_lon: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(16), default="registered")
-    # registered|grouped|picked_up|in_transit|delivered
+    # registered|grouped|in_transit|at_mandi|delivered
     delivered_weight_kg: Mapped[float | None] = mapped_column(Float)
     sale_price_per_quintal: Mapped[float | None] = mapped_column(Float)
     payout_status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|paid
