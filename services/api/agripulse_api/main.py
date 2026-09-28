@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import admin, auth, mandis
+from .routers import admin, auth, mandis, prices
 
 
 @asynccontextmanager
@@ -30,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, admin, mandis):
+for r in (auth, admin, mandis, prices):
     app.include_router(r.router)
 
 
