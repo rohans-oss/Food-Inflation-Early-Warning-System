@@ -71,3 +71,16 @@ def test_admin_can_disable_user(client, as_role):
     r = client.patch(f"/admin/users/{buyer['id']}", json={"is_active": False}, headers=as_role("admin"))
     assert r.status_code == 200
     assert client.get("/auth/me", headers=headers).status_code == 401
+
+
+def test_signup_options_are_public_and_names_only(client):
+    r = client.get("/auth/signup-options")
+    assert r.status_code == 200
+    body = r.json()
+    assert any(m["name"] == "Kolar APMC" for m in body["mandis"])
+    assert body["fleets"] and set(body["fleets"][0]) == {"id", "name"}
+
+
+def test_admin_user_list_shows_active_flag(client, as_role):
+    users = client.get("/admin/users", headers=as_role("admin")).json()
+    assert all(isinstance(u["is_active"], bool) for u in users)

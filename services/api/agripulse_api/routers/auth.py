@@ -146,3 +146,14 @@ def update_me(body: PrefsIn, user: User = Depends(get_current_user), db: Session
 @router.get("/roles")
 def roles():
     return [{"name": k, "label": v[0], "description": v[1], "org_kind": ROLE_ORG_KIND.get(k)} for k, v in ROLES.items()]
+
+
+@router.get("/signup-options")
+def signup_options(db: Session = Depends(get_db)):
+    """Public, names only: mandis a trader can pick and fleets a driver can ask to join."""
+    return {
+        "mandis": [{"id": m.id, "name": m.name, "district": m.district, "state": m.state}
+                   for m in db.scalars(select(Mandi).order_by(Mandi.state, Mandi.name))],
+        "fleets": [{"id": o.id, "name": o.name}
+                   for o in db.scalars(select(Organization).where(Organization.kind == "fleet").order_by(Organization.name))],
+    }

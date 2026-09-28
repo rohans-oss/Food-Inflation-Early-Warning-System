@@ -244,3 +244,27 @@ def test_simulator_marks_everything_simulated(db):
     for tid in ids:
         t = db.get(Trip, tid)
         assert t.is_simulated and t.vehicle.is_simulated and t.last_lat is not None
+
+
+def test_public_share_socket_by_token_only(client, as_role, db, journey):
+    """The share-link socket takes the token alone, sends the public payload only, and refuses unknown/expired tokens."""
+    D = as_role("driver")
+    tid = journey["trip"]["id"]
+    client.post(f"/trips/{tid}/accept", headers=D)
+    client.post(f"/trips/{tid}/consent", headers=D, json={"consent": True})
+    client.post(f"/trips/{tid}/start", headers=D)
+    t = db.get(Trip, tid)
+    db.refresh(t)
+    public_keys = {"type", "status", "lat", "lon", "last_seen_at", "remaining_km", "eta_at", "eta_local", "lots", "is_simulated"}
+    with client.websocket_connect(f"/ws/track/{t.share_token}") as ws:
+        assert set(ws.receive_json()) == public_keys
+        client.post(f"/trips/{tid}/points", headers=D, json={"points": [
+            {"recorded_at": datetime.now(timezone.utc).isoformat(), "lat": 13.17, "lon": 78.07, "speed_kmph": 35}]})
+        m = ws.receive_json()
+        assert set(m) == public_keys and m["lat"] == 13.17
+
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/track/not-a-real-token") as ws:
+            ws.receive_json()

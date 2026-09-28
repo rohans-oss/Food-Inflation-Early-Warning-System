@@ -14,3 +14,7 @@ ml/artifacts/*.joblib
 mlruns/
 data/raw/
 .DS_Store
+apps/web/next-env.d.ts
+apps/web/*.tsbuildinfo
+apps/web/AGENTS.md
+apps/web/CLAUDE.md

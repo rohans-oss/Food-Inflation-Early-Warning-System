@@ -35,7 +35,7 @@ services:
       redis: { condition: service_started }
 
   worker:
-    # Scheduled ingestion + nightly retrain/forecast (APScheduler).
+    # Scheduled ingestion, nightly forecast + spike alerts, weekly retrain (APScheduler).
     build: { context: ., dockerfile: infra/Dockerfile.api }
     env_file: .env
     environment:
@@ -46,9 +46,12 @@ services:
       api: { condition: service_started }
 
   web:
-    build: { context: apps/web }
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    # Next.js dashboards for all 9 roles. The API URL is baked in at build time (browser-side calls),
+    # so rebuild the image after changing NEXT_PUBLIC_API_URL.
+    build:
+      context: apps/web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports: ["3000:3000"]
     depends_on: [api]
 

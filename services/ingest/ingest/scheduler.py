@@ -55,6 +55,22 @@ def job_forecast_and_alerts(db):
     return out
 
 
+def job_retrain_weekly(db):
+    """Refit the quantile model on real history (never synthetic) and refresh the backtest report."""
+    from agripulse_ml.train import train
+
+    from .runs import tracked_run
+
+    with tracked_run(db, "retrain") as run:
+        try:
+            r = train(db, allow_synthetic=False)
+        except SystemExit as exc:  # train() exits when there is no real history yet; log it as a failed run
+            raise RuntimeError(str(exc)) from None
+        run.rows = r["rows"]
+        run.details = {"model_version": r["model_version"], "vs_naive_pinball_pct": r["vs_naive_pinball_pct"]}
+        return run.details
+
+
 def job_trip_monitor(db):
     from tracking.monitor import check_stale_trips
 
@@ -67,6 +83,7 @@ JOBS = [
     ("open_meteo_hourly", job_open_meteo, CronTrigger(minute=5, timezone=TZ)),
     ("nasa_power_daily", job_nasa_power, CronTrigger(hour=6, minute=20, timezone=TZ)),
     ("forecast_daily", job_forecast_and_alerts, CronTrigger(hour=20, minute=30, timezone=TZ)),
+    ("retrain_weekly", job_retrain_weekly, CronTrigger(day_of_week="sun", hour=2, minute=15, timezone=TZ)),
     ("trip_monitor", job_trip_monitor, CronTrigger(minute="*", timezone=TZ)),
 ]
 

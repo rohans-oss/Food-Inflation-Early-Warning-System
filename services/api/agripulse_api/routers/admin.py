@@ -22,6 +22,7 @@ EXPECTED_EVERY = {
     "open_meteo": timedelta(hours=2),
     "nasa_power": timedelta(hours=26),
     "forecast": timedelta(hours=26),
+    "retrain": timedelta(days=8),
 }
 
 
@@ -121,7 +122,7 @@ def model_performance(_=Depends(admin_only)):
 
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), _=Depends(admin_only)):
-    return [user_out(u) for u in db.scalars(select(User).order_by(User.id))]
+    return [{**user_out(u).model_dump(), "is_active": u.is_active} for u in db.scalars(select(User).order_by(User.id))]
 
 
 class UserPatch(BaseModel):

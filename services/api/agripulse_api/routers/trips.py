@@ -32,6 +32,8 @@ def trip_out(db: Session, t: Trip, viewer: User | None = None) -> dict:
         "mandi": t.mandi.name,
         "mandi_lat": t.mandi.lat,
         "mandi_lon": t.mandi.lon,
+        "mandi_geofence_m": t.mandi.geofence_radius_m,
+        "pickup_radius_m": get_settings().pickup_radius_m,
         "origin_lat": t.origin_lat,
         "origin_lon": t.origin_lon,
         "driver": {"id": driver.id, "name": driver.full_name} if driver else None,
@@ -396,6 +398,21 @@ async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: 
         await _pump_public(ws, trip_id, initial)
     else:
         await _pump(ws, [f"trip:{trip_id}"], initial)
+
+
+@router.websocket("/ws/track/{share_token}")
+async def ws_public_track(ws: WebSocket, share_token: str):
+    """Live view behind a public share link. Keyed by the token alone so the trip id never leaves the server."""
+    await ws.accept()
+    with dbmod.SessionLocal() as db:
+        t = db.scalar(select(Trip).where(Trip.share_token == share_token))
+        ok = bool(t and t.share_expires_at and t.share_expires_at > datetime.now(timezone.utc))
+        trip_id = t.id if ok else None
+        initial = [{"type": "position", **public_payload(db, t)}] if ok else []
+    if not ok:
+        await ws.close(code=4410)
+        return
+    await _pump_public(ws, trip_id, initial)
 
 
 async def _pump_public(ws: WebSocket, trip_id: int, initial: list[dict]):

@@ -164,3 +164,13 @@ def test_latest_prices_near_a_farm(client, as_role, db):
     assert "Bangarpet APMC" in names and "Belgaum APMC" not in names
     assert r.json()[0]["distance_km"] <= r.json()[-1]["distance_km"]
     assert client.get("/prices/latest", headers=as_role("driver")).status_code == 403
+
+
+def test_weekly_retrain_without_real_history_is_logged_not_crashing(db):
+    """No real prices yet: the job must fail loudly in the run log (Admin → failed jobs), never train on synthetic."""
+    from ingest.scheduler import job_retrain_weekly
+
+    with pytest.raises(RuntimeError, match="No real price history"):
+        job_retrain_weekly(db)
+    run = db.scalar(select(DataSourceRun).where(DataSourceRun.source == "retrain"))
+    assert run.status == "failed" and "No real price history" in run.error
