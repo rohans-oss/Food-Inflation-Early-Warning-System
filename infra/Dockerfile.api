@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+# libgomp1 is LightGBM's OpenMP runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY pyproject.toml alembic.ini ./
+COPY services ./services
+COPY ml ./ml
+COPY apps/driver-pwa ./apps/driver-pwa
+RUN pip install --no-cache-dir -e .
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000

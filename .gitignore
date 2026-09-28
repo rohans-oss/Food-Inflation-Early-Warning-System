@@ -1,0 +1,16 @@
+.env
+*.db
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+node_modules/
+.next/
+apps/web/out/
+infra/osrm/data/
+ml/artifacts/*.txt
+ml/artifacts/*.joblib
+mlruns/
+data/raw/
+.DS_Store

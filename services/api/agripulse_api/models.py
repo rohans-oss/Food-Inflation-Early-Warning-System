@@ -1,0 +1,319 @@
+"""All V1 core tables (project doc §12).
+
+Coordinates are stored as plain lat/lon floats so the same models run on SQLite in
+tests. On PostgreSQL the Alembic migration additionally adds PostGIS geography
+columns + GiST indexes and turns gps_points into a TimescaleDB hypertable.
+"""
+from datetime import date, datetime, timezone
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+from .db import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class UTCDateTime(TypeDecorator):
+    """Timezone-aware on Postgres; SQLite drops tzinfo, so UTC is re-attached on read."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+
+# ---------------------------------------------------------------- identity
+
+
+class Role(Base):
+    __tablename__ = "roles"
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    label: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(Text, default="")
+
+
+class Organization(Base):
+    """Tenants: FPOs, fleets, trading firms, buyers, lenders, government bodies."""
+
+    __tablename__ = "organizations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(32))  # fpo|fleet|trader|buyer|lender|government|platform
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    phone: Mapped[str | None] = mapped_column(String(20))
+    full_name: Mapped[str] = mapped_column(String(200))
+    password_hash: Mapped[str] = mapped_column(String(300))
+    role: Mapped[str] = mapped_column(ForeignKey("roles.name"))
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    mandi_id: Mapped[int | None] = mapped_column(ForeignKey("mandis.id"))  # traders: their mandi
+    preferred_lang: Mapped[str] = mapped_column(String(5), default="en")  # en|kn
+    watch_mandi_ids: Mapped[list] = mapped_column(JSON, default=list)  # buyers: mandis to watch
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    org: Mapped[Organization | None] = relationship()
+
+
+# ---------------------------------------------------------------- markets & data
+
+
+class Mandi(Base):
+    __tablename__ = "mandis"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)  # canonical name
+    district: Mapped[str] = mapped_column(String(100))
+    state: Mapped[str] = mapped_column(String(100))
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    coords_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    geofence_radius_m: Mapped[float] = mapped_column(Float, default=500.0)
+    aliases: Mapped[list] = mapped_column(JSON, default=list)  # raw Agmarknet spellings
+
+
+class Price(Base):
+    """Rs per quintal, as published by Agmarknet."""
+
+    __tablename__ = "prices"
+    __table_args__ = (UniqueConstraint("mandi_id", "commodity", "variety", "grade", "date"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    commodity: Mapped[str] = mapped_column(String(50), index=True)
+    variety: Mapped[str] = mapped_column(String(80), default="")
+    grade: Mapped[str] = mapped_column(String(40), default="")
+    date: Mapped[date] = mapped_column(Date, index=True)
+    min_price: Mapped[float | None] = mapped_column(Float)
+    max_price: Mapped[float | None] = mapped_column(Float)
+    modal_price: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(40), default="agmarknet")
+    is_outlier: Mapped[bool] = mapped_column(Boolean, default=False)
+    quality_flags: Mapped[list] = mapped_column(JSON, default=list)
+    ingested_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Arrival(Base):
+    """Tonnes arriving at a mandi per day (bulk Agmarknet downloads / trader-confirmed)."""
+
+    __tablename__ = "arrivals"
+    __table_args__ = (UniqueConstraint("mandi_id", "commodity", "date", "source"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    commodity: Mapped[str] = mapped_column(String(50))
+    date: Mapped[date] = mapped_column(Date, index=True)
+    tonnes: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(40), default="agmarknet_bulk")
+
+
+class Weather(Base):
+    __tablename__ = "weather"
+    __table_args__ = (UniqueConstraint("mandi_id", "date", "source"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    source: Mapped[str] = mapped_column(String(20))  # open_meteo|nasa_power
+    is_forecast: Mapped[bool] = mapped_column(Boolean, default=False)
+    precip_mm: Mapped[float | None] = mapped_column(Float)
+    tmax_c: Mapped[float | None] = mapped_column(Float)
+    tmin_c: Mapped[float | None] = mapped_column(Float)
+    rh_pct: Mapped[float | None] = mapped_column(Float)
+    solar_kwh_m2: Mapped[float | None] = mapped_column(Float)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+
+
+class Forecast(Base):
+    """Always a range + spike probability, never a single point (rule 3)."""
+
+    __tablename__ = "forecasts"
+    __table_args__ = (UniqueConstraint("mandi_id", "commodity", "issue_date", "horizon_weeks", "model_name"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    commodity: Mapped[str] = mapped_column(String(50))
+    issue_date: Mapped[date] = mapped_column(Date, index=True)
+    target_date: Mapped[date] = mapped_column(Date)
+    horizon_weeks: Mapped[int] = mapped_column(Integer)
+    p10: Mapped[float] = mapped_column(Float)
+    p50: Mapped[float] = mapped_column(Float)
+    p90: Mapped[float] = mapped_column(Float)
+    spike_prob: Mapped[float] = mapped_column(Float)
+    model_name: Mapped[str] = mapped_column(String(40))
+    model_version: Mapped[str] = mapped_column(String(40), default="")
+    trained_on_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class DataSourceRun(Base):
+    __tablename__ = "data_source_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(40), index=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    status: Mapped[str] = mapped_column(String(16), default="running")  # running|success|failed
+    rows: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+# ---------------------------------------------------------------- logistics
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)  # fleet
+    registration: Mapped[str] = mapped_column(String(20), unique=True)
+    capacity_tons: Mapped[float] = mapped_column(Float, default=5.0)
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Shipment(Base):
+    """An FPO's grouping of farmer lots bound for one mandi."""
+
+    __tablename__ = "shipments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)  # FPO
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"))
+    status: Mapped[str] = mapped_column(String(16), default="planned")  # planned|booked|in_transit|delivered
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    lots: Mapped[list["Lot"]] = relationship(back_populates="shipment")
+    mandi: Mapped[Mandi] = relationship()
+
+
+class Lot(Base):
+    __tablename__ = "lots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    farmer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)  # FPO
+    lender_org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))  # farmer-granted
+    shipment_id: Mapped[int | None] = mapped_column(ForeignKey("shipments.id"), index=True)
+    crop: Mapped[str] = mapped_column(String(50), default="Tomato")
+    quantity_tons: Mapped[float] = mapped_column(Float)
+    grade: Mapped[str] = mapped_column(String(20), default="Local")
+    pickup_label: Mapped[str] = mapped_column(String(200), default="")
+    pickup_lat: Mapped[float] = mapped_column(Float)
+    pickup_lon: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), default="registered")
+    # registered|grouped|picked_up|in_transit|delivered
+    delivered_weight_kg: Mapped[float | None] = mapped_column(Float)
+    sale_price_per_quintal: Mapped[float | None] = mapped_column(Float)
+    payout_status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|paid
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+    shipment: Mapped[Shipment | None] = relationship(back_populates="lots")
+    farmer: Mapped[User] = relationship(foreign_keys=[farmer_id])
+
+
+class Trip(Base):
+    __tablename__ = "trips"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shipment_id: Mapped[int | None] = mapped_column(ForeignKey("shipments.id"), index=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"))
+    driver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    fleet_org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    origin_lat: Mapped[float] = mapped_column(Float)
+    origin_lon: Mapped[float] = mapped_column(Float)
+    load_tons: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(16), default="assigned")
+    # assigned|accepted|declined|in_progress|completed|cancelled
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    consent_given_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    pickup_qr_token: Mapped[str] = mapped_column(String(64), unique=True)
+    delivery_qr_token: Mapped[str] = mapped_column(String(64), unique=True)
+    pickup_scanned_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    delivery_scanned_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True)
+    share_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    planned_distance_km: Mapped[float | None] = mapped_column(Float)
+    planned_duration_min: Mapped[float | None] = mapped_column(Float)
+    route_geometry: Mapped[list | None] = mapped_column(JSON)  # [[lon, lat], ...]
+    route_source: Mapped[str] = mapped_column(String(16), default="")  # osrm|haversine
+    last_lat: Mapped[float | None] = mapped_column(Float)
+    last_lon: Mapped[float | None] = mapped_column(Float)
+    last_speed_kmph: Mapped[float | None] = mapped_column(Float)
+    last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    remaining_km: Mapped[float | None] = mapped_column(Float)
+    eta_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    stopped_since: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    vehicle: Mapped[Vehicle] = relationship()
+    mandi: Mapped[Mandi] = relationship()
+    shipment: Mapped[Shipment | None] = relationship()
+
+
+class GpsPoint(Base):
+    """PK (trip_id, recorded_at) makes offline re-sync idempotent and satisfies
+    TimescaleDB's rule that unique keys include the time column."""
+
+    __tablename__ = "gps_points"
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), primary_key=True)
+    recorded_at: Mapped[datetime] = mapped_column(UTCDateTime, primary_key=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    speed_kmph: Mapped[float | None] = mapped_column(Float)
+    accuracy_m: Mapped[float | None] = mapped_column(Float)
+    received_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class GeofenceEvent(Base):
+    __tablename__ = "geofence_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), index=True)
+    event: Mapped[str] = mapped_column(String(32))
+    # picked_up|left_pickup_zone|reached_mandi|unexpected_stop|delivered
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))  # price_spike|vehicle_delay|vehicle_arrived|...
+    severity: Mapped[str] = mapped_column(String(10), default="info")
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)
+    lang: Mapped[str] = mapped_column(String(5), default="en")
+    dedupe_key: Mapped[str] = mapped_column(String(200), unique=True)
+    channels: Mapped[dict] = mapped_column(JSON, default=dict)  # {"in_app": "sent", "email": "skipped"}
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
