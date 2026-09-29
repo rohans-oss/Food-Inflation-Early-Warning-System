@@ -64,7 +64,7 @@ def test_feature_set_naming():
 
 
 def test_pending_groups_refuse_and_prices_required(inputs):
-    for fs in ("prices+satellite", "prices+transit"):
+    for fs in ("prices+transit",):
         with pytest.raises(FeatureGroupNotBuilt):
             build_table(inputs, fs)
     with pytest.raises(ValueError):

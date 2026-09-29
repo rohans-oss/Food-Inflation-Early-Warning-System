@@ -9,6 +9,7 @@ arrivals = 1            # trader-confirmed weighings are same-day; bulk reports 
 nasa_power = 3          # NASA POWER daily point data runs a few days behind
 open_meteo = 1          # Open-Meteo's past_days values for yesterday
 synthetic_weather = 1   # synthetic weather stands in for the Open-Meteo-filled recent series
+sentinel2 = 2           # V2-4: Earth Search usually lists a scene within a day of acquisition; 2 is conservative
 # Weather FORECASTS have no lag: a forecast issued on day t is usable at issue date t (archived by issue date).
 
 [groups]

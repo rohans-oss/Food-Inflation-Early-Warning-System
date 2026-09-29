@@ -33,6 +33,8 @@ class Inputs:
     weather_provenance: str = REAL
     forecast_provenance: str = REAL
     notes: list[str] = field(default_factory=list)
+    # V2-4: Sentinel-2 cropland NDVI per (scene, district): district, date, ndvi_median, clear_px. Always REAL data.
+    satellite: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=["district", "date", "ndvi_median", "clear_px"]))
 
     @classmethod
     def from_synthetic(cls, seed: int = 7, start: date = date(2022, 1, 1), end: date = date(2026, 9, 25),
@@ -94,8 +96,14 @@ class Inputs:
             if forecasts.empty:
                 notes.append("no archived real weather forecasts yet: known-future weather features are empty")
         prov = SYNTHETIC if synthetic else REAL
+        from agripulse_api.models import SatelliteObs
+
+        sat = pd.DataFrame(db.execute(select(SatelliteObs.district, SatelliteObs.date, SatelliteObs.ndvi_median,
+                                             SatelliteObs.clear_px)).all(), columns=["district", "date", "ndvi_median", "clear_px"])
+        sat["date"] = pd.to_datetime(sat["date"])
         return cls(prices=prices, arrivals=arrivals, weather=weather, forecasts=forecasts, mandis=mandis,
-                   price_provenance=price_prov, weather_provenance=prov, forecast_provenance=prov, notes=notes)
+                   price_provenance=price_prov, weather_provenance=prov, forecast_provenance=prov, notes=notes,
+                   satellite=sat)
 
 
 def simulate_forecasts(weather: pd.DataFrame, seed: int) -> pd.DataFrame:

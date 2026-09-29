@@ -21,7 +21,7 @@ date range, per-column missingness, provenance per group, lags). The synthetic t
 | | | `wf_rain_next7`, `wf_rain_next14`, `wf_tmax_next7`, `wf_age_days`, `wf_available` | **known-future** |
 | `calendar` | always on (not in the name) | `cal_doy_{sin,cos}`, `cal_month`, `cal_festival`, `cal_festival_next14`, `cal_season` | known-future |
 | static | always | `mandi_id`, `st_district`, `st_state`, `st_lat`, `st_lon` | static covariates |
-| `satellite` | refuses until V2-4 | | |
+| `satellite` | built (V2-4), needs `satellite_obs` rows | `sat_ndvi_30`, `sat_obs_30`, `sat_ndvi_chg_30`, `sat_ndvi_anom`, `sat_age_days` (REAL; lag 2 days) | past-only |
 | `graph` | built (V2-3) | `gr_dist_chg_{7,14}`, `gr_dist_spread`, `gr_dist_risen`, `gr_corr_chg_7`, `gr_flow_up_chg_7` (flow = ESTIMATE), `gr_n_corr` | past-only |
 | `transit` | refuses until V2-5 | | |
 

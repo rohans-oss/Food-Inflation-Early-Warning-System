@@ -73,6 +73,34 @@ Seeded coordinates are approximate town centroids with `coords_verified = false`
   issue date (the day's last fetch wins). This is the only record of what the forecast said on past days, which
   backtests of known-future weather need. It starts empty; see `docs/feature-store.md`.
 
+## Sentinel-2 (V2-4, REAL)
+
+Checked against real responses on 2026-09-29 (rule 5); the workspace used to build V2-4 could not reach these hosts,
+so the checks were made through a web fetch and the pilot fetch runs on the user's machine.
+
+- **Catalogue:** Element 84 Earth Search, `GET https://earth-search.aws.element84.com/v1/search` with `collections=sentinel-2-l2a`,
+  `bbox=W,S,E,N`, `datetime=A/B`, `limit`. Response: STAC `FeatureCollection`; paging via `links[]` with `rel = "next"`.
+  Collection temporal extent starts 2015-06-27. A real search over Kolar (March 2026) returned 16 scenes, e.g.
+  `S2C_43PHQ_20260328_0_L2A` (Sentinel-2C), `eo:cloud_cover 1.16`, `s2:processing_baseline "05.12"`, `proj:epsg 32643`,
+  `grid:code "MGRS-43PHQ"`.
+- **Assets used:** `red` (B04, 10 m), `nir` (B08, 10 m), `scl` (scene classification, 20 m); cloud-optimised GeoTIFFs on
+  `https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/...`. `raster:bands[0]`: `scale 0.0001`,
+  **`offset -0.1` on processing baseline >= 04.00 (2022+)** and 0 before, so scale and offset are read per scene.
+  The collection-level metadata shows offset 0; do not use it.
+- **Cropland mask:** ESA WorldCover 2021 v200, 10 m, class 40 = cropland. 3 x 3 degree COG tiles, names verified by bucket
+  listing: `https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N12E075_Map.tif`
+  (127.7 MB) and `..._N12E078_Map.tif` (119.1 MB) cover the pilot districts. Only small windows are read.
+- **Publication lag:** 2 days (config/features.toml `sentinel2`).
+
+## Ground truth for the satellite signal (V2-4)
+
+- **ICRISAT District Level Database, apportioned** ([documentation](https://vdsa.icrisat.org/Include/document/all-apportioned-web-document.pdf)):
+  1966-67 to 2011-12, Karnataka included; crops are cereals, pulses, oilseeds, sugarcane, cotton, fruits,
+  vegetables (aggregate), potatoes, onions. **No tomato, and no year overlaps Sentinel-2 (2015+)**, so it cannot
+  validate the satellite signal. A newer ICRISAT district file with years after 2015 would be usable for major crops.
+- **Karnataka horticulture statistics** (district tomato area / production): format to be checked when the files arrive;
+  an adapter into the normalised schema in `ml/agripulse_ml/satellite/validate.py` is written only after that.
+
 ## Synthetic data
 
 `python -m ingest.run synthetic` writes a clearly fake history (`source = 'synthetic'`) so the pipeline

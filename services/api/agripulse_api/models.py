@@ -191,6 +191,31 @@ class GraphEdge(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
+class SatelliteObs(Base):
+    """Sentinel-2 NDVI over cropland, one row per (scene, district) (V2-4, REAL data).
+    Written by `python -m agripulse_ml.satellite.load`. District areas are approximated as circles around the
+    district HQ (config/satellite.toml). ndvi_* is NULL when the district was too cloudy in that scene."""
+
+    __tablename__ = "satellite_obs"
+    __table_args__ = (UniqueConstraint("scene_id", "district"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    district: Mapped[str] = mapped_column(String(100), index=True)
+    scene_id: Mapped[str] = mapped_column(String(80))
+    date: Mapped[date] = mapped_column(Date, index=True)  # acquisition date (UTC)
+    tile: Mapped[str | None] = mapped_column(String(20))
+    baseline: Mapped[str | None] = mapped_column(String(10))
+    scene_cloud_pct: Mapped[float | None] = mapped_column(Float)
+    cropland_px: Mapped[int] = mapped_column(Integer)
+    in_scene_px: Mapped[int] = mapped_column(Integer)
+    clear_px: Mapped[int] = mapped_column(Integer)
+    clear_frac: Mapped[float] = mapped_column(Float)
+    ndvi_median: Mapped[float | None] = mapped_column(Float)
+    ndvi_mean: Mapped[float | None] = mapped_column(Float)
+    ndvi_p25: Mapped[float | None] = mapped_column(Float)
+    ndvi_p75: Mapped[float | None] = mapped_column(Float)
+    loaded_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class Forecast(Base):
     """Always a range + spike probability, never a single point (rule 3)."""
 

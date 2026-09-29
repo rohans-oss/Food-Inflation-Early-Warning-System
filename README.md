@@ -235,6 +235,31 @@ signal is planted, but far mandis gain no more than near ones. Nothing user-faci
 - `python -m agripulse_ml.graph.experiment --generators random --seeds 7 --folds 1` (~2 min); the full run (~22 min)
   reproduces docs/graph-results.md. Admin → Evaluation runs marks planted-signal runs "PLANTED SIGNAL".
 
+## V2-4: Sentinel-2 crop signal (in progress)
+
+Built and tested on local fixtures (no satellite result yet; see [docs/satellite.md](docs/satellite.md)):
+
+- Scene search on Earth Search, and cropland NDVI per district from 80 m COG overviews.
+  - Per-scene reflectance offset, cloud masking with the scene classification layer, ESA WorldCover cropland.
+  - Endpoints and fields checked against real responses (docs/data-sources.md).
+- A resumable pilot runner with a dry-run cost estimate.
+- `satellite_obs` table (migration 0007) and a loader.
+- `satellite` feature group with a 2-day publication lag, leakage-tested against a planted leak.
+- Within-district validation statistics that say "too few points" when n is small.
+
+Waiting on: the imagery fetch on a machine that can reach the sources, and the ground-truth files. The ICRISAT
+apportioned data ends in 2011 and has no tomato, so it can't validate Sentinel-2 (2015+).
+
+**How to verify**
+- `pytest tests/test_satellite.py`: 7 tests.
+  - STAC paging and cloud filter
+  - NDVI exactly 0.75 / 0.50 under the two offset conventions
+  - cloud and non-cropland pixels dropped
+  - resumable run and idempotent load
+  - lag and truncation leakage
+  - validation verdicts
+- `python -m agripulse_ml.satellite.run --out data/satellite --dry-run` (needs network to Earth Search).
+
 ## V1 status
 
 | Done-criterion | Status |

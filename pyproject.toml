@@ -34,6 +34,8 @@ mlflow-ui = ["mlflow>=3.0"]
 tft = ["pytorch-forecasting>=1.4", "lightning>=2.4", "torch>=2.4"]
 # V2-3 mandi graph: GNN (torch), networkx export, optional Neo4j mirror. Graph FEATURES need none of these.
 graph = ["torch>=2.4", "networkx>=3", "neo4j>=5"]
+# V2-4 Sentinel-2 fetch (satellite.run / extract). Loading, features and validation need none of these.
+satellite = ["rasterio>=1.3", "pyproj>=3.5"]
 
 # One installable project, four packages, laid out as in the project doc (§12).
 [tool.setuptools.packages.find]
