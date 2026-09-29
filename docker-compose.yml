@@ -26,10 +26,17 @@ services:
       DATABASE_URL: postgresql+psycopg://agripulse:${POSTGRES_PASSWORD:-agripulse}@db:5432/agripulse
       REDIS_URL: redis://redis:6379/0
       OSRM_URL: ${OSRM_URL:-}
+      SEED_FLAGS: "--demo"   # dev: one demo login per role. The prod overlay sets this to "".
+    # $$ = expanded inside the container (so the prod overlay's SEED_FLAGS wins), not by compose
     command: >
-      sh -c "alembic upgrade head && python -m agripulse_api.seed ${SEED_FLAGS:---demo}
+      sh -c "alembic upgrade head && python -m agripulse_api.seed $${SEED_FLAGS}
              && uvicorn agripulse_api.main:app --host 0.0.0.0 --port 8000"
     ports: ["8000:8000"]
+    volumes: [models:/app/ml/artifacts]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      retries: 5
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_started }
@@ -42,13 +49,17 @@ services:
       DATABASE_URL: postgresql+psycopg://agripulse:${POSTGRES_PASSWORD:-agripulse}@db:5432/agripulse
       REDIS_URL: redis://redis:6379/0
     command: python -m ingest.scheduler
+    volumes: [models:/app/ml/artifacts, rawdata:/app/data]
     depends_on:
-      api: { condition: service_started }
+      api: { condition: service_healthy }
 
   web:
-    build: { context: apps/web }
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    build:
+      context: apps/web
+      # NEXT_PUBLIC_* is compiled into the browser bundle, so it is a build arg, not runtime env.
+      # Empty = the browser uses <same host>:8000, which suits local dev and LAN testing.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     ports: ["3000:3000"]
     depends_on: [api]
 
@@ -62,3 +73,5 @@ services:
 
 volumes:
   dbdata:
+  models:   # trained model + backtest.json, shared by api (reads) and worker (writes)
+  rawdata:  # archived raw Agmarknet payloads: your only copy of daily history

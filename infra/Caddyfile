@@ -1,0 +1,34 @@
+{$DOMAIN} {
+	encode gzip
+
+	# API + WebSockets + driver PWA under /api (prefix stripped before it reaches FastAPI)
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		# the driver PWA needs geolocation + camera; nothing else does
+		Permissions-Policy "geolocation=(self), camera=(self), microphone=()"
+	}
+
+	log {
+		output stdout
+		# JWTs travel in WebSocket query strings; don't write them to logs
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace token REDACTED
+					replace share REDACTED
+				}
+			}
+		}
+	}
+}

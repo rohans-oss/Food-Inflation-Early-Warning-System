@@ -1,0 +1,44 @@
+# Production overlay: HTTPS on one domain via Caddy (phones only allow GPS on HTTPS pages).
+#
+#   DOMAIN=agripulse.example.org docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Routes:  https://$DOMAIN/          -> web (Next.js)
+#          https://$DOMAIN/api/...   -> API (prefix stripped), incl. WebSockets
+#          https://$DOMAIN/api/driver/ -> driver PWA
+# Point the domain's DNS A record at the server first; Caddy gets the certificate itself.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [api, web]
+
+  db:
+    restart: unless-stopped
+    ports: !reset []          # not exposed outside the compose network
+  redis:
+    restart: unless-stopped
+    ports: !reset []
+  api:
+    restart: unless-stopped
+    ports: !reset []
+    environment:
+      PUBLIC_BASE_URL: https://${DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN}
+      SEED_FLAGS: ""          # prod: roles + mandis + admin only, no demo users
+  worker:
+    restart: unless-stopped
+  web:
+    restart: unless-stopped
+    ports: !reset []
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
+
+volumes:
+  caddy_data:

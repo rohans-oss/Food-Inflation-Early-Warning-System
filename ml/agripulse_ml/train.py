@@ -53,7 +53,10 @@ def train(db: Session, allow_synthetic: bool = False, n_folds: int = 8, model_di
     feat, synthetic = dataset(db, allow_synthetic)
     if feat.empty:
         raise SystemExit("No usable price rows.")
-    report = walk_forward(feat, BacktestConfig(n_folds=n_folds, alert_probability=s.spike_alert_probability))
+    try:
+        report = walk_forward(feat, BacktestConfig(n_folds=n_folds, alert_probability=s.spike_alert_probability))
+    except ValueError as exc:  # not enough history yet: say so instead of a traceback
+        raise SystemExit(f"{exc}. Keep the daily Agmarknet job running, or backfill older history.")
     final = LightGBMQuantileForecaster().fit(feat)
     final.save(model_dir)
     version = datetime.now(timezone.utc).strftime(MODEL_VERSION_FMT)

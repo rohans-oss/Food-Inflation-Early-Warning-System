@@ -3,7 +3,10 @@
  * - every fix goes to IndexedDB first, then is flushed over WebSocket (or HTTP when the socket is down)
  * - re-sends are safe: the server de-duplicates on (trip, timestamp)
  */
-const API = window.AGRIPULSE_API || (location.origin.includes(":3000") ? location.origin.replace(":3000", ":8000") : location.origin);
+// The PWA is served by the API at <api-root>/driver/, so the API root is the parent path:
+// dev  http://localhost:8000/driver/     -> http://localhost:8000
+// prod https://example.org/api/driver/   -> https://example.org/api   (behind Caddy)
+const API = window.AGRIPULSE_API || new URL("..", location.href).href.replace(/\/$/, "");
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem("ap_driver_token");
 let refreshToken = localStorage.getItem("ap_driver_refresh");

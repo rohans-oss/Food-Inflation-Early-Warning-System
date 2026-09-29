@@ -49,7 +49,14 @@ def _user(db: Session, email: str, name: str, role: str, password: str, **kw) ->
 
 def seed_admin(db: Session) -> User:
     email = os.environ.get("ADMIN_EMAIL", "admin@agripulse.local")
-    password = os.environ.get("ADMIN_PASSWORD", "agripulse-admin")
+    password = os.environ.get("ADMIN_PASSWORD", "")
+    if not password:
+        if not db.get_bind().url.drivername.startswith("sqlite"):
+            existing = db.scalar(select(User).where(User.email == email))
+            if existing:
+                return existing  # already created on an earlier start
+            raise SystemExit("Set ADMIN_PASSWORD in .env before the first start against a real database")
+        password = "agripulse-admin"  # local SQLite dev only
     return _user(db, email, "Platform Admin", "admin", password)
 
 

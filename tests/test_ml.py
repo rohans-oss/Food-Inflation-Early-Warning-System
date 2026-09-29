@@ -77,3 +77,14 @@ def test_train_predict_end_to_end_marks_synthetic(db, tmp_path, monkeypatch):
     rows = db.scalars(select(Forecast)).all()
     for f in rows:
         assert f.p10 <= f.p50 <= f.p90 and 0 <= f.spike_prob <= 1 and f.trained_on_synthetic
+
+
+def test_train_explains_short_history(db, tmp_path, monkeypatch):
+    from agripulse_api.config import get_settings
+    from agripulse_ml import synthetic, train
+
+    monkeypatch.setattr(get_settings(), "model_dir", str(tmp_path))
+    monkeypatch.setattr(synthetic, "SYNTH_MANDIS", SYNTH_MANDIS[:2])
+    synthetic.load_into_db(db, start=date(2025, 6, 1), end=date(2025, 12, 31))  # ~7 months
+    with pytest.raises(SystemExit, match="Not enough history"):
+        train.train(db, allow_synthetic=True, n_folds=2)

@@ -50,4 +50,15 @@ if _pwa.is_dir():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Liveness + database reachability (used by docker compose and uptime checks)."""
+    from sqlalchemy import text
+
+    from .db import engine
+
+    try:
+        with engine.connect() as c:
+            c.execute(text("SELECT 1"))
+        db = "ok"
+    except Exception as exc:  # noqa: BLE001
+        db = f"error: {type(exc).__name__}"
+    return {"status": "ok" if db == "ok" else "degraded", "db": db, "version": app.version}
