@@ -18,6 +18,7 @@ Each item says where it came from and why it's deferred.
 | 9 | Multi-pickup trips use one tonnage-weighted point | ETA and geofence are wrong for spread-out FPO pickups | Multi-stop routing is V3 (OR-Tools) |
 | 10 | Spike alert threshold (0.5) fires almost never | Spike recall ≈ 0 for every model on synthetic data | Choose the threshold from precision/recall on **real** data |
 | 11 | `ingest.run synthetic` generates up to *today* | Every day's demo database is a different random draw, so demo backtests change daily | Pin the end date like `eval/baseline.py` does, or label the draw date |
+| 12 | V1 LightGBM intervals under-cover | p10–p90 holds the price 59–73% of the time on the V2 folds (target 80%); the 120-day conformal window often doesn't resemble the next 28 days (docs/tft-results.md) | Revisit the calibration window on **real** data; the displayed band may be too narrow until then |
 
 ## V3 (by design)
 

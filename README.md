@@ -171,6 +171,33 @@ data once the archive is about 13 months old.
   and writes Parquet; `--feature-set prices+graph` refuses with "built in V2-3".
 - Admin → Real-data readiness now has a "Forecast archive" column.
 
+## V2-2: Temporal Fusion Transformer (TFT)
+
+A TFT quantile forecaster (pytorch-forecasting, CPU) on the V2-1 feature table, compared with seasonal naive, naive
+and the V1 LightGBM model on the **same folds, rows and metrics** (4 folds × 3 synthetic draws). Results, including
+where TFT loses: [docs/tft-results.md](docs/tft-results.md) — SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT.
+
+**Result: negative.** Averaged over 3 draws, TFT's pinball loss is 15–33% worse than naive, and it wins only 1 of 3
+draws (at 3–4 weeks). Its raw intervals hold the price 46–59% of the time (target 80%). Calibration helps on one draw
+only. LightGBM also doesn't beat naive (−1.7% to −3.1%). TFT stays off the display path.
+
+- Inputs: mandi as a static input; calendar as the only known-future input; prices, arrivals, observed weather and
+  the weather forecast *as issued* as past-only inputs (feeding actual future weather would be a perfect-forecast leak).
+- Two variants from one fit per fold: `tft_raw`, and `tft_cqr` (same split-conformal step as V1 LightGBM on a held-out
+  120-day window). Spike probability is derived from the quantiles and is labelled an approximation.
+- Switches in `config/models.toml`: `[tft] data_provenance = "real"` runs the same code on real rows (readiness stamps
+  each mandi real / real_partial); `[tft] write_forecasts = true` writes forecasts as `model_name = "tft"`. Users only
+  ever see the `[display] model` (default `lightgbm_quantile`); every forecast read filters by it.
+- Install: `pip install -e .[tft]` (torch, lightning, pytorch-forecasting). Tests skip TFT without it.
+
+**How to verify**
+- `pytest tests/test_tft.py`: 6 tests (leakage tamper test, harness history contract, quantile ordering + CQR,
+  config-only switch to real data with real / real_partial labels, forecast flag + display-model filter).
+- `python -m agripulse_ml.tft.experiment --folds 1 --seeds 7` (~5–25 min on 2 cores) prints the comparison and writes
+  `docs/results/tft-synthetic.csv`; the full run (no flags) is ~80 min on 2 cores and reproduces docs/tft-results.md.
+- `python -m agripulse_ml.tft.forecast` does nothing while `write_forecasts = false`; with `--force` it writes
+  `tft` rows, and the farmer / buyer screens still show the LightGBM forecast.
+
 ## V1 status
 
 | Done-criterion | Status |
