@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "kn_reviewed": false,
+    "note": "Kannada strings are machine-drafted. A native speaker must review them before a field pilot, then set kn_reviewed to true."
+  },
+  "en": {
+    "price_spike": {
+      "title": "Price spike risk: {mandi}",
+      "body": "{prob}% chance tomato prices at {mandi} jump more than {threshold}% within 2 weeks. 2-week range: Rs {p10}-{p90}/quintal (median {p50}).{synthetic}"
+    },
+    "vehicle_delay": {
+      "title": "Vehicle delayed: {vehicle}",
+      "body": "Vehicle {vehicle} to {mandi} is running about {minutes} min late. New ETA {eta}."
+    },
+    "unexpected_stop": {
+      "title": "Vehicle stopped: {vehicle}",
+      "body": "Vehicle {vehicle} has been stationary for {minutes} min away from the pickup point and mandi."
+    },
+    "picked_up": {
+      "title": "Lot #{lot} picked up",
+      "body": "Vehicle {vehicle} has collected your lot #{lot} for {mandi}. Track it live: {link}"
+    },
+    "vehicle_arrived": {
+      "title": "Vehicle reached {mandi}",
+      "body": "Vehicle {vehicle} reached {mandi} at {time}."
+    },
+    "delivered": {
+      "title": "Delivery confirmed: lot #{lot}",
+      "body": "Lot #{lot} weighed at {mandi}: {kg} kg at Rs {price}/quintal. Payout: {payout}."
+    },
+    "incoming_vehicle": {
+      "title": "Incoming: {vehicle}",
+      "body": "{vehicle} with {tons} t tomato is heading to {mandi}, ETA {eta}."
+    }
+  },
+  "kn": {
+    "price_spike": {
+      "title": "ಬೆಲೆ ಏರಿಕೆಯ ಎಚ್ಚರಿಕೆ: {mandi}",
+      "body": "ಮುಂದಿನ 2 ವಾರಗಳಲ್ಲಿ {mandi}ನಲ್ಲಿ ಟೊಮೆಟೊ ಬೆಲೆ {threshold}% ಕ್ಕಿಂತ ಹೆಚ್ಚು ಏರುವ ಸಾಧ್ಯತೆ {prob}%. 2 ವಾರದ ಅಂದಾಜು ಶ್ರೇಣಿ: ₹{p10}-{p90}/ಕ್ವಿಂಟಾಲ್ (ಮಧ್ಯಮ {p50}).{synthetic}"
+    },
+    "vehicle_delay": {
+      "title": "ವಾಹನ ತಡವಾಗಿದೆ: {vehicle}",
+      "body": "{mandi}ಗೆ ಹೋಗುತ್ತಿರುವ ವಾಹನ {vehicle} ಸುಮಾರು {minutes} ನಿಮಿಷ ತಡವಾಗಿದೆ. ಹೊಸ ಅಂದಾಜು ಸಮಯ {eta}."
+    },
+    "unexpected_stop": {
+      "title": "ವಾಹನ ನಿಂತಿದೆ: {vehicle}",
+      "body": "ವಾಹನ {vehicle} ಪಿಕ್‌ಅಪ್ ಸ್ಥಳ ಮತ್ತು ಮಂಡಿಯಿಂದ ದೂರದಲ್ಲಿ {minutes} ನಿಮಿಷಗಳಿಂದ ನಿಂತಿದೆ."
+    },
+    "picked_up": {
+      "title": "ಲಾಟ್ #{lot} ಎತ್ತಿಕೊಳ್ಳಲಾಗಿದೆ",
+      "body": "ವಾಹನ {vehicle} ನಿಮ್ಮ ಲಾಟ್ #{lot} ಅನ್ನು {mandi}ಗಾಗಿ ಎತ್ತಿಕೊಂಡಿದೆ. ಲೈವ್ ಟ್ರ್ಯಾಕಿಂಗ್: {link}"
+    },
+    "vehicle_arrived": {
+      "title": "ವಾಹನ {mandi} ತಲುಪಿದೆ",
+      "body": "ವಾಹನ {vehicle} {time}ಕ್ಕೆ {mandi} ತಲುಪಿದೆ."
+    },
+    "delivered": {
+      "title": "ವಿತರಣೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ: ಲಾಟ್ #{lot}",
+      "body": "ಲಾಟ್ #{lot} ಅನ್ನು {mandi}ನಲ್ಲಿ ತೂಕ ಮಾಡಲಾಗಿದೆ: {kg} ಕೆಜಿ, ₹{price}/ಕ್ವಿಂಟಾಲ್. ಪಾವತಿ: {payout}."
+    },
+    "incoming_vehicle": {
+      "title": "ಬರುತ್ತಿರುವ ವಾಹನ: {vehicle}",
+      "body": "{vehicle} {tons} ಟನ್ ಟೊಮೆಟೊ ಹೊತ್ತು {mandi}ಗೆ ಬರುತ್ತಿದೆ, ಅಂದಾಜು ಸಮಯ {eta}."
+    }
+  }
+}

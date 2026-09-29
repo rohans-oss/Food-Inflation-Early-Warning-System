@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..alerts import notify
+from ..lifecycle import move
 from ..db import get_db
 from ..models import Alert, Arrival, GeofenceEvent, GpsPoint, Lot, Mandi, Price, Shipment, Trip, User
 from ..rbac import forbid, get_current_user, require
@@ -103,7 +104,8 @@ def weigh_lot(lot_id: int, body: WeighIn, db: Session = Depends(get_db), user: U
         raise HTTPException(409, "Scan the vehicle's delivery QR first; the lot must be at the mandi")
     now = datetime.now(timezone.utc)
     lot.delivered_weight_kg, lot.sale_price_per_quintal = body.weight_kg, body.price_per_quintal
-    lot.status, lot.delivered_at = "delivered", now
+    move(db, lot, "delivered", user.id, weight_kg=body.weight_kg, price_per_quintal=body.price_per_quintal)
+    lot.delivered_at = now
     sh = lot.shipment
     # Confirmed tonnage feeds the mandi's arrivals series (source kept separate from Agmarknet)
     day = ist_today(now)
@@ -115,8 +117,8 @@ def weigh_lot(lot_id: int, body: WeighIn, db: Session = Depends(get_db), user: U
         a.tonnes += body.weight_kg / 1000
     notify(db, lot.farmer, "delivered", f"delivered:{lot.id}", lot=lot.id, mandi=sh.mandi.name,
            kg=round(body.weight_kg), price=round(body.price_per_quintal), payout=lot.payout_status)
-    if all(x.status == "delivered" for x in sh.lots):
-        sh.status = "delivered"
+    if all(x.status == "delivered" for x in sh.lots) and sh.status == "in_transit":
+        move(db, sh, "delivered", user.id)
     db.commit()
     return {"lot_id": lot.id, "status": lot.status, "delivered_weight_kg": lot.delivered_weight_kg,
             "sale_price_per_quintal": lot.sale_price_per_quintal, "shipment_status": sh.status}

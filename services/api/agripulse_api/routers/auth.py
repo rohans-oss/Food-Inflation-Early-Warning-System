@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Mandi, Organization, User
 from ..rbac import ROLE_ORG_KIND, ROLES, get_current_user
-from ..security import create_access_token, hash_password, verify_password
+from ..security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -43,8 +43,14 @@ class UserOut(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+def tokens_for(u: User) -> TokenOut:
+    return TokenOut(access_token=create_access_token(u.id, u.role, u.org_id), refresh_token=create_refresh_token(u.id),
+                    user=user_out(u))
 
 
 def user_out(u: User) -> UserOut:
@@ -110,7 +116,7 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     db.refresh(user)
     if not user.is_active:
         raise HTTPException(202, "Registered. Your fleet owner must approve you before you can log in.")
-    return TokenOut(access_token=create_access_token(user.id, user.role, user.org_id), user=user_out(user))
+    return tokens_for(user)
 
 
 @router.post("/login", response_model=TokenOut)
@@ -120,7 +126,24 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong email or password")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account disabled")
-    return TokenOut(access_token=create_access_token(user.id, user.role, user.org_id), user=user_out(user))
+    return tokens_for(user)
+
+
+class RefreshIn(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh", response_model=TokenOut)
+def refresh(body: RefreshIn, db: Session = Depends(get_db)):
+    """Swap a refresh token for a new pair. Disabled users and role changes take effect here."""
+    try:
+        payload = decode_token(body.refresh_token, typ="refresh")
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token")
+    user = db.get(User, int(payload["sub"]))
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or disabled")
+    return tokens_for(user)
 
 
 @router.get("/me", response_model=UserOut)

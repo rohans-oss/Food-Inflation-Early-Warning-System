@@ -1,5 +1,9 @@
 """In-transit supply (display only in V1) and the rule-based best-mandi recommender."""
+import os
+import tomllib
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
 from statistics import median
 
 from sqlalchemy import func, select
@@ -8,11 +12,20 @@ from sqlalchemy.orm import Session
 from tracking.geo import haversine_km
 from tracking.routing import road_km
 
-from .config import get_settings
 from .models import Arrival, Forecast, Mandi, Price, Trip, Weather
 
 IST = timezone(timedelta(hours=5, minutes=30))
-CROP_SENSITIVITY = {"Tomato": 1.0}  # V1 crop; onion ~0.3, pulses ~0.05 when added
+_DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "config" / "recommender.toml"
+
+
+@lru_cache
+def cost_config() -> dict:
+    """All recommender cost parameters live in config/recommender.toml (brief: 'keep them in a config file')."""
+    path = Path(os.environ.get("RECOMMENDER_CONFIG", _DEFAULT_CONFIG))
+    with open(path, "rb") as f:
+        cfg = tomllib.load(f)
+    cfg["_path"] = str(path)
+    return cfg
 
 
 def ist_today(now: datetime | None = None) -> date:
@@ -107,18 +120,22 @@ def _latest_forecast(db: Session, mandi_id: int, weeks: int) -> Forecast | None:
 def _temp_c(db: Session, mandi_id: int) -> tuple[float, str]:
     w = db.scalar(select(Weather).where(Weather.mandi_id == mandi_id, Weather.date == date.today(),
                                         Weather.tmax_c.is_not(None)).limit(1))
-    return (w.tmax_c, w.source) if w else (30.0, "default")
+    return (w.tmax_c, w.source) if w else (cost_config()["spoilage"]["default_temp_c"], "default")
 
 
 def spoilage_pct(hours: float, temp_c: float, crop: str = "Tomato") -> float:
     """% of value lost in transit: base rate at 30C, doubling every +10C (Q10 = 2)."""
-    s = get_settings()
-    return s.spoilage_pct_per_hour_at_30c * hours * 2 ** ((temp_c - 30) / 10) * CROP_SENSITIVITY.get(crop, 1.0)
+    sp = cost_config()["spoilage"]
+    sens = sp["crop_sensitivity"].get(crop, 1.0)
+    return sp["base_pct_per_hour"] * hours * sp["q10"] ** ((temp_c - sp["reference_temp_c"]) / 10) * sens
 
 
 def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tomato", weeks: int = 1,
-              radius_km: float = 300, max_candidates: int = 12) -> dict:
-    s = get_settings()
+              radius_km: float | None = None, max_candidates: int | None = None) -> dict:
+    cfg = cost_config()
+    rate = cfg["transport"]["rate_per_km_ton"]
+    radius_km = radius_km or cfg["search"]["radius_km"]
+    max_candidates = max_candidates or cfg["search"]["max_candidates"]
     cands = []
     for m in db.scalars(select(Mandi).where(Mandi.lat.is_not(None))):
         d = haversine_km(lat, lon, m.lat, m.lon)
@@ -135,7 +152,7 @@ def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tom
         hours = minutes / 60
         temp, temp_src = _temp_c(db, m.id)
         spoil = spoilage_pct(hours, temp, crop)
-        transport = km * s.transport_rate_per_km_ton * tons
+        transport = km * rate * tons
         quintals = tons * 10
 
         def net(price):
@@ -161,8 +178,9 @@ def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tom
         r["clearly_better_than_next"] = i + 1 < len(ranked) and r["net_value"]["p10"] > ranked[i + 1]["net_value"]["p90"]
     return {
         "inputs": {"lat": lat, "lon": lon, "tons": tons, "crop": crop, "weeks": weeks,
-                   "rate_per_km_ton": s.transport_rate_per_km_ton, "spoilage_pct_per_hour_at_30c": s.spoilage_pct_per_hour_at_30c},
-        "formula": "net = p50 x quantity - distance x rate x tons - spoilage% x gross (spoilage% = base x hours x 2^((T-30)/10))",
+                   "rate_per_km_ton": rate, "spoilage": {k: v for k, v in cfg["spoilage"].items()},
+                   "config_file": Path(cfg["_path"]).name},
+        "formula": "net = price x quantity - road km x rate x tons - spoilage% x gross; spoilage% = base x hours x q10^((T-Tref)/10) x crop sensitivity",
         "ranked": ranked,
         "no_forecast": no_forecast,
     }

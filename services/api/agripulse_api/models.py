@@ -319,3 +319,18 @@ class Alert(Base):
     channels: Mapped[dict] = mapped_column(JSON, default=dict)  # {"in_app": "sent", "email": "skipped"}
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     read_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class AuditLog(Base):
+    """Append-only record of every lifecycle transition (lot, shipment, trip, payout)."""
+
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity: Mapped[str] = mapped_column(String(16), index=True)  # lot|shipment|trip
+    entity_id: Mapped[int] = mapped_column(Integer, index=True)
+    field: Mapped[str] = mapped_column(String(24), default="status")  # status|payout_status
+    from_state: Mapped[str | None] = mapped_column(String(24))
+    to_state: Mapped[str] = mapped_column(String(24))
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # None = system (geofence, simulator)
+    at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)

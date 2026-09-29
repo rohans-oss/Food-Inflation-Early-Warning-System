@@ -1,0 +1,28 @@
+# Best-mandi recommender cost parameters (V1, rule-based).
+#
+#   net value = p50 price x quantity
+#             - transport cost   (road km x rate_per_km_ton x tons)
+#             - spoilage loss    (gross x spoilage %)
+#   spoilage % = base_pct_per_hour x trip hours x q10 ^ ((temp - reference_temp_c) / 10) x crop sensitivity
+#
+# These are STARTING ASSUMPTIONS, not measured values. Replace them with numbers from
+# your field test / transporter quotes and note the source next to each one.
+# Override the file location with RECOMMENDER_CONFIG=/path/to/file.toml
+
+[transport]
+rate_per_km_ton = 12.0          # INR per road-km per tonne. Assumption: typical small-truck freight quote.
+
+[spoilage]
+base_pct_per_hour = 0.4         # % of value lost per trip hour at the reference temperature. Assumption.
+reference_temp_c = 30.0
+q10 = 2.0                       # loss rate multiplies by q10 for every +10 C (standard respiration rule of thumb)
+default_temp_c = 30.0           # used when no weather row exists for the mandi today
+
+[spoilage.crop_sensitivity]     # multiplier on the base rate
+Tomato = 1.0
+# Onion = 0.3                   # enable when onion is in scope (V2+)
+# Tur = 0.05
+
+[search]
+radius_km = 300                 # straight-line pre-filter before routing
+max_candidates = 12             # nearest N mandis get routed and ranked

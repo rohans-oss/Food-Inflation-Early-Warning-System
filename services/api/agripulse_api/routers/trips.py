@@ -8,14 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tracking import routing
-from tracking.engine import TrackingNotActive, add_event, live_payload, process_points, public_payload
+from tracking.engine import TrackingNotActive, _local, add_event, live_payload, process_points, public_payload
 from tracking.hub import hub
 
 from ..alerts import mandi_traders, notify, trip_audience
 from ..config import get_settings
 from .. import db as dbmod
 from ..db import get_db
-from ..models import GeofenceEvent, GpsPoint, Lot, Mandi, Shipment, Trip, User, Vehicle
+from ..lifecycle import move
+from ..models import AuditLog, GeofenceEvent, GpsPoint, Lot, Mandi, Shipment, Trip, User, Vehicle
 from ..rbac import forbid, get_current_user, require
 from ..scoping import scoped_trips, trip_filter
 from ..security import decode_token, new_token
@@ -105,6 +106,9 @@ def assign_trip(body: TripIn, db: Session = Depends(get_db), user: User = Depend
         route_source=r.source, remaining_km=r.distance_km,
     )
     db.add(t)
+    db.flush()
+    db.add(AuditLog(entity="trip", entity_id=t.id, from_state=None, to_state="assigned", actor_id=user.id,
+                    details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source}))
     db.commit()
     db.refresh(t)
     return trip_out(db, t, user)
@@ -144,16 +148,10 @@ def _driver_trip(db: Session, user: User, trip_id: int) -> Trip:
     return t
 
 
-def _transition(t: Trip, allowed_from: set[str], to: str) -> None:
-    if t.status not in allowed_from:
-        raise HTTPException(409, f"Trip is {t.status}; cannot move to {to}")
-    t.status = to
-
-
 @router.post("/trips/{trip_id}/accept")
 def accept(trip_id: int, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
     t = _driver_trip(db, user, trip_id)
-    _transition(t, {"assigned"}, "accepted")
+    move(db, t, "accepted", user.id)
     db.commit()
     return trip_out(db, t, user)
 
@@ -161,7 +159,7 @@ def accept(trip_id: int, db: Session = Depends(get_db), user: User = Depends(req
 @router.post("/trips/{trip_id}/decline")
 def decline(trip_id: int, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
     t = _driver_trip(db, user, trip_id)
-    _transition(t, {"assigned", "accepted"}, "declined")
+    move(db, t, "declined", user.id)
     db.commit()
     return trip_out(db, t, user)
 
@@ -185,13 +183,13 @@ def start(trip_id: int, db: Session = Depends(get_db), user: User = Depends(requ
     t = _driver_trip(db, user, trip_id)
     if t.consent_given_at is None:
         raise HTTPException(409, "Location consent is required before starting the trip")
-    _transition(t, {"accepted"}, "in_progress")
+    move(db, t, "in_progress", user.id)
     now = datetime.now(timezone.utc)
     t.started_at = now
     t.share_token = new_token()
     t.share_expires_at = now + timedelta(hours=get_settings().share_link_hours)
     if t.shipment:
-        t.shipment.status = "in_transit"
+        move(db, t.shipment, "in_transit", user.id, trip_id=t.id)
     db.commit()
     return trip_out(db, t, user)
 
@@ -214,7 +212,7 @@ def scan_pickup(trip_id: int, body: ScanIn, db: Session = Depends(get_db), user:
         add_event(db, t, "picked_up", now, t.last_lat, t.last_lon)
         link = f"{get_settings().public_base_url}/track/{t.share_token}"
         for lot in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
-            lot.status = "in_transit"
+            move(db, lot, "in_transit", user.id, trip_id=t.id, via="pickup_qr")
             notify(db, lot.farmer, "picked_up", f"pickup:{t.id}:{lot.id}", lot=lot.id, vehicle=t.vehicle.registration,
                    mandi=t.mandi.name, link=link)
         for trader in mandi_traders(db, t.mandi_id):
@@ -243,9 +241,9 @@ def scan_delivery(trip_id: int, body: ScanIn, db: Session = Depends(get_db), use
             add_event(db, t, "reached_mandi", now, t.last_lat, t.last_lon, source="qr_scan")
             for u in trip_audience(db, t):
                 notify(db, u, "vehicle_arrived", f"arrived:{t.id}", vehicle=t.vehicle.registration, mandi=t.mandi.name,
-                       time=trip_out(db, t)["eta_local"] or "now")
+                       time=_local(now))
         for lot in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
-            lot.status = "at_mandi"
+            move(db, lot, "at_mandi", user.id, trip_id=t.id, via="delivery_qr")
     db.commit()
     return trip_out(db, t, user)
 
@@ -253,7 +251,7 @@ def scan_delivery(trip_id: int, body: ScanIn, db: Session = Depends(get_db), use
 @router.post("/trips/{trip_id}/end")
 def end(trip_id: int, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
     t = _driver_trip(db, user, trip_id)
-    _transition(t, {"in_progress"}, "completed")
+    move(db, t, "completed", user.id)
     t.ended_at = datetime.now(timezone.utc)
     t.share_expires_at = min(t.share_expires_at or t.ended_at, t.ended_at + timedelta(hours=2))
     db.commit()

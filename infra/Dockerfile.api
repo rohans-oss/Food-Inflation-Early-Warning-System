@@ -7,6 +7,7 @@ COPY pyproject.toml alembic.ini ./
 COPY services ./services
 COPY ml ./ml
 COPY apps/driver-pwa ./apps/driver-pwa
+COPY config ./config
 RUN pip install --no-cache-dir -e .
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000

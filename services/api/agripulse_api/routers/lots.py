@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..models import Lot, Organization, Shipment, Trip, User, Vehicle
+from ..lifecycle import history, move
+from ..models import AuditLog, Lot, Organization, Shipment, Trip, User, Vehicle
 from ..rbac import forbid, get_current_user, require
 from ..scoping import lot_filter, scoped_lots
 
@@ -103,6 +104,9 @@ def create_lot(body: LotIn, db: Session = Depends(get_db), user: User = Depends(
         pickup_lon=body.pickup_lon,
     )
     db.add(lot)
+    db.flush()
+    db.add(AuditLog(entity="lot", entity_id=lot.id, from_state=None, to_state="registered", actor_id=user.id,
+                    details={"tons": lot.quantity_tons}))
     db.commit()
     db.refresh(lot)
     return lot_out(db, lot, user)
@@ -126,6 +130,18 @@ def get_scoped_lot(db: Session, user: User, lot_id: int) -> Lot:
 @router.get("/lots/{lot_id}")
 def get_lot(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:read"))):
     return lot_out(db, get_scoped_lot(db, user, lot_id), user)
+
+
+@router.get("/lots/{lot_id}/history")
+def lot_history(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:read"))):
+    """Audit trail: every state change of the lot, its shipment and its trip, oldest first."""
+    lot = get_scoped_lot(db, user, lot_id)
+    rows = [{"entity": "lot", **h} for h in history(db, "lot", lot.id)]
+    if lot.shipment_id:
+        rows += [{"entity": "shipment", **h} for h in history(db, "shipment", lot.shipment_id)]
+        for tid in db.scalars(select(Trip.id).where(Trip.shipment_id == lot.shipment_id)):
+            rows += [{"entity": "trip", "trip_id": tid, **h} for h in history(db, "trip", tid)]
+    return sorted(rows, key=lambda r: r["at"])
 
 
 class ShareIn(BaseModel):
@@ -219,8 +235,11 @@ def create_shipment(body: ShipmentIn, db: Session = Depends(get_db), user: User 
     sh = Shipment(org_id=user.org_id, mandi_id=mandi.id, created_by=user.id)
     db.add(sh)
     db.flush()
+    db.add(AuditLog(entity="shipment", entity_id=sh.id, from_state=None, to_state="planned", actor_id=user.id,
+                    details={"lots": [lot.id for lot in lots], "mandi_id": mandi.id}))
     for lot in lots:
-        lot.shipment_id, lot.status = sh.id, "grouped"
+        lot.shipment_id = sh.id
+        move(db, lot, "grouped", user.id, shipment_id=sh.id)
     db.commit()
     db.refresh(sh)
     return shipment_out(db, sh)
@@ -254,9 +273,10 @@ def book_vehicle(shipment_id: int, body: BookIn, db: Session = Depends(get_db), 
     fleet = db.get(Organization, body.fleet_org_id)
     if fleet is None or fleet.kind != "fleet":
         raise HTTPException(400, "Not a fleet")
-    if sh.status not in ("planned", "booked"):
-        raise HTTPException(409, f"Shipment is already {sh.status}")
-    sh.fleet_org_id, sh.status, sh.booked_at = fleet.id, "booked", datetime.now(timezone.utc)
+    if db.scalar(select(Trip.id).where(Trip.shipment_id == sh.id, Trip.status.not_in(["declined", "cancelled"]))):
+        raise HTTPException(409, "A vehicle is already assigned; it can't be re-booked now")
+    move(db, sh, "booked", user.id, fleet_org_id=fleet.id)
+    sh.fleet_org_id, sh.booked_at = fleet.id, datetime.now(timezone.utc)
     db.commit()
     return shipment_out(db, sh)
 
@@ -264,9 +284,7 @@ def book_vehicle(shipment_id: int, body: BookIn, db: Session = Depends(get_db), 
 @router.post("/lots/{lot_id}/payout")
 def mark_paid(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("shipments:manage"))):
     lot = get_scoped_lot(db, user, lot_id)
-    if lot.status != "delivered":
-        raise HTTPException(409, "Only delivered lots can be marked paid")
-    lot.payout_status = "paid"
+    move(db, lot, "paid", user.id, field="payout_status")
     db.commit()
     return lot_out(db, lot, user)
 

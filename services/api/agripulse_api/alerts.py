@@ -2,11 +2,13 @@
 arrival and delivery. In-app always; email when SMTP is configured; SMS through an
 optional webhook adapter. English and Kannada.
 
-The Kannada strings were machine-drafted and are marked unreviewed. Get a native
-speaker to check them before a field pilot (docs/alerts.md).
+Copy lives in i18n/alerts.json. The Kannada strings were machine-drafted and are marked
+unreviewed there; get a native speaker to check them before a field pilot (docs/alerts.md).
 """
 import json
 import logging
+from functools import lru_cache
+from pathlib import Path
 import smtplib
 from email.message import EmailMessage
 
@@ -20,54 +22,28 @@ from .models import Alert, Forecast, Lot, Mandi, Shipment, Trip, User
 
 log = logging.getLogger("agripulse.alerts")
 
-KN_REVIEWED = False
-
-TEMPLATES = {
-    "price_spike": {
-        "severity": "warning",
-        "en": ("Price spike risk: {mandi}",
-               "{prob}% chance tomato prices at {mandi} jump more than {threshold}% within 2 weeks. "
-               "2-week range: Rs {p10}-{p90}/quintal (median {p50}).{synthetic}"),
-        "kn": ("ಬೆಲೆ ಏರಿಕೆಯ ಎಚ್ಚರಿಕೆ: {mandi}",
-               "ಮುಂದಿನ 2 ವಾರಗಳಲ್ಲಿ {mandi}ನಲ್ಲಿ ಟೊಮೆಟೊ ಬೆಲೆ {threshold}% ಕ್ಕಿಂತ ಹೆಚ್ಚು ಏರುವ ಸಾಧ್ಯತೆ {prob}%. "
-               "2 ವಾರದ ಅಂದಾಜು ಶ್ರೇಣಿ: ₹{p10}-{p90}/ಕ್ವಿಂಟಾಲ್ (ಮಧ್ಯಮ {p50}).{synthetic}"),
-    },
-    "vehicle_delay": {
-        "severity": "warning",
-        "en": ("Vehicle delayed: {vehicle}", "Vehicle {vehicle} to {mandi} is running about {minutes} min late. New ETA {eta}."),
-        "kn": ("ವಾಹನ ತಡವಾಗಿದೆ: {vehicle}", "{mandi}ಗೆ ಹೋಗುತ್ತಿರುವ ವಾಹನ {vehicle} ಸುಮಾರು {minutes} ನಿಮಿಷ ತಡವಾಗಿದೆ. ಹೊಸ ಅಂದಾಜು ಸಮಯ {eta}."),
-    },
-    "unexpected_stop": {
-        "severity": "warning",
-        "en": ("Vehicle stopped: {vehicle}", "Vehicle {vehicle} has been stationary for {minutes} min away from the pickup point and mandi."),
-        "kn": ("ವಾಹನ ನಿಂತಿದೆ: {vehicle}", "ವಾಹನ {vehicle} ಪಿಕ್‌ಅಪ್ ಸ್ಥಳ ಮತ್ತು ಮಂಡಿಯಿಂದ ದೂರದಲ್ಲಿ {minutes} ನಿಮಿಷಗಳಿಂದ ನಿಂತಿದೆ."),
-    },
-    "picked_up": {
-        "severity": "info",
-        "en": ("Lot #{lot} picked up", "Vehicle {vehicle} has collected your lot #{lot} for {mandi}. Track it live: {link}"),
-        "kn": ("ಲಾಟ್ #{lot} ಎತ್ತಿಕೊಳ್ಳಲಾಗಿದೆ", "ವಾಹನ {vehicle} ನಿಮ್ಮ ಲಾಟ್ #{lot} ಅನ್ನು {mandi}ಗಾಗಿ ಎತ್ತಿಕೊಂಡಿದೆ. ಲೈವ್ ಟ್ರ್ಯಾಕಿಂಗ್: {link}"),
-    },
-    "vehicle_arrived": {
-        "severity": "info",
-        "en": ("Vehicle reached {mandi}", "Vehicle {vehicle} reached {mandi} at {time}."),
-        "kn": ("ವಾಹನ {mandi} ತಲುಪಿದೆ", "ವಾಹನ {vehicle} {time}ಕ್ಕೆ {mandi} ತಲುಪಿದೆ."),
-    },
-    "delivered": {
-        "severity": "info",
-        "en": ("Delivery confirmed: lot #{lot}", "Lot #{lot} weighed at {mandi}: {kg} kg at Rs {price}/quintal. Payout: {payout}."),
-        "kn": ("ವಿತರಣೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ: ಲಾಟ್ #{lot}", "ಲಾಟ್ #{lot} ಅನ್ನು {mandi}ನಲ್ಲಿ ತೂಕ ಮಾಡಲಾಗಿದೆ: {kg} ಕೆಜಿ, ₹{price}/ಕ್ವಿಂಟಾಲ್. ಪಾವತಿ: {payout}."),
-    },
-    "incoming_vehicle": {
-        "severity": "info",
-        "en": ("Incoming: {vehicle}", "{vehicle} with {tons} t tomato is heading to {mandi}, ETA {eta}."),
-        "kn": ("ಬರುತ್ತಿರುವ ವಾಹನ: {vehicle}", "{vehicle} {tons} ಟನ್ ಟೊಮೆಟೊ ಹೊತ್ತು {mandi}ಗೆ ಬರುತ್ತಿದೆ, ಅಂದಾಜು ಸಮಯ {eta}."),
-    },
+SEVERITY = {
+    "price_spike": "warning",
+    "vehicle_delay": "warning",
+    "unexpected_stop": "warning",
+    "picked_up": "info",
+    "vehicle_arrived": "info",
+    "delivered": "info",
+    "incoming_vehicle": "info",
 }
+LANGS = ("en", "kn")
+
+
+@lru_cache
+def messages() -> dict:
+    """Alert copy lives in i18n/alerts.json, one block per language."""
+    return json.loads((Path(__file__).parent / "i18n" / "alerts.json").read_text(encoding="utf-8"))
 
 
 def render(kind: str, lang: str, **params) -> tuple[str, str]:
-    t = TEMPLATES[kind].get(lang) or TEMPLATES[kind]["en"]
-    return t[0].format(**params), t[1].format(**params)
+    m = messages()
+    t = m.get(lang, {}).get(kind) or m["en"][kind]
+    return t["title"].format(**params), t["body"].format(**params)
 
 
 def notify(db: Session, user: User, kind: str, dedupe_key: str, **params) -> Alert | None:
@@ -75,9 +51,9 @@ def notify(db: Session, user: User, kind: str, dedupe_key: str, **params) -> Ale
     key = f"{user.id}:{dedupe_key}"
     if db.scalar(select(Alert.id).where(Alert.dedupe_key == key)):
         return None
-    lang = user.preferred_lang if user.preferred_lang in ("en", "kn") else "en"
+    lang = user.preferred_lang if user.preferred_lang in LANGS else "en"
     title, body = render(kind, lang, **params)
-    alert = Alert(user_id=user.id, kind=kind, severity=TEMPLATES[kind]["severity"], title=title, body=body,
+    alert = Alert(user_id=user.id, kind=kind, severity=SEVERITY[kind], title=title, body=body,
                   lang=lang, dedupe_key=key, channels={"in_app": "sent"})
     try:
         with db.begin_nested():

@@ -29,22 +29,28 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(got, expected)
 
 
-def create_access_token(user_id: int, role: str, org_id: int | None) -> str:
+def _encode(user_id: int, typ: str, ttl: timedelta, **claims) -> str:
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {
-        "sub": str(user_id),
-        "role": role,
-        "org": org_id,
-        "iat": now,
-        "exp": now + timedelta(minutes=s.jwt_expire_minutes),
-    }
+    payload = {"sub": str(user_id), "typ": typ, "iat": now, "exp": now + ttl, "jti": secrets.token_hex(8), **claims}
     return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm)
 
 
-def decode_token(token: str) -> dict:
+def create_access_token(user_id: int, role: str, org_id: int | None) -> str:
+    return _encode(user_id, "access", timedelta(minutes=get_settings().jwt_expire_minutes), role=role, org=org_id)
+
+
+def create_refresh_token(user_id: int) -> str:
+    return _encode(user_id, "refresh", timedelta(days=get_settings().jwt_refresh_days))
+
+
+def decode_token(token: str, typ: str = "access") -> dict:
+    """Raises if expired, tampered, or the wrong kind (a refresh token is not an access token)."""
     s = get_settings()
-    return jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
+    payload = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
+    if payload.get("typ") != typ:
+        raise jwt.InvalidTokenError(f"expected a {typ} token")
+    return payload
 
 
 def new_token(nbytes: int = 24) -> str:

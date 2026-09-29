@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agripulse_api import db as dbmod
+from agripulse_api.lifecycle import move
 from agripulse_api.models import Mandi, Organization, Trip, Vehicle
 from agripulse_api.security import new_token
 
@@ -121,7 +122,8 @@ def tick(db: Session, st: SimState, dt_s: float, rng: random.Random, now: dateti
         lat, lon, done = _point_along(t.route_geometry, st.progress.get(tid, 0.0))
         process_points(db, t, [{"recorded_at": now, "lat": lat, "lon": lon, "speed_kmph": speed, "accuracy_m": 15}], now=now)
         if done:
-            t.status, t.ended_at, t.delivery_scanned_at = "completed", now, now
+            move(db, t, "completed", None, via="simulator")
+            t.ended_at, t.delivery_scanned_at = now, now
         else:
             moving += 1
     db.commit()
@@ -160,7 +162,8 @@ def stop(db: Session) -> dict:
     if state.task:
         state.task.cancel()
     for t in db.scalars(select(Trip).where(Trip.is_simulated.is_(True), Trip.status == "in_progress")):
-        t.status, t.ended_at = "cancelled", datetime.now(timezone.utc)
+        move(db, t, "cancelled", None, via="simulator_stop")
+        t.ended_at = datetime.now(timezone.utc)
     db.commit()
     state.trip_ids = []
     return state.status()

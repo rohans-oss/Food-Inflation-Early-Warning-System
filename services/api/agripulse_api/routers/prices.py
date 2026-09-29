@@ -125,6 +125,44 @@ def forecast_block(db: Session, mandi_id: int, commodity: str = "Tomato") -> dic
     }
 
 
+@router.get("/forecasts/baseline")
+def baseline_forecast(mandi_id: int, commodity: str = "Tomato", db: Session = Depends(get_db),
+                      _=Depends(require("forecasts:read"))):
+    """Naive baseline for comparison: today's price moved by the p10/p50/p90 of this mandi's own past
+    h-week price changes (last 365 days). Same shape as the model forecast."""
+    import numpy as np
+    import pandas as pd
+
+    rows = db.execute(
+        select(Price.date, func.avg(Price.modal_price))
+        .where(Price.mandi_id == mandi_id, Price.commodity == commodity, Price.is_outlier.is_(False))
+        .group_by(Price.date).order_by(Price.date)
+    ).all()
+    if len(rows) < 60:
+        raise HTTPException(404, "Need at least 60 days of prices for a baseline")
+    s = pd.Series([r[1] for r in rows], index=pd.to_datetime([r[0] for r in rows])).asfreq("D").ffill(limit=3)
+    s = s[s.index >= s.index[-1] - pd.Timedelta(days=365)]
+    last = float(s.dropna().iloc[-1])
+    lr = np.log(s)
+    horizons = []
+    for h in (1, 2, 3, 4):
+        ch = (lr.shift(-7 * h) - lr).dropna()
+        q10, q50, q90 = (np.quantile(ch, [0.1, 0.5, 0.9]) if len(ch) >= 30 else (0.0, 0.0, 0.0))
+        # identical to the backtested `naive` model: quantiles of this mandi's own past h-week changes
+        horizons.append({"weeks": h, "p10": round(last * float(np.exp(q10))), "p50": round(last * float(np.exp(q50))),
+                         "p90": round(last * float(np.exp(q90)))})
+    synthetic = db.scalar(select(func.max(Price.source)).where(Price.mandi_id == mandi_id)) == "synthetic"
+    return {"mandi_id": mandi_id, "model": "naive", "issue_date": rows[-1][0], "unit": "Rs/quintal",
+            "latest_price": round(last), "horizons": horizons, "is_synthetic": synthetic}
+
+
+@router.get("/prices")
+def prices(mandi_id: int, commodity: str = "Tomato", days: int = 180, db: Session = Depends(get_db),
+           user=Depends(require("prices:read"))):
+    """Alias of /prices/history (the name used in the build brief)."""
+    return price_history(mandi_id, commodity, days, db, user)
+
+
 @router.get("/forecasts/{mandi_id}")
 def mandi_forecast(mandi_id: int, db: Session = Depends(get_db), _=Depends(require("forecasts:read"))):
     if db.get(Mandi, mandi_id) is None:

@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     redis_url: str = ""  # empty -> in-process pub/sub (fine for dev / tests)
     jwt_secret: str = "change-me-in-.env"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60 * 12
+    jwt_expire_minutes: int = 30
+    jwt_refresh_days: int = 14
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
     public_base_url: str = "http://localhost:3000"
 
@@ -42,8 +43,7 @@ class Settings(BaseSettings):
     # --- forecasting / recommender ---
     spike_threshold_pct: float = 30.0  # price rise above this within 2 weeks = spike
     spike_alert_probability: float = 0.5
-    transport_rate_per_km_ton: float = 12.0  # INR per km per ton (edit for your fleet)
-    spoilage_pct_per_hour_at_30c: float = 0.4  # tomato % loss per trip hour at 30C
+    # recommender cost parameters live in config/recommender.toml
     model_dir: str = "ml/artifacts"
 
     # --- alerts ---

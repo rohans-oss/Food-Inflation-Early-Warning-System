@@ -6,6 +6,7 @@
 const API = window.AGRIPULSE_API || (location.origin.includes(":3000") ? location.origin.replace(":3000", ":8000") : location.origin);
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem("ap_driver_token");
+let refreshToken = localStorage.getItem("ap_driver_refresh");
 let current = null;      // trip being viewed
 let watchId = null;      // geolocation watch
 let ws = null;
@@ -33,11 +34,26 @@ const bufAll = () => store("readonly", (s) => s.getAll());
 const bufDel = (keys) => store("readwrite", (s) => keys.forEach((k) => s.delete(k)));
 
 // ------------------------------------------------------------ API
-async function api(path, opts = {}) {
+function saveTokens(r) {
+  token = r.access_token; refreshToken = r.refresh_token;
+  localStorage.setItem("ap_driver_token", token);
+  localStorage.setItem("ap_driver_refresh", refreshToken);
+}
+// Access tokens are short-lived (30 min); a trip is longer, so refresh silently instead of logging out.
+async function tryRefresh() {
+  if (!refreshToken) return false;
+  const r = await fetch(API + "/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }) }).catch(() => null);
+  if (!r || !r.ok) return false;
+  saveTokens(await r.json());
+  return true;
+}
+async function api(path, opts = {}, retried = false) {
   const r = await fetch(API + path, {
     ...opts,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...(opts.headers || {}) },
   });
+  if (r.status === 401 && !retried && !path.startsWith("/auth/") && await tryRefresh()) return api(path, opts, true);
   if (r.status === 401) { logout(); throw new Error("Session expired"); }
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || r.statusText);
@@ -51,8 +67,9 @@ function show(view) {
 }
 function logout() {
   stopTracking();
-  token = null;
+  token = null; refreshToken = null;
   localStorage.removeItem("ap_driver_token");
+  localStorage.removeItem("ap_driver_refresh");
   show("loginView");
 }
 $("logout").onclick = logout;
@@ -64,8 +81,7 @@ $("loginForm").onsubmit = async (e) => {
   try {
     const r = await api("/auth/login", { method: "POST", body: JSON.stringify({ email: f.get("email"), password: f.get("password") }) });
     if (r.user.role !== "driver") throw new Error("This app is for drivers. Use the web dashboard for other roles.");
-    token = r.access_token;
-    localStorage.setItem("ap_driver_token", token);
+    saveTokens(r);
     loadTrips();
   } catch (err) { $("loginErr").textContent = err.message; }
 };
@@ -220,7 +236,13 @@ function openSocket(tripId) {
     if (r.ok === false) { $("scanMsg").textContent = r.error; return; }
     if (r.trip && current && current.id === tripId) { Object.assign(current, r.trip); render(); }
   };
-  ws.onclose = () => { ws = null; if (watchId !== null) setTimeout(() => openSocket(tripId), 3000); };
+  // 4403 = token rejected (usually expired): refresh first, then reconnect
+  ws.onclose = async (ev) => {
+    ws = null;
+    if (watchId === null) return;
+    if (ev.code === 4403) await tryRefresh();
+    setTimeout(() => openSocket(tripId), 3000);
+  };
 }
 
 // Flush everything buffered. Socket if open, otherwise HTTP. Anything that fails stays queued.

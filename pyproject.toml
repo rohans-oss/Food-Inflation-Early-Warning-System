@@ -32,6 +32,9 @@ mlflow = ["mlflow>=2.12"]
 [tool.setuptools.packages.find]
 where = ["services/api", "services/ingest", "services/tracking", "ml"]
 
+[tool.setuptools.package-data]
+agripulse_api = ["i18n/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
