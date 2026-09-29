@@ -91,6 +91,15 @@ so the checks were made through a web fetch and the pilot fetch runs on the user
   listing: `https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N12E075_Map.tif`
   (127.7 MB) and `..._N12E078_Map.tif` (119.1 MB) cover the pilot districts. Only small windows are read.
 - **Publication lag:** 2 days (config/features.toml `sentinel2`).
+- **First real pilot run (2026-09-29, user's machine), 2018-01-01 to today, cloud <= 60%:** Kolar 1,103 scenes,
+  Chikkaballapur 1,508 (the 30 km circles straddle 2-3 tiles: 43PGQ, 43PGR, 43PHQ, 44PKV). Found and handled:
+  - 295 / 402 duplicate listings: older scenes appear as `_0_L2A` (baseline 00.01) and reprocessed `_1_L2A` (05.00);
+    the highest version is kept;
+  - 1 item without band assets (`S2A_43PGQ_20200119_1_L2A`, only coastal / nir09 / metadata): skipped and logged;
+  - overlapping tiles see the same district on the same day (2018-01-04 Kolar: 317,677 / 78,818 / 330 cropland
+    pixels in view); features and validation keep the most complete view per district and day.
+  First values (2018-01-04, dry season): cropland NDVI median 0.31-0.40, 83-99% of cropland pixels clear;
+  WorldCover marks ~70% of each circle as cropland.
 
 ## Ground truth for the satellite signal (V2-4)
 

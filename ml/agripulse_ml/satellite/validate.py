@@ -35,7 +35,9 @@ def agri_year(d: pd.Series) -> pd.Series:
 
 
 def annual_signal(obs: pd.DataFrame, composite_days: int = 10, min_obs: int = 6) -> pd.DataFrame:
-    o = obs.dropna(subset=["ndvi_median"])
+    from .features import best_view_per_day
+
+    o = best_view_per_day(obs).dropna(subset=["ndvi_median"])
     o = o[o["clear_px"] > 0].copy()
     o["date"] = pd.to_datetime(o["date"])
     o["agri_year"] = agri_year(o["date"])

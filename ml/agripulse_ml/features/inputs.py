@@ -99,7 +99,8 @@ class Inputs:
         from agripulse_api.models import SatelliteObs
 
         sat = pd.DataFrame(db.execute(select(SatelliteObs.district, SatelliteObs.date, SatelliteObs.ndvi_median,
-                                             SatelliteObs.clear_px)).all(), columns=["district", "date", "ndvi_median", "clear_px"])
+                                             SatelliteObs.clear_px, SatelliteObs.in_scene_px)).all(),
+                           columns=["district", "date", "ndvi_median", "clear_px", "in_scene_px"])
         sat["date"] = pd.to_datetime(sat["date"])
         return cls(prices=prices, arrivals=arrivals, weather=weather, forecasts=forecasts, mandis=mandis,
                    price_provenance=price_prov, weather_provenance=prov, forecast_provenance=prov, notes=notes,

@@ -235,3 +235,17 @@ def test_validation_is_within_district_and_says_when_n_is_too_small():
     assert few["verdict"].str.startswith("too few").all()
     with pytest.raises(ValueError, match="adapter"):
         compare(sig, truth.drop(columns=["unit"]))
+
+
+def test_overlapping_tiles_count_once_per_day():
+    """Real pilot rows, 2018-01-04 Kolar: three overlapping tiles saw the same fields."""
+    from agripulse_ml.satellite.features import best_view_per_day
+
+    rows = pd.DataFrame({"district": "Kolar", "date": pd.Timestamp("2018-01-04"),
+                         "scene_id": ["S2B_43PGQ_20180104_0_L2A", "S2B_43PHQ_20180104_0_L2A", "S2B_44PKV_20180104_0_L2A"],
+                         "in_scene_px": [330, 317677, 78818], "clear_px": [324, 263264, 69207],
+                         "ndvi_median": [0.404, 0.3944, 0.3999]})
+    best = best_view_per_day(rows)
+    assert best["scene_id"].tolist() == ["S2B_43PHQ_20180104_0_L2A"]
+    s = district_series(rows, pd.date_range("2018-01-01", "2018-01-10"), lag=2)
+    assert s.loc["2018-01-06", "sat_obs_30"] == 1 and s.loc["2018-01-06", "sat_ndvi_30"] == pytest.approx(0.3944)

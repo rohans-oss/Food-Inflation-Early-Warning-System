@@ -17,9 +17,19 @@ SATELLITE = ["sat_ndvi_30", "sat_obs_30", "sat_ndvi_chg_30", "sat_ndvi_anom", "s
 WINDOW = 30
 
 
+def best_view_per_day(obs: pd.DataFrame) -> pd.DataFrame:
+    """Sentinel-2 tiles overlap, so one district is often seen by 2-3 tiles on the same day, covering the SAME
+    fields (first real pilot rows, 2018-01-04 Kolar: 317,677 / 78,818 / 330 cropland pixels in view). Keep the
+    most complete view (most cropland pixels in the scene) per district and day; ties -> more clear pixels."""
+    if obs.empty or "in_scene_px" not in obs:
+        return obs
+    o = obs.sort_values(["district", "date", "in_scene_px", "clear_px"], ascending=[True, True, False, False])
+    return o.drop_duplicates(["district", "date"], keep="first")
+
+
 def district_series(obs: pd.DataFrame, idx: pd.DatetimeIndex, lag: int) -> pd.DataFrame:
-    """obs for ONE district (date, ndvi_median, clear_px) -> daily features on idx."""
-    o = obs.dropna(subset=["ndvi_median"])
+    """obs for ONE district (date, ndvi_median, clear_px[, in_scene_px]) -> daily features on idx."""
+    o = best_view_per_day(obs).dropna(subset=["ndvi_median"])
     o = o[o["clear_px"] > 0]
     full = pd.date_range(min(idx.min(), o["date"].min()) - pd.Timedelta(days=400 * 8), idx.max(), freq="D") \
         if len(o) else idx
