@@ -16,6 +16,9 @@ from .geo import haversine_km, remaining_along_route_km
 from .hub import hub
 
 
+MAX_PLAUSIBLE_KMPH = 130.0  # loaded goods vehicle; anything above is a bad fix
+
+
 class TrackingNotActive(Exception):
     pass
 
@@ -80,8 +83,12 @@ def process_points(db: Session, trip: Trip, points: list[dict], now: datetime | 
             continue
         existing.add(ts)
         if speed is None and prev[0] is not None and ts > prev[0]:
-            hours = (ts - prev[0]).total_seconds() / 3600
-            speed = haversine_km(prev[1], prev[2], lat, lon) / hours if hours > 0 else 0.0
+            secs = (ts - prev[0]).total_seconds()
+            # GPS jitter over short gaps makes derived speed meaningless; only derive over >= 3 s
+            if secs >= 3:
+                speed = haversine_km(prev[1], prev[2], lat, lon) / (secs / 3600)
+        if speed is not None and not (0 <= speed <= MAX_PLAUSIBLE_KMPH):
+            speed = None  # a truck can't do this: bad fix or clock skew, keep the point but drop the speed
         db.add(GpsPoint(trip_id=trip.id, recorded_at=ts, lat=lat, lon=lon, speed_kmph=speed, accuracy_m=acc,
                         received_at=now, is_simulated=trip.is_simulated))
         accepted += 1
@@ -120,6 +127,8 @@ def _geofence(db, trip: Trip, mandi: Mandi, ts, lat, lon, speed, s) -> list[str]
     moving = speed is not None and speed >= s.stop_speed_kmph
     if moving or in_pickup or in_mandi:
         trip.stopped_since = None
+    elif speed is None:
+        pass  # unknown speed (bad fix / first point): neither start nor reset the stop timer
     else:
         if trip.stopped_since is None:
             trip.stopped_since = ts

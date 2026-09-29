@@ -161,8 +161,8 @@ def share_with_lender(lot_id: int, body: ShareIn, db: Session = Depends(get_db),
 
 
 @router.get("/orgs/directory")
-def org_directory(kind: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """Names only, so a farmer can pick an FPO / lender and an FPO can pick a fleet."""
+def org_directory(kind: str, db: Session = Depends(get_db)):
+    """Public, names only: a farmer picks an FPO / lender, an FPO a fleet, a new driver their fleet."""
     if kind not in {"fpo", "fleet", "lender"}:
         raise HTTPException(400, "kind must be fpo, fleet or lender")
     return [{"id": o.id, "name": o.name} for o in db.scalars(select(Organization).where(Organization.kind == kind).order_by(Organization.name))]

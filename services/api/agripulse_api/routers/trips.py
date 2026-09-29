@@ -396,6 +396,21 @@ async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: 
         await _pump(ws, [f"trip:{trip_id}"], initial)
 
 
+@router.websocket("/ws/public/{share_token}")
+async def ws_public(ws: WebSocket, share_token: str):
+    """Live feed for the public tracking link: same reduced payload as GET /public/track/{token}."""
+    await ws.accept()
+    with dbmod.SessionLocal() as db:
+        t = db.scalar(select(Trip).where(Trip.share_token == share_token))
+        ok = t is not None and t.share_expires_at is not None and t.share_expires_at > datetime.now(timezone.utc)
+        initial = [{"type": "position", **public_payload(db, t)}] if ok else []
+        trip_id = t.id if t else None
+    if not ok:
+        await ws.close(code=4410)
+        return
+    await _pump_public(ws, trip_id, initial)
+
+
 async def _pump_public(ws: WebSocket, trip_id: int, initial: list[dict]):
     """Public viewers get a re-computed public payload on each update, never the raw one."""
     q = hub.subscribe(f"trip:{trip_id}")

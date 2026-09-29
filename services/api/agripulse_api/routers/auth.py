@@ -39,6 +39,7 @@ class UserOut(BaseModel):
     mandi_id: int | None
     preferred_lang: str
     watch_mandi_ids: list[int]
+    is_active: bool = True
 
 
 class TokenOut(BaseModel):
@@ -65,6 +66,7 @@ def user_out(u: User) -> UserOut:
         mandi_id=u.mandi_id,
         preferred_lang=u.preferred_lang,
         watch_mandi_ids=u.watch_mandi_ids or [],
+        is_active=u.is_active,
     )
 
 

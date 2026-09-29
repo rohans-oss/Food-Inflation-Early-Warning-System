@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Mandi
-from ..rbac import get_current_user
 
 router = APIRouter(prefix="/mandis", tags=["mandis"])
 
@@ -23,7 +22,8 @@ def mandi_out(m: Mandi) -> dict:
 
 
 @router.get("")
-def list_mandis(state: str | None = None, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def list_mandis(state: str | None = None, db: Session = Depends(get_db)):
+    """Public: mandi names and locations are public information (needed on the sign-up form)."""
     q = select(Mandi).order_by(Mandi.state, Mandi.name)
     if state:
         q = q.where(Mandi.state == state)

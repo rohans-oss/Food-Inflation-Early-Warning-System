@@ -1,0 +1,57 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+import { getSession, wsUrl } from "./api";
+
+/** Subscribe to one trip's live stream. Auth with the session token, or a public share token. */
+export function useLiveTrip(tripId: number | null | undefined, opts: { share?: string } = {}) {
+  const [pos, setPos] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
+  const retry = useRef(0);
+
+  useEffect(() => {
+    if (!tripId) return;
+    let ws: WebSocket | null = null;
+    let closed = false;
+    const open = () => {
+      const params: Record<string, string> = opts.share ? { share: opts.share } : { token: getSession()?.access_token ?? "" };
+      ws = new WebSocket(wsUrl(`/ws/trips/${tripId}`, params));
+      ws.onopen = () => { setConnected(true); retry.current = 0; };
+      ws.onmessage = (m) => {
+        const msg = JSON.parse(m.data);
+        if (msg.type === "position") setPos(msg);
+        else if (msg.type === "event") setEvents((e) => [...e, msg]);
+        else if (msg.type === "status") setPos((p: any) => ({ ...(p ?? {}), status: msg.status }));
+      };
+      ws.onclose = () => {
+        setConnected(false);
+        if (!closed) setTimeout(open, Math.min(30000, 2000 * 2 ** retry.current++));
+      };
+    };
+    open();
+    return () => { closed = true; ws?.close(); };
+  }, [tripId, opts.share]);
+
+  return { pos, events, connected };
+}
+
+/** Role-scoped live feed (fleet / mandi / all mandis), for map pages. */
+export function useLiveFeed(onMessage: (msg: any) => void) {
+  const cb = useRef(onMessage);
+  cb.current = onMessage;
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let closed = false;
+    const open = () => {
+      const token = getSession()?.access_token;
+      if (!token) return;
+      ws = new WebSocket(wsUrl("/ws/live", { token }));
+      ws.onmessage = (m) => cb.current(JSON.parse(m.data));
+      ws.onclose = () => { if (!closed) setTimeout(open, 5000); };
+    };
+    open();
+    return () => { closed = true; ws?.close(); };
+  }, []);
+}

@@ -244,3 +244,38 @@ def test_simulator_marks_everything_simulated(db):
     for tid in ids:
         t = db.get(Trip, tid)
         assert t.is_simulated and t.vehicle.is_simulated and t.last_lat is not None
+
+
+def test_public_websocket_by_share_token(client, as_role, db, journey):
+    D = as_role("driver")
+    tid = journey["trip"]["id"]
+    client.post(f"/trips/{tid}/accept", headers=D)
+    client.post(f"/trips/{tid}/consent", headers=D, json={"consent": True})
+    client.post(f"/trips/{tid}/start", headers=D)
+    db.expire_all()
+    token = db.get(Trip, tid).share_token
+    with client.websocket_connect(f"/ws/public/{token}") as ws:
+        first = ws.receive_json()
+        assert first["type"] == "position" and "trip_id" not in first and "vehicle" not in first
+        client.post(f"/trips/{tid}/points", headers=D, json={"points": [
+            {"recorded_at": datetime.now(timezone.utc).isoformat(), "lat": 13.17, "lon": 78.07, "speed_kmph": 35}]})
+        msg = ws.receive_json()
+        assert msg["lat"] == 13.17 and set(msg) <= {"type", "status", "lat", "lon", "last_seen_at", "remaining_km",
+                                                    "eta_at", "eta_local", "lots", "is_simulated"}
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/public/not-a-token") as ws:
+            ws.receive_json()
+
+
+def test_implausible_speed_is_dropped(db, journey):
+    t = _start(db, journey["trip"]["id"], 5)
+    now = datetime.now(timezone.utc)
+    # 1 km in 1 s, then 1 km in 0.5 s with a reported speed: neither is a real truck speed
+    process_points(db, t, [
+        {"recorded_at": now - timedelta(seconds=3), "lat": 13.20, "lon": 78.02},
+        {"recorded_at": now - timedelta(seconds=2), "lat": 13.209, "lon": 78.02},
+        {"recorded_at": now - timedelta(seconds=1), "lat": 13.218, "lon": 78.02, "speed_kmph": 7200},
+    ], now=now)
+    db.commit()
+    assert t.last_speed_kmph is None

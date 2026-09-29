@@ -158,6 +158,12 @@ $("consent").onchange = async (e) => {
   if (!e.target.checked) stopTracking();
 };
 
+function notice(text) {
+  $("notice").textContent = text;
+  $("notice").hidden = false;
+  setTimeout(() => { $("notice").hidden = true; }, 8000);
+}
+
 // ------------------------------------------------------------ QR
 function drawQR(text) {
   if (!window.qrcode) { $("qr").textContent = ""; $("qrText").textContent = text; return; }
@@ -171,8 +177,8 @@ function drawQR(text) {
 async function submitPickup(tokenText) {
   try {
     current = await api(`/trips/${current.id}/scan/pickup`, { method: "POST", body: JSON.stringify({ token: tokenText.trim() }) });
-    $("scanMsg").textContent = "Pickup confirmed.";
     render();
+    notice("Pickup confirmed. The farmer has been notified.");
   } catch (e) { $("scanMsg").textContent = e.message; }
 }
 $("manualBtn").onclick = () => submitPickup($("manualToken").value);

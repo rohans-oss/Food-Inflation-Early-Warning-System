@@ -1,0 +1,188 @@
+"use client";
+
+import { cloneElement, isValidElement, ReactNode, useCallback, useEffect, useId, useState } from "react";
+
+import { api } from "@/lib/api";
+import { spikeLevel } from "@/lib/format";
+
+export function Card({ title, action, children, className = "" }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={`min-w-0 rounded-xl border border-line bg-surface p-4 ${className}`}>
+      {(title || action) && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          {title && <h2 className="text-base font-semibold">{title}</h2>}
+          {action}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-line bg-surface p-4">
+      <div className="text-sm text-ink2">{label}</div>
+      <div className="mt-1 text-2xl font-semibold">{value}</div>
+      {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
+    </div>
+  );
+}
+
+type BadgeKind = "neutral" | "sim" | "good" | "warn" | "serious" | "critical" | "brand";
+const badgeCls: Record<BadgeKind, string> = {
+  neutral: "border-line text-ink2",
+  sim: "border-amber-400/60 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
+  good: "border-good/50 text-ink",
+  warn: "border-warn/60 text-ink",
+  serious: "border-serious/60 text-ink",
+  critical: "border-critical/60 text-ink",
+  brand: "border-brand/50 text-ink",
+};
+const dotCls: Partial<Record<BadgeKind, string>> = {
+  good: "bg-good", warn: "bg-warn", serious: "bg-serious", critical: "bg-critical", brand: "bg-brand",
+};
+
+export function Badge({ kind = "neutral", children }: { kind?: BadgeKind; children: ReactNode }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${badgeCls[kind]}`}>
+      {dotCls[kind] && <span aria-hidden className={`h-2 w-2 rounded-full ${dotCls[kind]}`} />}
+      {children}
+    </span>
+  );
+}
+
+/** Rule 1: anything simulated says so. */
+export function SimBadge({ on, label = "Simulated" }: { on: boolean | null | undefined; label?: string }) {
+  return on ? <Badge kind="sim">{label}</Badge> : null;
+}
+
+/** Spike risk: status colour + icon dot + text label, never colour alone. */
+export function SpikeBadge({ p }: { p: number | null | undefined }) {
+  const s = spikeLevel(p);
+  if (s.level === "none") return <Badge>{s.label}</Badge>;
+  return <Badge kind={s.level}>{s.label} · {Math.round((p ?? 0) * 100)}%</Badge>;
+}
+
+const statusKind: Record<string, BadgeKind> = {
+  registered: "neutral", grouped: "brand", planned: "neutral", booked: "brand", assigned: "neutral",
+  accepted: "brand", in_progress: "warn", in_transit: "warn", at_mandi: "serious", delivered: "good",
+  completed: "good", paid: "good", pending: "neutral", declined: "critical", cancelled: "critical",
+  success: "good", failed: "critical", running: "warn", fresh: "good", stale: "critical", never: "neutral",
+};
+export function StatusBadge({ s }: { s: string | null | undefined }) {
+  if (!s) return null;
+  return <Badge kind={statusKind[s] ?? "neutral"}>{s.replace(/_/g, " ")}</Badge>;
+}
+
+export function Button({ children, variant = "primary", className = "", ...p }:
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "ghost" }) {
+  const v = {
+    primary: "bg-brand text-brand-ink hover:opacity-90",
+    secondary: "border border-line bg-surface hover:bg-page",
+    danger: "bg-critical text-white hover:opacity-90",
+    ghost: "text-ink2 hover:text-ink underline-offset-2 hover:underline",
+  }[variant];
+  return (
+    <button {...p} className={`rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${v} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+/** Label linked by id (not wrapping), so a <select>'s accessible name is the label, not its option text. */
+export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  const auto = useId();
+  const child = isValidElement<{ id?: string; "aria-describedby"?: string }>(children) ? children : null;
+  const id = child?.props.id ?? auto;
+  const hintId = hint ? `${id}-hint` : undefined;
+  return (
+    <div className="block text-sm">
+      <label htmlFor={id} className="mb-1 block text-ink2">{label}</label>
+      {child ? cloneElement(child, { id, "aria-describedby": hintId }) : children}
+      {hint && <span id={hintId} className="mt-1 block text-xs text-muted">{hint}</span>}
+    </div>
+  );
+}
+
+export const inputCls = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40";
+
+export function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: string }) {
+  const hasRows = Array.isArray(children) ? children.flat().filter(Boolean).length > 0 : !!children;
+  return (
+    <div className="-mx-4 overflow-x-auto px-4">
+      <table className="w-full min-w-[520px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+            {head.map((h, i) => <th key={i} className="py-2 pr-3 font-medium">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody className="tnum">{children}</tbody>
+      </table>
+      {!hasRows && <p className="py-4 text-sm text-muted">{empty ?? "Nothing here yet."}</p>}
+    </div>
+  );
+}
+export const Td = ({ children, className = "" }: { children?: ReactNode; className?: string }) =>
+  <td className={`border-b border-line py-2 pr-3 align-top ${className}`}>{children}</td>;
+
+export function ErrorNote({ error }: { error: string | null | undefined }) {
+  if (!error) return null;
+  return <p role="alert" className="rounded-lg border border-critical/40 px-3 py-2 text-sm text-critical">{error}</p>;
+}
+
+export function Note({ children }: { children: ReactNode }) {
+  return <p className="rounded-lg border border-line bg-page px-3 py-2 text-xs text-ink2">{children}</p>;
+}
+
+/** Fetch helper with loading / error / reload and optional polling. */
+export function useApi<T>(path: string | null, opts: { query?: Record<string, unknown>; poll?: number } = {}) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!!path);
+  const key = path ? path + JSON.stringify(opts.query ?? {}) : null;
+
+  const load = useCallback(async () => {
+    if (!path) return;
+    try {
+      const d = await api<T>(path, { query: opts.query });
+      setData(d);
+      setError(null);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  useEffect(() => {
+    setLoading(!!path);
+    load();
+    if (!opts.poll) return;
+    const id = setInterval(load, opts.poll);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, opts.poll]);
+
+  return { data, error, loading, reload: load, setData };
+}
+
+/** Run an action with a busy flag and an error message. */
+export function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    setBusy(true);
+    setError(null);
+    try {
+      return await fn();
+    } catch (e: any) {
+      setError(e.message);
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  return { busy, error, run, setError };
+}
