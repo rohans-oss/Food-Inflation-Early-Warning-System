@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from agripulse_api.config import get_settings
 from agripulse_api.db import SessionLocal
 from agripulse_api.models import Forecast
+from agripulse_api.readiness import mandi_price_ready, provenance_for
 
 from .data import load_arrivals, load_prices, load_weather
 from .features import HORIZONS, QUANTILES, build_features
@@ -33,6 +34,7 @@ def predict_latest(db: Session, model_dir: str | None = None) -> dict:
         raise RuntimeError("No trained model. Run `python -m agripulse_ml.train` first.")
     meta = json.loads(meta_path.read_text())
     synthetic = bool(meta.get("trained_on_synthetic"))
+    ready = {} if synthetic else mandi_price_ready(db)
     model = LoadedLightGBM(d)
 
     prices = load_prices(db, synthetic=synthetic)
@@ -75,6 +77,7 @@ def predict_latest(db: Session, model_dir: str | None = None) -> dict:
             f.spike_prob = round(float(preds["spike_prob"][i]), 3)
             f.model_version = meta.get("model_version", "")
             f.trained_on_synthetic = synthetic
+            f.data_provenance = provenance_for(synthetic, ready.get(int(row.mandi_id), False))
             written += 1
     db.commit()
     return {"written": written, "mandis": int(len(latest)), "issue_date": str(newest.date()), "synthetic": synthetic}

@@ -52,6 +52,43 @@ export function Badge({ kind = "neutral", children }: { kind?: BadgeKind; childr
   );
 }
 
+export type Provenance = "real" | "real_partial" | "synthetic";
+const PROV: Record<Provenance, { full: string; short: string; cls: string; dot: string }> = {
+  synthetic: {
+    full: "SYNTHETIC — METHODOLOGY DEMO",
+    short: "SYNTHETIC",
+    cls: "border-critical bg-critical/10 text-critical font-semibold",
+    dot: "bg-critical",
+  },
+  real_partial: {
+    full: "REAL — LIMITED HISTORY",
+    short: "REAL — LIMITED",
+    cls: "border-warn bg-warn/15 text-ink font-semibold",
+    dot: "bg-warn",
+  },
+  real: { full: "REAL", short: "REAL", cls: "border-good bg-good/10 text-ink font-semibold", dot: "bg-good" },
+};
+const RANK: Record<Provenance, number> = { real: 0, real_partial: 1, synthetic: 2 };
+
+/** Worst provenance of a set (one synthetic input makes the whole thing synthetic). */
+export function worstProvenance(ps: (string | null | undefined)[]): Provenance | null {
+  const v = ps.filter((p): p is Provenance => !!p && p in RANK);
+  return v.length ? v.reduce((a, b) => (RANK[b] > RANK[a] ? b : a)) : null;
+}
+
+/** V2 rule 9: every forecast / backtest number is shown with where it comes from. Text, never colour alone. */
+export function ProvenanceBadge({ p, compact = false }: { p: string | null | undefined; compact?: boolean }) {
+  if (!p || !(p in PROV)) return null;
+  const d = PROV[p as Provenance];
+  const title = p === "synthetic" ? "SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT" : d.full;
+  return (
+    <span title={title} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${d.cls}`}>
+      <span aria-hidden className={`h-2 w-2 rounded-full ${d.dot}`} />
+      {compact ? d.short : d.full}
+    </span>
+  );
+}
+
 /** Rule 1: anything simulated says so. */
 export function SimBadge({ on, label = "Simulated" }: { on: boolean | null | undefined; label?: string }) {
   return on ? <Badge kind="sim">{label}</Badge> : null;
@@ -69,6 +106,7 @@ const statusKind: Record<string, BadgeKind> = {
   accepted: "brand", in_progress: "warn", in_transit: "warn", at_mandi: "serious", delivered: "good",
   completed: "good", paid: "good", pending: "neutral", declined: "critical", cancelled: "critical",
   success: "good", failed: "critical", running: "warn", fresh: "good", stale: "critical", never: "neutral",
+  ready: "good", collecting: "warn", stalled: "critical", too_many_gaps: "serious", no_data: "neutral",
 };
 export function StatusBadge({ s }: { s: string | null | undefined }) {
   if (!s) return null;

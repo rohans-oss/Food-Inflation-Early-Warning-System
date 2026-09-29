@@ -1,24 +1,21 @@
-"""Walk-forward backtest (rule 2: never random splits on time series).
+"""V1 walk-forward backtest API, now a thin wrapper over the V2 shared harness (agripulse_ml.eval).
 
-Folds step through time. For a fold starting at T:
-  train = rows whose *target date* for the longest horizon is < T   (no label leakage)
-  test  = issue dates in [T, T + step)
-Metrics per model and horizon, all computed in price space (Rs/quintal):
-  pinball loss (mean over p10/p50/p90), MAPE of p50, p10-p90 coverage,
-  spike recall / precision at the alert threshold, and Brier score.
+Kept so V1 callers and tests keep working; the folds and metrics are the harness's, so V1
+LightGBM and every V2 model are scored on exactly the same splits.
 """
 from dataclasses import dataclass
 
-import numpy as np
-import pandas as pd
-
-from .features import HORIZONS, QUANTILES
+from .eval import FoldSpec, legacy_metrics
+from .eval import run as run_eval
+from .eval.metrics import pinball  # noqa: F401  (re-exported for V1 imports)
 from .models import LightGBMQuantileForecaster, NaiveForecaster, SeasonalNaiveForecaster, add_seasonal_naive
 
-
-def pinball(y: np.ndarray, pred: np.ndarray, q: float) -> np.ndarray:
-    d = y - pred
-    return np.maximum(q * d, (q - 1) * d)
+V1_MODELS = {
+    "naive": NaiveForecaster,
+    "seasonal_naive": SeasonalNaiveForecaster,
+    "lightgbm_quantile": LightGBMQuantileForecaster,
+}
+V1_FEATURE_SET = "prices+weather"  # V1 features: price history + arrivals (past-only), weather, calendar
 
 
 @dataclass
@@ -28,77 +25,17 @@ class BacktestConfig:
     n_folds: int = 8
     alert_probability: float = 0.5
 
+    def spec(self) -> FoldSpec:
+        return FoldSpec(min_train_days=self.min_train_days, step_days=self.step_days, n_folds=self.n_folds)
 
-def walk_forward(feat: pd.DataFrame, cfg: BacktestConfig | None = None, model_factories=None) -> dict:
+
+def walk_forward(feat, cfg: BacktestConfig | None = None, model_factories=None, data_provenance: str = "synthetic",
+                 feature_set: str = V1_FEATURE_SET, return_run: bool = False):
     cfg = cfg or BacktestConfig()
-    feat = add_seasonal_naive(feat)
-    model_factories = model_factories or {
-        "naive": NaiveForecaster,
-        "seasonal_naive": SeasonalNaiveForecaster,
-        "lightgbm_quantile": LightGBMQuantileForecaster,
-    }
-    dates = feat["date"].sort_values().unique()
-    start, end = pd.Timestamp(dates[0]), pd.Timestamp(dates[-1])
-    last_issue = end - pd.Timedelta(days=7 * max(HORIZONS))  # need observed targets
-    first_fold = max(start + pd.Timedelta(days=cfg.min_train_days), last_issue - pd.Timedelta(days=cfg.step_days * cfg.n_folds))
-    if first_fold >= last_issue:
-        raise ValueError(
-            f"Not enough history for a walk-forward backtest: {start.date()}..{end.date()} "
-            f"(need > {cfg.min_train_days} days + {7 * max(HORIZONS)} days of targets)"
-        )
-
-    preds_all = []
-    folds = []
-    T = first_fold
-    while T < last_issue:
-        T_end = min(T + pd.Timedelta(days=cfg.step_days), last_issue)
-        train = feat[feat[f"target_date_h{max(HORIZONS)}"] < T]
-        test = feat[(feat["date"] >= T) & (feat["date"] < T_end)]
-        if len(test) and len(train) > 200:
-            for mname, factory in model_factories.items():
-                model = factory().fit(train)
-                p = model.predict(test)
-                frame = test[["mandi_id", "date", "price", "spike"]].copy()
-                frame["model"] = mname
-                for h in HORIZONS:
-                    frame[f"y_h{h}"] = test[f"target_h{h}"].to_numpy()
-                    for q in QUANTILES:
-                        frame[f"q{int(q * 100)}_h{h}"] = p[(h, f"p{int(q * 100)}")]
-                frame["spike_prob"] = p["spike_prob"]
-                preds_all.append(frame)
-            folds.append({"start": str(T.date()), "end": str(T_end.date()), "train_rows": len(train), "test_rows": len(test)})
-        T = T_end
-
-    preds = pd.concat(preds_all, ignore_index=True)
-    return {"folds": folds, "metrics": score(preds, cfg.alert_probability), "n_predictions": int(len(preds))}
-
-
-def score(preds: pd.DataFrame, alert_probability: float) -> dict:
-    results = {}
-    for mname, g in preds.groupby("model"):
-        per_h = {}
-        for h in HORIZONS:
-            ok = g[f"y_h{h}"].notna()
-            gg = g[ok]
-            base = gg["price"].to_numpy()
-            y = base * np.exp(gg[f"y_h{h}"].to_numpy())
-            qp = {q: base * np.exp(gg[f"q{int(q * 100)}_h{h}"].to_numpy()) for q in QUANTILES}
-            pin = np.mean([pinball(y, qp[q], q).mean() for q in QUANTILES])
-            mape = float(np.mean(np.abs(qp[0.5] - y) / y) * 100)
-            cover = float(np.mean((y >= qp[0.1]) & (y <= qp[0.9])) * 100)
-            per_h[f"h{h}"] = {"pinball": round(float(pin), 2), "mape_pct": round(mape, 2), "coverage_p10_p90_pct": round(cover, 1), "n": int(ok.sum())}
-        s = g[g["spike"].notna()]
-        truth = s["spike"].astype(int).to_numpy()
-        prob = s["spike_prob"].to_numpy()
-        alert = prob >= alert_probability
-        tp = int((alert & (truth == 1)).sum())
-        results[mname] = {
-            "by_horizon": per_h,
-            "spike": {
-                "events": int(truth.sum()),
-                "recall": round(tp / truth.sum(), 3) if truth.sum() else None,
-                "precision": round(tp / alert.sum(), 3) if alert.sum() else None,
-                "brier": round(float(np.mean((prob - truth) ** 2)), 4) if len(truth) else None,
-            },
-        }
-    return results
+    run = run_eval(feat, model_factories or V1_MODELS, feature_set=feature_set, data_provenance=data_provenance,
+                   spec=cfg.spec(), alert_probability=cfg.alert_probability, prepare=add_seasonal_naive)
+    report = {"folds": [{"start": f["cutoff"], "end": f["test_end"], "train_rows": f["train_rows"], "test_rows": f["test_rows"]}
+                        for f in run.folds],
+              "metrics": legacy_metrics(run.results), "n_predictions": int(len(run.predictions)),
+              "data_provenance": run.data_provenance, "feature_set": run.feature_set, "run_id": run.run_id}
+    return (report, run) if return_run else report

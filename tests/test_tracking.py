@@ -18,7 +18,8 @@ def seed_forecasts(db, spike=0.2):
         for h in (1, 2, 3, 4):
             db.add(Forecast(mandi_id=m.id, commodity="Tomato", issue_date=today, target_date=today + timedelta(weeks=h),
                             horizon_weeks=h, p10=base * 0.8, p50=base, p90=base * 1.3, spike_prob=spike,
-                            model_name="lightgbm_quantile", model_version="test", trained_on_synthetic=True))
+                            model_name="lightgbm_quantile", model_version="test", trained_on_synthetic=True,
+                            data_provenance="synthetic"))
     db.commit()
 
 

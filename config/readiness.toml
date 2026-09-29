@@ -1,0 +1,27 @@
+# Real-data readiness thresholds (V2-0). Only REAL rows count: source = 'synthetic' prices / weather /
+# arrivals and is_simulated trips are ignored. Override the path with READINESS_CONFIG=/path/file.toml
+#
+# A mandi is "ready" for a data type when BOTH hold:
+#   history_days  (first real date -> last real date, calendar days)  >= min_real_days
+#   missing_pct   (share of calendar days in that span with no record) <= max_missing_pct
+# history_days, not "days with a record": mandis close on Sundays/holidays, so a year of
+# history has ~300 reporting days. Missing days are policed separately by max_missing_pct.
+
+[general]
+stale_after_days = 7        # last real record older than this -> "stalled": no projected ready date
+
+[prices]
+min_real_days = 365         # one full seasonal cycle; the walk-forward harness needs 365 + 28
+max_missing_pct = 30        # Sunday closures alone are ~14%; festival closures and gaps add more
+
+[weather]
+min_real_days = 365         # NASA POWER can be backfilled for years in one run, so this goes green fast
+max_missing_pct = 10
+
+[arrivals]
+min_real_days = 365         # arrival tonnes come from bulk CSV backfill + trader-confirmed weighings
+max_missing_pct = 40
+
+[transit]                   # used by V2-5 (in-transit feature); reported now so the gap is visible
+min_real_trips = 50         # completed, non-simulated trips to this mandi
+min_days_covered = 90

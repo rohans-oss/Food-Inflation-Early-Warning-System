@@ -78,7 +78,7 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
     return {
         "mandi": {"id": mandi.id, "name": mandi.name},
         "summary": {k: board[k] for k in ("tons_in_transit", "tons_real", "tons_simulated", "expected_today_tons_total",
-                                          "confirmed_today_tons", "typical_daily_tons", "typical_is_synthetic",
+                                          "confirmed_today_tons", "typical_daily_tons", "typical_is_synthetic", "typical_provenance",
                                           "expected_vs_normal", "note")},
         "incoming": [{"trip_id": t.id, "vehicle": t.vehicle.registration, "tons": t.load_tons, "status": t.status,
                       "eta_at": t.eta_at, "remaining_km": t.remaining_km, "is_simulated": t.is_simulated,
@@ -178,6 +178,7 @@ def policy_overview(state: str | None = None, db: Session = Depends(get_db), _=D
                "trend_4w_pct": trend, "spike_prob_14d": fc["spike_prob_14d"] if fc else None,
                "forecast_2w": next((h for h in fc["horizons"] if h["weeks"] == 2), None) if fc else None,
                "trained_on_synthetic": fc["trained_on_synthetic"] if fc else None,
+               "data_provenance": fc["data_provenance"] if fc else None,
                "tons_in_transit": it, "arrival_anomaly_7d": anomaly, "arrivals_synthetic": typ["is_synthetic"]}
         mandis.append(row)
         d = by_district.setdefault((m.state, m.district), {"state": m.state, "district": m.district, "mandis": 0,

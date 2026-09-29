@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { MapMarker, MapView } from "@/components/MapView";
 import { QRScanner } from "@/components/QR";
 import { Shell } from "@/components/Shell";
-import { Badge, Button, Card, ErrorNote, inputCls, Note, SimBadge, Stat, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Badge, Button, Card, ErrorNote, inputCls, Note, ProvenanceBadge, SimBadge, Stat, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
 import { inr, num, time, tons } from "@/lib/format";
 import { useLiveFeed } from "@/lib/live";
@@ -57,7 +57,7 @@ export default function Trader() {
           <Stat label={t("inTransit")} value={tons(s.tons_in_transit)} sub={s.tons_simulated ? `${num(s.tons_simulated, 1)} t simulated` : undefined} />
           <Stat label={t("expectedToday")} value={tons(s.expected_today_tons_total)} sub={`incl. ${tons(s.confirmed_today_tons)} already weighed`} />
           <Stat label={t("typicalDay")} value={s.typical_daily_tons != null ? tons(s.typical_daily_tons) : "–"}
-            sub={s.typical_is_synthetic ? "from synthetic arrivals" : "median of last 28 days"} />
+            sub={<span className="inline-flex items-center gap-1">median of last 28 days <ProvenanceBadge p={s.typical_provenance} compact /></span>} />
           <Stat label="Expected vs normal" value={ratio != null ? `${num(ratio * 100, 0)}%` : "–"}
             sub={ratio != null ? (ratio < 0.7 ? "well below normal: watch prices" : ratio > 1.3 ? "above normal" : "near normal") : "no arrival history yet"} />
         </div>

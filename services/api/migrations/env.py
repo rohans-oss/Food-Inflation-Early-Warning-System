@@ -8,7 +8,9 @@ from agripulse_api.config import get_settings
 from agripulse_api.db import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+# alembic.ini holds a placeholder; a caller (e.g. tests) may pass a real URL via Config.set_main_option.
+if config.get_main_option("sqlalchemy.url") in (None, "", "set-from-env"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

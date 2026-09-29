@@ -46,7 +46,7 @@ def test_spike_alerts_go_to_the_right_people(db):
     assert db.scalar(select(Alert).where(Alert.user_id == trader.id)).kind == "price_spike"
     assert spike_alerts(db)["alerts"] == 0  # de-duplicated on the next run
     body = db.scalar(select(Alert).where(Alert.user_id == buyer.id)).body
-    assert "[Synthetic model]" in body
+    assert "[SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT]" in body
 
 
 def test_kannada_alerts(db, client, as_role):

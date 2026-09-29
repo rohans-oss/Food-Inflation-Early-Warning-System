@@ -42,33 +42,16 @@ and asserts nothing changes.
   (target 80%), and spike recall / precision / Brier.
 - The report is written to `ml/artifacts/backtest.json` and shown on the Admin → Model page.
 
-### Current numbers — SYNTHETIC data only
+### Current numbers — SYNTHETIC, METHODOLOGY DEMO
 
-Run on 28/09/2026 over the generated 2022–2026 history, 18 mandis, 8 folds (Jan–Aug 2026).
-**These are not real results.** They show the pipeline works end to end.
-
-| Horizon | LightGBM pinball | Naive pinball | LightGBM vs naive | LightGBM p10–p90 coverage | Naive coverage |
-|---|---|---|---|---|---|
-| 1 wk | 84 | 85 | −1.6% | 76% | 86% |
-| 2 wk | 103 | 109 | −5.7% | 77% | 89% |
-| 3 wk | 114 | 122 | −6.6% | 76% | 91% |
-| 4 wk | 120 | 131 | −8.2% | 74% | 93% |
-
-Spike recall at a 0.5 alert threshold: LightGBM 0.15, baselines 0.
-
-An honest reading:
-
-- LightGBM beats naive on pinball, and the gap grows with the horizon. At 1 week it's a near-tie.
-- Its intervals are still slightly **too narrow** (74–77% vs the 80% target), even after conformal calibration.
-  Naive intervals are too wide. Neither is calibrated yet; tightening this is V3 work.
-- Spike recall is low. A 0.5 threshold on a calibrated probability rarely fires when the base rate is around 20%.
-  Pick the alert threshold from the precision/recall trade-off on **real** data, not synthetic.
-- Seasonal naive is poor on this data, because the synthetic series has weak year-to-year repetition.
-
-**Re-run on real data** as soon as you have Agmarknet history. If LightGBM does not beat naive there, report that.
+Superseded by the V2 harness: see [backtest-synthetic.md](backtest-synthetic.md). In short, the V1 table that used to
+be here ("LightGBM beats naive by 1.6–8.2%") came from one synthetic draw. Across 8 draws, LightGBM has no reliable
+edge over naive on synthetic data. **Re-run on real data** once the readiness monitor shows 365 days of real prices.
 
 ## Serving
 
 `python -m agripulse_ml.predict` (also scheduled daily at 20:30 IST) writes the latest forecast for every mandi whose
 most recent observed price is within 7 days of the newest date. It reads `GET /forecasts/{mandi_id}` and `GET /forecasts`.
-If `MLFLOW_TRACKING_URI` is set and `pip install -e .[mlflow]` is done, training runs are logged to MLflow.
+Every training run is recorded in the DB (`model_runs`, `eval_results`, shown on Admin) and in MLflow
+(`MLFLOW_TRACKING_URI`, default a SQLite store in `mlruns/`; browse with `pip install -e .[mlflow-ui]` then
+`mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`), stamped with `data_provenance`.

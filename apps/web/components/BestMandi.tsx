@@ -5,7 +5,7 @@ import { useState } from "react";
 import { inr, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
-import { Badge, ErrorNote, Note, SpikeBadge, Table, Td, useApi } from "./ui";
+import { ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstProvenance } from "./ui";
 
 /** Rule-based best mandi (V1). Ranked by p50 net value; p10-p90 shown so overlap is visible. */
 export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId: number) => void }) {
@@ -13,7 +13,7 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
   const [weeks, setWeeks] = useState(1);
   const r = useApi<any>("/recommend/best-mandi", { query: { lot_id: lotId, weeks } });
   const ranked: any[] = r.data?.ranked ?? [];
-  const synthetic = ranked.some((x) => x.trained_on_synthetic);
+  const prov = worstProvenance(ranked.map((x) => x.data_provenance));
 
   return (
     <div className="space-y-3">
@@ -25,7 +25,7 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
             {w} wk
           </button>
         ))}
-        {synthetic && <Badge kind="sim">{t("synthetic")}</Badge>}
+        <ProvenanceBadge p={prov} />
       </div>
       <ErrorNote error={r.error} />
       <Table head={["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk")]}

@@ -77,9 +77,10 @@ Postgres the migration adds PostGIS geography columns + GiST indexes and turns `
 - `python -m agripulse_ml.train --synthetic` prints LightGBM vs naive pinball and coverage per horizon.
 - `GET /forecasts/{mandi_id}` returns 4 horizons with `p10 ≤ p50 ≤ p90` + `spike_prob_14d`. `GET /forecasts/baseline` gives the naive version.
 
-**Honest result so far (synthetic data only):** LightGBM beats naive pinball by 1–2% at 1 week (a near-tie), rising
-to 8–12% at 3–4 weeks. Intervals are slightly too narrow (mostly 74–77% coverage vs the 80% target). Spike recall at a 0.5 threshold is poor. None of
-this says anything about real tomato prices until it's re-run on Agmarknet history.
+**Honest result so far — SYNTHETIC, METHODOLOGY DEMO:** across 8 synthetic draws, V1 LightGBM has **no reliable edge
+over naive** (mean −2.2% / −2.1% / +0.9% / +1.8% pinball at 1–4 weeks; it wins only 3–4 of 8 draws). The "1–2% / 8–12%
+better" figure first reported for V1 reproduces exactly on the draw it came from, but it was one favourable draw.
+Details: [docs/backtest-synthetic.md](docs/backtest-synthetic.md). Nothing here says anything about real tomato prices.
 
 ## Phase 6 — Live vehicle tracking
 
@@ -130,6 +131,30 @@ delivery. In-app + live, email via SMTP, SMS via a webhook adapter; English + Ka
 **How to verify:** `cd apps/web && npm run build` (type-checks every page), then sign in as each role.
 
 ---
+
+## V2-0: evaluation harness, readiness monitor, provenance labels
+
+V2 (Intelligence) is being built phase by phase. Until about 13 months of real Agmarknet history exists, price models
+run on synthetic data, and every output says so (`data_provenance`: `real` / `real_partial` / `synthetic`).
+
+- **One harness** (`ml/agripulse_ml/eval/`): one walk-forward fold definition, pinball / MAPE / coverage / spike recall /
+  false-alarm rate, results as a long table (`model_name, feature_set, horizon, mandi, data_provenance, metric_name,
+  metric_value`), recorded to the DB (`model_runs`, `eval_results`) and MLflow. V1 training now runs through it and
+  produces identical numbers.
+- **Readiness monitor** (`config/readiness.toml`, `GET /admin/data-readiness`, Admin page): days of *real* history per
+  mandi and data type, missing %, a ready flag, and a projected ready date.
+- **Labels everywhere:** red SYNTHETIC — METHODOLOGY DEMO / amber REAL — LIMITED HISTORY / green REAL on every forecast,
+  chart (legend, tooltip, table view), recommender, policy and admin number.
+- **Synthetic baseline:** [docs/backtest-synthetic.md](docs/backtest-synthetic.md). Finding: V1's "LightGBM beats naive"
+  was one favourable synthetic draw; across 8 draws there is no reliable edge.
+- Out-of-scope issues: [docs/backlog.md](docs/backlog.md).
+
+**How to verify**
+- `pytest` → 66 tests (47 V1 + 19 V2-0), including a migration round-trip and hand-computed metrics.
+- `python -m agripulse_ml.eval.baseline --seeds 1-8` reproduces every number in `docs/backtest-synthetic.md`.
+- Admin page: "Real-data readiness" shows 0/18 ready and a projected date; "Evaluation runs" lists runs with provenance.
+- Any forecast screen (farmer, buyer, policy, admin): the red SYNTHETIC — METHODOLOGY DEMO badge is visible, including
+  in the chart tooltip and table view.
 
 ## V1 status
 

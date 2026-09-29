@@ -77,6 +77,7 @@ def test_train_predict_end_to_end_marks_synthetic(db, tmp_path, monkeypatch):
     rows = db.scalars(select(Forecast)).all()
     for f in rows:
         assert f.p10 <= f.p50 <= f.p90 and 0 <= f.spike_prob <= 1 and f.trained_on_synthetic
+        assert f.data_provenance == "synthetic"
 
 
 def test_train_explains_short_history(db, tmp_path, monkeypatch):

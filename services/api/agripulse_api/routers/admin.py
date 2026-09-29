@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..models import DataSourceRun, Mandi, Organization, Price, User
+from .. import readiness
+from ..models import DataSourceRun, EvalResult, Mandi, ModelRun, Organization, Price, User
+from ..provenance import LABEL
 from ..rbac import ROLES, require
 from .auth import user_out
 
@@ -113,7 +115,33 @@ def model_performance(_=Depends(admin_only)):
     path = Path(get_settings().model_dir) / "backtest.json"
     if not path.exists():
         return {"available": False, "hint": "Run `python -m agripulse_ml.train` to produce a backtest."}
-    return {"available": True, **json.loads(path.read_text())}
+    rep = json.loads(path.read_text())
+    # V1 backtest files predate data_provenance: derive it so nothing is shown unlabelled
+    rep.setdefault("data_provenance", "synthetic" if rep.get("trained_on_synthetic") else "real")
+    rep.setdefault("provenance_label", LABEL[rep["data_provenance"]])
+    return {"available": True, **rep}
+
+
+@router.get("/data-readiness")
+def data_readiness(db: Session = Depends(get_db), _=Depends(admin_only)):
+    """How much REAL history each mandi has per data type, vs config/readiness.toml."""
+    return readiness.compute(db)
+
+
+@router.get("/eval-runs")
+def eval_runs(limit: int = 20, db: Session = Depends(get_db), _=Depends(admin_only)):
+    """Recent walk-forward runs from the shared harness, with pooled (ALL-mandi) metrics."""
+    runs = db.scalars(select(ModelRun).order_by(ModelRun.started_at.desc()).limit(min(limit, 100))).all()
+    out = []
+    for r in runs:
+        rows = db.scalars(select(EvalResult).where(EvalResult.run_id == r.run_id, EvalResult.mandi == "ALL")).all()
+        out.append({"run_id": r.run_id, "purpose": r.purpose, "models": r.models, "feature_set": r.feature_set,
+                    "data_provenance": r.data_provenance, "provenance_label": LABEL[r.data_provenance],
+                    "data_start": r.data_start, "data_end": r.data_end, "n_mandis": r.n_mandis,
+                    "folds": len(r.folds or []), "started_at": r.started_at, "mlflow_run_id": r.mlflow_run_id,
+                    "pooled": [{"model_name": x.model_name, "horizon": x.horizon, "metric_name": x.metric_name,
+                                "metric_value": x.metric_value} for x in rows]})
+    return out
 
 
 # ---------------------------------------------------------------- users & orgs

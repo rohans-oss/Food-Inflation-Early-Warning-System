@@ -104,6 +104,7 @@ def supply_board(db: Session, mandi_ids: list[int] | None = None, now: datetime 
         out.append({"mandi_id": m.id, "mandi": m.name, "district": m.district, "state": m.state, "lat": m.lat, "lon": m.lon,
                     **it, "confirmed_today_tons": round(confirmed, 2), "expected_today_tons_total": expected,
                     "typical_daily_tons": typical["tons"], "typical_is_synthetic": typical["is_synthetic"],
+                    "typical_provenance": "synthetic" if typical["is_synthetic"] else "real",
                     "expected_vs_normal": ratio,
                     "note": "Tracked vehicles only - most arrivals are not tracked in V1, so this is a lower bound."})
     return out
@@ -170,6 +171,7 @@ def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tom
             "transport_cost": round(transport), "spoilage_pct": round(spoil, 2), "temp_c": temp, "temp_source": temp_src,
             "net_value": {"p10": net(f.p10), "p50": net(f.p50), "p90": net(f.p90)},
             "trained_on_synthetic": f.trained_on_synthetic,
+            "data_provenance": f.data_provenance,
         })
     ranked.sort(key=lambda r: r["net_value"]["p50"], reverse=True)
     for i, r in enumerate(ranked):

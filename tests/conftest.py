@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
+os.environ.setdefault("MLFLOW_DISABLE", "1")  # tests never write to the real mlruns/; test_eval_harness opts back in
 
 import pytest
 from fastapi.testclient import TestClient

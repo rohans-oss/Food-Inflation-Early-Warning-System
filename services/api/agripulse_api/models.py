@@ -165,7 +165,8 @@ class Forecast(Base):
     spike_prob: Mapped[float] = mapped_column(Float)
     model_name: Mapped[str] = mapped_column(String(40))
     model_version: Mapped[str] = mapped_column(String(40), default="")
-    trained_on_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)
+    trained_on_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)  # V1 flag, kept for compatibility
+    data_provenance: Mapped[str] = mapped_column(String(16), default="real", server_default="real")  # real|real_partial|synthetic
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
@@ -334,3 +335,41 @@ class AuditLog(Base):
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # None = system (geofence, simulator)
     at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ModelRun(Base):
+    """One walk-forward evaluation (V2 harness). Metrics live in eval_results."""
+
+    __tablename__ = "model_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    models: Mapped[list] = mapped_column(JSON, default=list)
+    feature_set: Mapped[str] = mapped_column(String(80))
+    data_provenance: Mapped[str] = mapped_column(String(16), index=True)
+    fold_spec: Mapped[dict] = mapped_column(JSON, default=dict)
+    folds: Mapped[list] = mapped_column(JSON, default=list)
+    data_start: Mapped[date | None] = mapped_column(Date)
+    data_end: Mapped[date | None] = mapped_column(Date)
+    n_mandis: Mapped[int] = mapped_column(Integer, default=0)
+    alert_probability: Mapped[float] = mapped_column(Float, default=0.5)
+    git_sha: Mapped[str | None] = mapped_column(String(40))
+    mlflow_run_id: Mapped[str | None] = mapped_column(String(64))
+    purpose: Mapped[str] = mapped_column(String(40), default="")  # e.g. v1_train, v2_baseline
+    notes: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class EvalResult(Base):
+    """Long-format metrics: one row per (run, model, feature_set, horizon, mandi, metric)."""
+
+    __tablename__ = "eval_results"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("model_runs.run_id", ondelete="CASCADE"), index=True)
+    model_name: Mapped[str] = mapped_column(String(40))
+    feature_set: Mapped[str] = mapped_column(String(80))
+    horizon: Mapped[str] = mapped_column(String(12))  # "1".."4" weeks, or "spike_14d"
+    mandi: Mapped[str] = mapped_column(String(16))  # mandi id, or "ALL"
+    data_provenance: Mapped[str] = mapped_column(String(16))
+    metric_name: Mapped[str] = mapped_column(String(40))
+    metric_value: Mapped[float | None] = mapped_column(Float)

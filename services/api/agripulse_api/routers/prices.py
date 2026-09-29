@@ -70,6 +70,7 @@ def latest_prices(
                 "unit": "Rs/quintal",
                 "varieties": sorted({f"{r.variety} / {r.grade}" for r in rows}),
                 "is_synthetic": any(r.source == "synthetic" for r in rows),
+                "data_provenance": "synthetic" if any(r.source == "synthetic" for r in rows) else "real",
                 "distance_km": dist,
             }
         )
@@ -94,7 +95,8 @@ def price_history(
         .order_by(Price.date)
     ).all()
     return [
-        {"date": d, "modal_price": round(m, 0), "min_price": lo, "max_price": hi, "is_synthetic": src == "synthetic"}
+        {"date": d, "modal_price": round(m, 0), "min_price": lo, "max_price": hi, "is_synthetic": src == "synthetic",
+         "data_provenance": "synthetic" if src == "synthetic" else "real"}
         for d, m, lo, hi, src in rows
     ]
 
@@ -116,6 +118,7 @@ def forecast_block(db: Session, mandi_id: int, commodity: str = "Tomato") -> dic
         "model": rows[0].model_name,
         "model_version": rows[0].model_version,
         "trained_on_synthetic": rows[0].trained_on_synthetic,
+        "data_provenance": rows[0].data_provenance,
         "spike_prob_14d": rows[0].spike_prob,
         "unit": "Rs/quintal",
         "horizons": [
@@ -153,7 +156,8 @@ def baseline_forecast(mandi_id: int, commodity: str = "Tomato", db: Session = De
                          "p90": round(last * float(np.exp(q90)))})
     synthetic = db.scalar(select(func.max(Price.source)).where(Price.mandi_id == mandi_id)) == "synthetic"
     return {"mandi_id": mandi_id, "model": "naive", "issue_date": rows[-1][0], "unit": "Rs/quintal",
-            "latest_price": round(last), "horizons": horizons, "is_synthetic": synthetic}
+            "latest_price": round(last), "horizons": horizons, "is_synthetic": synthetic,
+            "data_provenance": "synthetic" if synthetic else "real"}
 
 
 @router.get("/prices")

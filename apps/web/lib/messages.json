@@ -13,7 +13,7 @@
     "loading": "Loading…",
     "simulated": "Simulated",
     "synthetic": "Synthetic data",
-    "syntheticNote": "Forecasts come from a model trained on synthetic data. Real Agmarknet history replaces it once collected.",
+    "syntheticNote": "SYNTHETIC — METHODOLOGY DEMO: this forecast comes from a model trained on synthetic data. It shows the pipeline works; it is not a real price forecast. Real Agmarknet history replaces it once about 13 months are collected.",
     "approximateRoute": "Approximate route (no OSRM)",
     "myLots": "My lots",
     "newLot": "Register a harvest lot",
@@ -79,7 +79,10 @@
     "dataQuality": "Data quality (90 days)",
     "modelPerformance": "Model performance",
     "users": "Users",
-    "simulator": "Vehicle simulator"
+    "simulator": "Vehicle simulator",
+    "realPartialNote": "REAL — LIMITED HISTORY: built from real prices, but this mandi has less history than the readiness threshold. Treat the range as indicative.",
+    "readiness": "Real-data readiness",
+    "evalRuns": "Evaluation runs (shared harness)"
   },
   "kn": {
     "app": "ಅಗ್ರಿಪಲ್ಸ್",

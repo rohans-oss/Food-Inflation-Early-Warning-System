@@ -3,16 +3,48 @@
 ## What we are building
 A platform that (1) forecasts tomato prices 1-4 weeks ahead as probabilistic ranges
 and (2) tracks vehicles carrying produce from farm to mandi live, so farmers, traders,
-buyers and policymakers can see supply in motion. This is Version 1 (V1) of 3.
+buyers and policymakers can see supply in motion.
 
-## V1 scope (do NOT build V2/V3 items)
+## Current version: V2 (Intelligence). V1 is merged on main.
+
+## V2 data reality (read this before building anything)
+- Real Agmarknet history is just starting to accumulate (started ~2026-09-25) and needs
+  about 13 months before it is usable for training. Until then, price-dependent models
+  are trained and evaluated on SYNTHETIC data only, and every artifact produced from it
+  (model, metric, chart, table) must carry data_provenance = "synthetic" and be labelled
+  "SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT" wherever it is shown.
+- Satellite (Sentinel-2) and ground-truth (ICRISAT) data ARE real today and don't depend
+  on price history. Build and validate the satellite module on real data from the start.
+- OSRM distances and the mandi graph's distance edges are real. Only the price-correlation
+  and estimated-flow edges depend on price history, so those start synthetic.
+- Real in-transit (vehicle) data may exist only from the field test, likely a handful of
+  trips. Treat it as too small for a result; use it only to prove the pipeline works.
+- One synthetic draw is not evidence (V2-0 finding, docs/backtest-synthetic.md): V1's
+  "LightGBM beats naive" held on one draw and not across 8. Report synthetic model
+  comparisons across several draws (eval/baseline.py seed_sweep), with mean, range, wins.
+
+## V2 scope
+1. Shared walk-forward evaluation harness (works identically on synthetic and real data)
+2. Real-data readiness monitor (per mandi, per feature type) on the Admin page
+3. Feature store with groups: prices, weather, satellite, graph, transit
+4. TFT quantile forecasting
+5. Mandi graph in Neo4j + GNN, compared against the non-graph model
+6. Sentinel-2 crop signal, validated against real ICRISAT ground truth
+7. In-transit tonnage as a feature (pipeline proof only, given data volume)
+8. Ablation study, run and reported separately for synthetic and real-so-far data
+
+## NOT in V2
+OR-Tools optimizer, scenario simulator, Hindi review, React Native driver rewrite,
+Kannada native-speaker review, mandi-map confirmation (all V1 hardening or V3 items —
+listed in /docs/backlog.md instead of doing them here).
+
+## V1 scope (still enforced)
 - Crop: tomato only. Region: Karnataka + neighbouring states.
 - 9 roles, all with real login + RBAC + a working screen:
   1 Farmer, 2 FPO/aggregator, 3 Transporter/driver, 4 Fleet owner,
   5 Mandi trader/commission agent, 6 Bulk buyer, 7 Policy analyst/government,
   8 Lender/insurer, 9 Admin/data ops.
 - Multi-tenant: FPOs, fleet owners and organizations have their own data scope.
-- NOT in V1: TFT, GNN/Neo4j, Sentinel-2, OR-Tools, scenario simulator, Hindi alerts.
 
 ## Stack
 - Backend: FastAPI (Python 3.11), SQLAlchemy 2 + Alembic, Pydantic v2, JWT auth
@@ -50,10 +82,30 @@ buyers and policymakers can see supply in motion. This is Version 1 (V1) of 3.
 8. Work in small steps. Before writing code for a phase, show me a plan and wait for approval.
    After each phase, summarize what was built, what is stubbed, and known issues.
 
+### New rules for V2
+9. Every dataset, model output, chart and table carries an explicit data_provenance
+   field: "real", "synthetic", or "real_partial" (real but below the readiness threshold).
+   Nothing synthetic may be shown without a visible "SYNTHETIC" label, in the UI, in docs,
+   and in any exported report.
+10. Every new model is compared against (i) seasonal naive and (ii) V1 LightGBM, on the
+    SAME folds, mandis, and metrics, run separately on synthetic and on real-so-far data.
+11. A negative result, or "not enough real data yet", is a valid, expected outcome.
+    Report it plainly. Do not tune until a result looks good.
+12. No leakage: every feature needs a test proving it only uses data available at
+    forecast time (satellite acquisition dates, publication lags, graph edges built only
+    from data before the fold cutoff).
+13. Trade-flow graph edges are ESTIMATES. Label them as estimates in code, docs and UI.
+14. Do not break V1: all existing tests keep passing. New models sit behind a config
+    flag and write to forecasts with a model_name and data_provenance column.
+15. Plan first for each phase, wait for my explicit approval, then build. Actually wait —
+    do not continue automatically into the next phase.
+16. Any V1 issue you notice but that isn't V2's job goes into /docs/backlog.md, not into
+    the current phase's code.
+
 ## Core tables
 users, organizations, roles, lots, shipments, trips, vehicles, gps_points,
 geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_source_runs
-(+ audit_log: every lifecycle transition)
+(+ audit_log: every lifecycle transition; V2: model_runs, eval_results)
 
 ## Definition of done for V1
 - Prices and weather update daily on their own; Admin page shows freshness per source
@@ -76,3 +128,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - Recommender costs: `config/recommender.toml`. Alert copy: `services/api/agripulse_api/i18n/alerts.json`.
 - Tests: `pytest` (SQLite in-memory; Postgres-only bits are in the migration and skipped there).
 - Migrations: hand-check autogenerated ones; revision ids are 0001, 0002, ...
+- Evaluation: ONLY through `agripulse_ml.eval` (`FoldSpec`, `run`) so every model shares folds and
+  metrics. Record runs with `eval.tracking.record` (DB) + `log_mlflow`. Provenance values and labels
+  live in `agripulse_api.provenance`; readiness thresholds in `config/readiness.toml`.
+- UI: forecast / backtest numbers always render with `ProvenanceBadge` (apps/web/components/ui.tsx).
+- Tests set MLFLOW_DISABLE=1 (conftest) so they never write to the real mlruns/.

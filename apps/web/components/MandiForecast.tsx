@@ -7,7 +7,7 @@ import { day } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 import { ForecastBlock, ForecastChart, HistoryPoint } from "./ForecastChart";
-import { Badge, SpikeBadge } from "./ui";
+import { ProvenanceBadge, SpikeBadge } from "./ui";
 
 /** Price history + model forecast + naive baseline for one mandi. */
 export function MandiForecast({ mandiId, name }: { mandiId: number; name?: string }) {
@@ -30,11 +30,12 @@ export function MandiForecast({ mandiId, name }: { mandiId: number; name?: strin
         {name && <b>{name}</b>}
         {fc && <span className="text-ink2">issued {day(fc.issue_date)}</span>}
         {fc && <><span className="text-ink2">{t("spikeRisk")}:</span><SpikeBadge p={fc.spike_prob_14d} /></>}
-        {fc?.trained_on_synthetic && <Badge kind="sim">{t("synthetic")}</Badge>}
+        {fc && <ProvenanceBadge p={fc.data_provenance} />}
       </div>
       {msg && !fc && <p className="text-sm text-muted">{msg}</p>}
       <ForecastChart history={hist} forecast={fc} baseline={base} />
-      {fc?.trained_on_synthetic && <p className="text-xs text-muted">{t("syntheticNote")}</p>}
+      {fc?.data_provenance === "synthetic" && <p className="text-xs text-muted">{t("syntheticNote")}</p>}
+      {fc?.data_provenance === "real_partial" && <p className="text-xs text-muted">{t("realPartialNote")}</p>}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { MandiForecast } from "@/components/MandiForecast";
 import { MapMarker, MapView } from "@/components/MapView";
 import { Shell } from "@/components/Shell";
-import { Badge, Card, ErrorNote, Note, SpikeBadge, Table, Td, useApi } from "@/components/ui";
+import { Card, ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstProvenance } from "@/components/ui";
 import { inr, num, signedPct, spikeLevel, tons } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -18,7 +18,7 @@ export default function Policy() {
   const ov = useApi<any>("/policy/overview", { query: { state }, poll: 60000 });
   const [focus, setFocus] = useState<any>(null);
   const mandis: any[] = ov.data?.mandis ?? [];
-  const synthetic = mandis.some((m) => m.trained_on_synthetic || m.arrivals_synthetic);
+  const prov = worstProvenance([...mandis.map((m) => m.data_provenance), ...mandis.map((m) => (m.arrivals_synthetic ? "synthetic" : null))]);
 
   const markers = useMemo<MapMarker[]>(() => mandis.map((m) => {
     const s = spikeLevel(m.spike_prob_14d);
@@ -40,7 +40,7 @@ export default function Policy() {
           <option value="">All states</option>
           {states.map((s) => <option key={s}>{s}</option>)}
         </select>
-        {synthetic && <Badge kind="sim">{t("synthetic")}</Badge>}
+        <ProvenanceBadge p={prov} />
       </div>
       <ErrorNote error={ov.error} />
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
@@ -55,7 +55,7 @@ export default function Policy() {
             <span>· Size = tonnes in transit</span>
           </div>
         </Card>
-        <Card title={t("districts")}>
+        <Card title={t("districts")} action={<ProvenanceBadge p={prov} compact />}>
           <Table head={["District", "Mandis", "Avg price", t("trend4w"), "Max spike risk", t("inTransit")]}>
             {ov.data?.districts?.map((d: any) => (
               <tr key={`${d.state}-${d.district}`}>
@@ -74,7 +74,7 @@ export default function Policy() {
               <Td>{m.mandi}<div className="text-xs text-muted">{m.district}</div></Td>
               <Td>{inr(m.latest_price)}</Td>
               <Td>{signedPct(m.trend_4w_pct)}</Td>
-              <Td>{m.forecast_2w ? <>{inr(m.forecast_2w.p50)} <span className="text-xs text-muted">({inr(m.forecast_2w.p10)}–{inr(m.forecast_2w.p90)})</span></> : "–"}</Td>
+              <Td>{m.forecast_2w ? <>{inr(m.forecast_2w.p50)} <span className="text-xs text-muted">({inr(m.forecast_2w.p10)}–{inr(m.forecast_2w.p90)})</span>{" "}<ProvenanceBadge p={m.data_provenance} compact /></> : "–"}</Td>
               <Td><SpikeBadge p={m.spike_prob_14d} /></Td>
               <Td>{tons(m.tons_in_transit)}</Td>
               <Td>{m.arrival_anomaly_7d != null ? `${m.arrival_anomaly_7d > 0 ? "+" : ""}${num(m.arrival_anomaly_7d * 100, 0)}%` : "–"}</Td>

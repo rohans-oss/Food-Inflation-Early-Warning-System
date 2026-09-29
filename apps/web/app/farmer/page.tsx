@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { MandiForecast } from "@/components/MandiForecast";
 import { MapView } from "@/components/MapView";
 import { Shell } from "@/components/Shell";
-import { Button, Card, ErrorNote, Field, inputCls, SimBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Button, Card, ErrorNote, Field, inputCls, ProvenanceBadge, SimBadge, StatusBadge, Table, Td, useAction, useApi, worstProvenance } from "@/components/ui";
 import { api } from "@/lib/api";
 import { day, inr, num, time, tons } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -121,13 +121,13 @@ export default function Farmer() {
           </form>
         </Card>
 
-        <Card title={t("pricesNearby")}>
+        <Card title={t("pricesNearby")} action={<ProvenanceBadge p={worstProvenance((prices.data ?? []).map((p) => p.data_provenance))} />}>
           <ErrorNote error={prices.error} />
           <Table head={[t("mandi"), t("distance"), t("modalPrice"), t("range")]} empty="No mandi prices within 150 km yet.">
             {prices.data?.slice(0, 10).map((p) => (
               <tr key={p.mandi.id} onClick={() => setMandi(p.mandi)}
                 className={`cursor-pointer hover:bg-page ${mandi?.id === p.mandi.id ? "bg-page" : ""}`}>
-                <Td>{p.mandi.name} <SimBadge on={p.is_synthetic} label="Synthetic" /></Td>
+                <Td>{p.mandi.name} {p.data_provenance !== "real" && <ProvenanceBadge p={p.data_provenance} compact />}</Td>
                 <Td>{num(p.distance_km, 0)} km</Td>
                 <Td><b>{inr(p.modal_price)}</b><span className="text-muted">/q</span></Td>
                 <Td className="text-ink2">{inr(p.min_price)}–{inr(p.max_price)} <span className="text-xs text-muted">{day(p.date)}</span></Td>

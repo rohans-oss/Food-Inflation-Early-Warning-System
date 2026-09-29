@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Shell } from "@/components/Shell";
-import { Badge, Button, Card, ErrorNote, Field, inputCls, Note, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Badge, Button, Card, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ago, dateTime, day, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -24,6 +24,8 @@ export default function Admin() {
   const perf = useApi<any>("/admin/model-performance");
   const users = useApi<any[]>("/admin/users");
   const sim = useApi<any>("/admin/simulator", { poll: 10000 });
+  const ready = useApi<any>("/admin/data-readiness", { poll: 300000 });
+  const runs = useApi<any[]>("/admin/eval-runs", { query: { limit: 10 } });
   const [simCfg, setSimCfg] = useState({ trips: "8", speedup: "10" });
   const act = useAction();
 
@@ -69,7 +71,7 @@ export default function Admin() {
         </Card>
       </div>
 
-      <Card title={t("modelPerformance")} action={p?.trained_on_synthetic && <Badge kind="sim">Trained on synthetic data</Badge>}>
+      <Card title={t("modelPerformance")} action={p?.available && <ProvenanceBadge p={p.data_provenance} />}>
         {!p?.available ? <p className="text-sm text-muted">{p?.hint ?? t("loading")}</p> : (
           <div className="space-y-3">
             <p className="text-sm text-ink2">Model {p.model_version} · data {p.data_range?.join(" → ")} · {p.mandis} mandis · {p.folds?.length} walk-forward folds · spike = {p.spike_definition}</p>
@@ -84,14 +86,72 @@ export default function Admin() {
                 </tr>
               ))}
             </Table>
-            <Table head={["Model", "Spike events", "Recall", "Precision", "Brier"]}>
+            <Table head={["Model", "Spike events", "Recall", "Precision", "False-alarm rate", "Brier"]}>
               {Object.entries(p.metrics).map(([m, v]: [string, any]) => (
-                <tr key={m}><Td>{m}</Td><Td>{v.spike.events}</Td><Td>{v.spike.recall ?? "–"}</Td><Td>{v.spike.precision ?? "–"}</Td><Td>{v.spike.brier ?? "–"}</Td></tr>
+                <tr key={m}><Td>{m}</Td><Td>{v.spike.events}</Td><Td>{v.spike.recall ?? "–"}</Td><Td>{v.spike.precision ?? "–"}</Td>
+                  <Td>{v.spike.false_alarm_rate ?? "–"}</Td><Td>{v.spike.brier ?? "–"}</Td></tr>
               ))}
             </Table>
-            {p.trained_on_synthetic && <Note>These numbers come from synthetic data and prove only that the pipeline runs. Re-train on real Agmarknet history before quoting any result.</Note>}
+            {p.data_provenance === "synthetic" && <Note>SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT. These numbers come from one
+              synthetic draw and prove only that the pipeline runs. &ldquo;Better&rdquo; here is not evidence: across 8 synthetic draws
+              LightGBM has no reliable edge over naive (docs/backtest-synthetic.md). Re-train on real Agmarknet history before quoting any result.</Note>}
+            {p.data_provenance === "real_partial" && <Note>REAL — LIMITED HISTORY: some mandis are below the readiness threshold, so these numbers are partial.</Note>}
           </div>
         )}
+      </Card>
+
+      <Card title={t("readiness")} action={ready.data && <span className="text-xs text-muted">thresholds from {ready.data.config_file} · real rows only</span>}>
+        {ready.data && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {(["prices", "weather", "arrivals", "transit"] as const).map((g) => {
+                const s = ready.data.summary[g];
+                const th = ready.data.thresholds[g];
+                return (
+                  <div key={g} className="rounded-xl border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between"><b className="capitalize">{g}</b>
+                      <span className="tnum">{s.ready}/{s.total} ready</span></div>
+                    <div className="mt-1 text-xs text-muted">
+                      {g === "transit" ? `needs ${th.min_real_trips} real trips over ${th.min_days_covered} days`
+                        : `needs ${th.min_real_days} days, ≤ ${th.max_missing_pct}% missing`}
+                    </div>
+                    <div className="mt-2 text-xs">{s.no_data === s.total ? "No real data yet"
+                      : s.latest_projected_ready_date ? `All collecting mandis ready by ${day(s.latest_projected_ready_date)}` : ""}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <Table head={["Mandi", "Prices", "Weather", "Arrivals", "Real trips"]}>
+              {ready.data.mandis.map((m: any) => (
+                <tr key={m.mandi_id}>
+                  <Td>{m.mandi}<div className="text-xs text-muted">{m.district}</div></Td>
+                  {(["prices", "weather", "arrivals"] as const).map((g) => (
+                    <Td key={g}>
+                      <StatusBadge s={m[g].status} />
+                      <div className="text-xs text-muted tnum">
+                        {m[g].history_days ? `${m[g].history_days} days · ${num(m[g].missing_pct, 0)}% missing` : ""}
+                        {m[g].projected_ready_date ? ` · ready ~${day(m[g].projected_ready_date)}` : ""}
+                      </div>
+                    </Td>
+                  ))}
+                  <Td><StatusBadge s={m.transit.status} /><div className="text-xs text-muted tnum">{m.transit.real_trips} trips</div></Td>
+                </tr>
+              ))}
+            </Table>
+          </div>
+        )}
+      </Card>
+
+      <Card title={t("evalRuns")}>
+        <Table head={["When", "Purpose", "Feature set", "Models", "Data", "Folds", "Provenance"]} empty="No evaluation runs recorded yet.">
+          {runs.data?.map((r) => (
+            <tr key={r.run_id}>
+              <Td>{dateTime(r.started_at)}</Td><Td>{r.purpose || "–"}</Td><Td className="font-mono text-xs">{r.feature_set}</Td>
+              <Td>{r.models.join(", ")}</Td><Td>{day(r.data_start)} → {day(r.data_end)}<div className="text-xs text-muted">{r.n_mandis} mandis</div></Td>
+              <Td>{r.folds}</Td><Td><ProvenanceBadge p={r.data_provenance} compact /></Td>
+            </tr>
+          ))}
+        </Table>
       </Card>
 
       <Card title={t("dataQuality")}>

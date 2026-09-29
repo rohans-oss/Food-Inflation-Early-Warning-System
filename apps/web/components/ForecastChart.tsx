@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { inr } from "@/lib/format";
 
+import { ProvenanceBadge, worstProvenance } from "./ui";
+
 export interface Horizon { weeks: number; target_date?: string; p10: number; p50: number; p90: number }
-export interface ForecastBlock { issue_date: string; horizons: Horizon[]; trained_on_synthetic?: boolean; spike_prob_14d?: number }
+export interface ForecastBlock { issue_date: string; horizons: Horizon[]; trained_on_synthetic?: boolean; spike_prob_14d?: number; data_provenance?: string }
 export interface HistoryPoint { date: string; modal_price: number }
 
 const H = 250, PAD = { l: 56, r: 16, t: 12, b: 28 };
@@ -65,6 +67,8 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
     return { shown, model, base, x, y, ticksY, ticksX, stops, anchor };
   }, [history, forecast, baseline, days, W]);
 
+  // one label for everything drawn: the worst of model and baseline (synthetic wins)
+  const prov = worstProvenance([forecast?.data_provenance, baseline?.data_provenance]);
   if (!g) return <div ref={box}><p className="text-sm text-muted">No price data yet.</p></div>;
   const line = (ps: { t: number; v: number }[]) => ps.map((p, i) => `${i ? "L" : "M"}${g.x(p.t).toFixed(1)},${g.y(p.v).toFixed(1)}`).join("");
   const band = (ps: { t: number; p10: number; p90: number }[]) =>
@@ -86,6 +90,7 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
         <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><rect x="0" y="1" width="22" height="8" rx="2" fill="var(--series-1)" opacity=".18" /><line x1="0" x2="22" y1="5" y2="5" stroke="var(--series-1)" strokeWidth="2" /></svg>Model p50 (band p10–p90)</span>
         {baseline && <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><line x1="0" x2="22" y1="5" y2="5" stroke="var(--series-2)" strokeWidth="2" strokeDasharray="4 3" /></svg>Naive baseline</span>}
         <span className="text-muted">Rs/quintal</span>
+        <ProvenanceBadge p={prov} />
         <button onClick={() => setShowTable((s) => !s)} className="ml-auto underline">{showTable ? "Hide table" : "Table view"}</button>
       </div>
       <div className="relative">
@@ -116,7 +121,7 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
         {h && (
           <div className="pointer-events-none absolute top-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow"
             style={{ left: `${Math.min(70, (g.x(h.t) / W) * 100)}%` }}>
-            <div className="mb-1 text-muted">{fmtD(h.t)}</div>
+            <div className="mb-1 flex items-center gap-2 text-muted">{fmtD(h.t)} <ProvenanceBadge p={prov} compact /></div>
             {"hist" in h && h.hist != null && <div><b className="tnum">{inr(h.hist)}</b> observed</div>}
             {"model" in h && h.model && <div><b className="tnum">{inr(h.model.p50)}</b> model p50 <span className="text-muted">({inr(h.model.p10)}–{inr(h.model.p90)})</span></div>}
             {"base" in h && h.base && <div><b className="tnum">{inr(h.base.p50)}</b> baseline <span className="text-muted">({inr(h.base.p10)}–{inr(h.base.p90)})</span></div>}
@@ -125,6 +130,7 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
       </div>
       {showTable && forecast && (
         <table className="mt-3 w-full text-sm tnum">
+          {prov && <caption className="mb-1 text-left"><ProvenanceBadge p={prov} /></caption>}
           <thead><tr className="text-left text-xs text-muted"><th className="py-1">Horizon</th><th>Model p10</th><th>p50</th><th>p90</th>{baseline && <th>Baseline p50</th>}</tr></thead>
           <tbody>
             {forecast.horizons.map((f, i) => (

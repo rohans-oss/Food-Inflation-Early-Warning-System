@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .provenance import LABEL
 from .models import Alert, Forecast, Lot, Mandi, Shipment, Trip, User
 
 log = logging.getLogger("agripulse.alerts")
@@ -161,7 +162,7 @@ def spike_alerts(db: Session) -> dict:
             if notify(db, user, "price_spike", f"spike:{mid}:{f.issue_date}", mandi=mandi.name,
                       prob=round(f.spike_prob * 100), threshold=round(s.spike_threshold_pct),
                       p10=round(f.p10), p50=round(f.p50), p90=round(f.p90),
-                      synthetic=" [Synthetic model]" if f.trained_on_synthetic else ""):
+                      synthetic=f" [{LABEL[f.data_provenance]}]" if f.data_provenance != "real" else ""):
                 n += 1
     db.commit()
     return {"hot_mandis": len(hot), "alerts": n}
