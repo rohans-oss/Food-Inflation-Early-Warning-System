@@ -107,8 +107,19 @@ so the checks were made through a web fetch and the pilot fetch runs on the user
   1966-67 to 2011-12, Karnataka included; crops are cereals, pulses, oilseeds, sugarcane, cotton, fruits,
   vegetables (aggregate), potatoes, onions. **No tomato, and no year overlaps Sentinel-2 (2015+)**, so it cannot
   validate the satellite signal. A newer ICRISAT district file with years after 2015 would be usable for major crops.
-- **Karnataka horticulture statistics** (district tomato area / production): format to be checked when the files arrive;
-  an adapter into the normalised schema in `ml/agripulse_ml/satellite/validate.py` is written only after that.
+- **Tomato district area / production (used):** `data/ground_truth/tomato_district_hsg.csv`, 2015-16 to 2023-24 for
+  Kolar and Chikballapur, read from the real PDFs on 2026-09-29 (text extracted with pdf.js; rotated tables read by
+  column position):
+  - [Horticulture Statistics at a Glance 2018](https://nhb.gov.in/statistics/Publication/Horticulture%20Statistics%20at%20a%20Glance-2018.pdf) (NHB),
+    Table 7.5.32, PDF p.344: 2015-16, 2016-17 in '000 Ha / '000 MT.
+  - [Horticultural Statistics at a Glance 2021](https://agriwelfare.gov.in/Documents/Horticultural_Statistics_at__Glance_2021.pdf) (DA&FW),
+    Table 7.4.1, PDF p.264: 2016-17 to 2020-21. **The header says '000 Ha / '000 MT but the values are Ha / MT**
+    (2016-17 Kolar 8510 / 481447 = the 2018 edition's 8.51 / 481.45 thousand).
+  - [Horticultural Statistics at a Glance 2024](https://agriwelfare.gov.in/Documents/HORTICULTURAL_STATISTICS_AT_A_GLANCE_2024.pdf) (DA&FW),
+    Table 7.4.1, PDF p.193: 2020-21 to 2023-24, Hectare / Metric Tonne; 2020-21 equals the 2021 edition.
+  - Where editions overlap (2016-17, 2020-21) the figures agree exactly. Kolar's area almost doubles from 2017-18
+    (8,712 ha) to 2018-19 (16,328 ha); whether that is real or a compilation change is not stated in the tables.
+  - Adapter: `ml/agripulse_ml/satellite/truth_adapters.py` (`hsg_tomato`).
 
 ## Synthetic data
 

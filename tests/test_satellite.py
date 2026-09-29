@@ -249,3 +249,17 @@ def test_overlapping_tiles_count_once_per_day():
     assert best["scene_id"].tolist() == ["S2B_43PHQ_20180104_0_L2A"]
     s = district_series(rows, pd.date_range("2018-01-01", "2018-01-10"), lag=2)
     assert s.loc["2018-01-06", "sat_obs_30"] == 1 and s.loc["2018-01-06", "sat_ndvi_30"] == pytest.approx(0.3944)
+
+
+def test_hsg_tomato_ground_truth_adapter():
+    """The real published figures (data/ground_truth/tomato_district_hsg.csv), checked against the printed tables."""
+    from agripulse_ml.satellite.truth_adapters import hsg_tomato
+    from agripulse_ml.satellite.validate import check_truth
+
+    t = check_truth(hsg_tomato())
+    assert len(t) == 36 and set(t["district"]) == {"Kolar", "Chikkaballapur"}
+    area = t[t["variable"] == "area"].set_index(["district", "agri_year"])["value"]
+    # HSG 2018 prints 2016-17 Kolar as 8.51 thousand ha; HSG 2021 prints 8510 (ha): same number, units reconciled
+    assert area[("Kolar", 2016)] == 8510 and area[("Kolar", 2015)] == 5960
+    assert area[("Chikkaballapur", 2023)] == 10879 and t["agri_year"].between(2015, 2023).all()
+    assert t["source"].str.contains("Table 7.4.1|Table 7.5.32").all()

@@ -128,3 +128,35 @@ def report(comps: list[Comparison]) -> pd.DataFrame:
     if len(df):
         df["comparisons_made"] = len(df)  # read any single "signal" against how many were tried
     return df
+
+
+def main(argv=None):
+    """python -m agripulse_ml.satellite.validate data/satellite/observations.csv
+    -> docs/results/satellite-signal.csv (district-year NDVI) + satellite-validation.csv (comparisons). REAL data."""
+    import argparse
+    from pathlib import Path
+
+    from .truth_adapters import hsg_tomato
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("observations")
+    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[3] / "docs" / "results"))
+    a = ap.parse_args(argv)
+    obs = pd.read_csv(a.observations, parse_dates=["date"])
+    sig = annual_signal(obs)
+    rep = report(compare(sig, hsg_tomato()))
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sig.assign(data_provenance="real").to_csv(out / "satellite-signal.csv", index=False)
+    rep.assign(data_provenance="real").to_csv(out / "satellite-validation.csv", index=False)
+    with pd.option_context("display.width", 200, "display.max_columns", 20):
+        print("REAL data: Sentinel-2 L2A (Earth Search) x ESA WorldCover cropland vs Horticultural Statistics at a Glance")
+        print(sig.round(3).to_string(index=False))
+        print(rep.to_string(index=False))
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
