@@ -51,7 +51,8 @@ def run(out: Path, start: str, end: str, districts: list[dict], cfg: dict, dry_r
     done = done_keys(obs)
     plan = []
     for d in districts:
-        scenes = search(bbox_of(d), start, end, cfg, client=client)
+        skipped: list = []
+        scenes = search(bbox_of(d), start, end, cfg, client=client, log=log, skipped=skipped)
         todo = [s for s in scenes if (s.id, d["name"]) not in done]
         plan.append((d, scenes, todo))
         log(f"{d['name']}: {len(scenes)} scenes with cloud <= {cfg['stac']['max_cloud_pct']}%, {len(todo)} still to fetch")

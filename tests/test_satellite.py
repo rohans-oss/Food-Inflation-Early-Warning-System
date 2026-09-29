@@ -104,6 +104,26 @@ def test_search_pages_filters_clouds_and_reads_per_scene_offsets(cogs):
     assert scenes[0].offset["red"] == 0.0 and scenes[1].offset["red"] == -0.1 and scenes[1].epsg == 32643
 
 
+@respx.mock
+def test_search_skips_items_without_assets_and_keeps_the_reprocessed_duplicate(tmp_path):
+    """Both seen on the first real pilot run: an item without the red asset crashed the dry run, and 2018 scenes
+    come twice (_0_L2A baseline 00.01 and the reprocessed _1_L2A baseline 05.00, same tile and time)."""
+    from agripulse_ml.satellite.stac import search
+
+    old = _feature(tmp_path, "S2B_43PHQ_20180213_0_L2A", "2018-02-13", 5.0, 0.0)
+    new = _feature(tmp_path, "S2B_43PHQ_20180213_1_L2A", "2018-02-13", 5.0, 0.0)
+    new["properties"]["s2:processing_baseline"] = "05.00"
+    broken = _feature(tmp_path, "S2A_43PHQ_20180220_0_L2A", "2018-02-20", 3.0, 0.0)
+    del broken["assets"]["red"]
+    respx.get(f"{STAC}/search").mock(return_value=httpx.Response(
+        200, json={"type": "FeatureCollection", "features": [old, broken, new], "links": []}))
+    skipped, logs = [], []
+    scenes = search((78.0, 13.0, 78.3, 13.3), "2018-01-01", "2018-03-01", _cfg(tmp_path), log=logs.append, skipped=skipped)
+    assert [x.id for x in scenes] == ["S2B_43PHQ_20180213_1_L2A"]
+    assert len(skipped) == 1 and "S2A_43PHQ_20180220_0_L2A" in skipped[0] and "red" in skipped[0]
+    assert any("duplicate" in m for m in logs) and any("skipped 1" in m for m in logs)
+
+
 def test_extract_masks_cloud_and_non_cropland_and_applies_offset(cogs):
     from agripulse_ml.satellite.extract import district_stats
     from agripulse_ml.satellite.stac import parse
