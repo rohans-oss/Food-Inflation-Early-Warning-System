@@ -108,12 +108,14 @@ def _cqr_offsets(y: np.ndarray, lo: np.ndarray, hi: np.ndarray, coverage: float 
 class LightGBMQuantileForecaster:
     name: str = "lightgbm_quantile"
     params: dict = field(default_factory=lambda: dict(LGB_PARAMS))
+    features: list = field(default_factory=lambda: list(FEATURES))  # V1 features; V2 passes table.feature_columns
     models: dict = field(default_factory=dict)
     offsets: dict = field(default_factory=dict)  # h -> (lower_widen, upper_widen) in log space
     spike_model: object = None
     spike_rate: float = 0.0
 
     def fit(self, train: pd.DataFrame) -> "LightGBMQuantileForecaster":
+        FEATURES = self.features  # noqa: N806
         cut = train["date"].max() - pd.Timedelta(days=CALIBRATION_DAYS)
         fit_part, cal_part = train[train["date"] <= cut], train[train["date"] > cut]
         if len(fit_part) < 500 or len(cal_part) < 50:
@@ -153,7 +155,7 @@ class LightGBMQuantileForecaster:
         return np.full(len(Xf), self.spike_rate)
 
     def predict(self, X: pd.DataFrame) -> dict:
-        Xf = X[FEATURES]
+        Xf = X[self.features]
         out = {}
         for h in HORIZONS:
             preds = np.column_stack([self._raw(h, _q_name(q), Xf) for q in QUANTILES])

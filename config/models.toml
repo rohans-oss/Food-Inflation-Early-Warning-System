@@ -1,0 +1,30 @@
+# Model configuration (V2-2). Override the path with MODELS_CONFIG=/path/file.toml
+
+[display]
+# The model whose forecasts users see (farmer, buyer, policy, recommender, alerts).
+# V2 models write alongside it under their own model_name and never replace it silently.
+model = "lightgbm_quantile"
+
+[tft]
+# Switching to real data is THIS line, not a code change. "real" reads non-synthetic DB rows; the
+# readiness monitor then stamps each mandi real / real_partial. "synthetic" uses the pinned generator.
+data_provenance = "synthetic"
+feature_set = "prices+weather"
+synthetic_seeds = [7, 1, 2]      # 3 synthetic draws (V2-0: one draw is not evidence)
+n_folds = 4                      # approved compute budget: 4 folds x 3 draws, same folds for every model
+write_forecasts = false          # write TFT forecasts to the forecasts table (model_name = "tft")
+
+# architecture / training (small on purpose: 2 CPU cores, ~30k windows per fold)
+max_encoder_length = 90
+hidden_size = 16
+hidden_continuous_size = 8
+attention_head_size = 2
+dropout = 0.1
+learning_rate = 0.01
+batch_size = 128
+max_epochs = 8
+limit_train_batches = 120        # batches per epoch (random windows), keeps an epoch bounded on CPU
+early_stopping_patience = 2
+validation_days = 60             # last days of the fitting window, for early stopping
+calibration_days = 120           # held out for conformal calibration, same as V1 LightGBM
+seed = 42

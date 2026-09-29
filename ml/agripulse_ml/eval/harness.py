@@ -6,7 +6,12 @@
     run.results   # long table: model_name, feature_set, horizon, mandi, data_provenance, metric_name, metric_value
 
 A model is any object with fit(train_df) -> self and predict(test_df) -> {(h, "p10"|"p50"|"p90"): log-ratio
-array, "spike_prob": array}. Predictions are log(price[t+7h] / price[t]); the harness converts to Rs/quintal.
+array, "spike_prob": array}.
+Sequence models (TFT) set `uses_history = True` and receive two extra frames:
+    fit(train, history=rows issued before the cutoff)         their target series (the published base price) is
+                                                              known on each issue date, so every row < cutoff is legal
+    predict(test, context=rows issued before the test window end)  and MUST use, for a test row at t, only rows <= t
+                                                              (checked by tests/test_tft.py) Predictions are log(price[t+7h] / price[t]); the harness converts to Rs/quintal.
 `data_provenance` may be one string, or a {mandi_id: provenance} dict when mandis differ (real vs real_partial);
 the pooled "ALL" row then carries the worst of them.
 """
@@ -86,8 +91,16 @@ def run(
         train, test = split(feat, fold, spec)
         if not len(test) or len(train) < spec.min_train_rows:
             continue
+        history = context = None
         for name, factory in models.items():
-            p = factory().fit(train).predict(test)
+            m = factory()
+            if getattr(m, "uses_history", False):
+                if history is None:
+                    history = feat[feat["date"] < fold.cutoff]
+                    context = feat[feat["date"] < fold.test_end]
+                p = m.fit(train, history=history).predict(test, context=context)
+            else:
+                p = m.fit(train).predict(test)
             fr = test[["mandi_id", "date", "price", "spike"]].copy()
             fr["model_name"], fr["fold"] = name, fold.index
             for h in HORIZONS:

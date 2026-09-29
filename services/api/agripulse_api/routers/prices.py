@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from tracking.geo import haversine_km
 
 from ..db import get_db
+from ..modelcfg import display_model
 from ..models import Forecast, Mandi, Price
 from ..rbac import require
 from .mandis import mandi_out
@@ -101,15 +102,20 @@ def price_history(
     ]
 
 
-def forecast_block(db: Session, mandi_id: int, commodity: str = "Tomato") -> dict | None:
+def forecast_block(db: Session, mandi_id: int, commodity: str = "Tomato", model: str | None = None) -> dict | None:
+    """Latest forecast of ONE model (default: config/models.toml [display] model). V2 models write their own
+    rows under their own model_name; they are never mixed into what users see."""
+    model = model or display_model()
     issue = db.scalar(
-        select(func.max(Forecast.issue_date)).where(Forecast.mandi_id == mandi_id, Forecast.commodity == commodity)
+        select(func.max(Forecast.issue_date)).where(Forecast.mandi_id == mandi_id, Forecast.commodity == commodity,
+                                                    Forecast.model_name == model)
     )
     if issue is None:
         return None
     rows = db.scalars(
         select(Forecast)
-        .where(Forecast.mandi_id == mandi_id, Forecast.commodity == commodity, Forecast.issue_date == issue)
+        .where(Forecast.mandi_id == mandi_id, Forecast.commodity == commodity, Forecast.issue_date == issue,
+               Forecast.model_name == model)
         .order_by(Forecast.horizon_weeks)
     ).all()
     return {

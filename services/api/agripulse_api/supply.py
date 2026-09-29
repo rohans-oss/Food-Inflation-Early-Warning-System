@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from tracking.geo import haversine_km
 from tracking.routing import road_km
 
+from .modelcfg import display_model
 from .models import Arrival, Forecast, Mandi, Price, Trip, Weather
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -114,7 +115,8 @@ def supply_board(db: Session, mandi_ids: list[int] | None = None, now: datetime 
 
 
 def _latest_forecast(db: Session, mandi_id: int, weeks: int) -> Forecast | None:
-    return db.scalar(select(Forecast).where(Forecast.mandi_id == mandi_id, Forecast.horizon_weeks == weeks)
+    return db.scalar(select(Forecast).where(Forecast.mandi_id == mandi_id, Forecast.horizon_weeks == weeks,
+                                            Forecast.model_name == display_model())
                      .order_by(Forecast.issue_date.desc()).limit(1))
 
 

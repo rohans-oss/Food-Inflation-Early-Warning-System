@@ -136,3 +136,9 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   with `table.fold_spec()` (carries the label publication lag). Lags live in `config/features.toml`. V1 LightGBM keeps
   `features/legacy.py`. Any new feature needs a leakage test in tests/test_feature_store.py.
 - Tests set MLFLOW_DISABLE=1 (conftest) so they never write to the real mlruns/.
+- Model switches live in `config/models.toml` (`agripulse_api.modelcfg`). Users see ONLY the `[display] model`: every
+  forecast read (`forecast_block`, recommender, spike alerts) filters `Forecast.model_name == display_model()`. V2
+  models write under their own model_name (TFT: "tft", only when `[tft] write_forecasts = true`).
+- Sequence models set `uses_history = True`; the harness passes `history` (rows < cutoff) and `context` (rows < test
+  end) and the model must use only rows <= each test row's issue date (tests/test_tft.py tamper test).
+- TFT needs the `tft` extra (`pip install -e .[tft]`); tests/test_tft.py skips without it.

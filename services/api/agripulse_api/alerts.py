@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .provenance import LABEL
+from .modelcfg import display_model
 from .models import Alert, Forecast, Lot, Mandi, Shipment, Trip, User
 
 log = logging.getLogger("agripulse.alerts")
@@ -131,7 +132,7 @@ def spike_alerts(db: Session) -> dict:
     """After each forecast run: alert users whose mandis cross the spike threshold."""
     s = get_settings()
     latest = {}
-    for f in db.scalars(select(Forecast).where(Forecast.horizon_weeks == 2).order_by(Forecast.issue_date)):
+    for f in db.scalars(select(Forecast).where(Forecast.horizon_weeks == 2, Forecast.model_name == display_model()).order_by(Forecast.issue_date)):
         latest[f.mandi_id] = f  # keeps the newest per mandi
     hot = {mid: f for mid, f in latest.items() if f.spike_prob >= s.spike_alert_probability}
     if not hot:

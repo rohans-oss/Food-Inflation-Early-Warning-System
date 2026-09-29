@@ -30,6 +30,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "respx>=0.21"]
 mlflow-ui = ["mlflow>=3.0"]
+# V2-2 TFT (CPU is enough; see docs/tft-results.md for timings). tests/test_tft.py skips without it.
+tft = ["pytorch-forecasting>=1.4", "lightning>=2.4", "torch>=2.4"]
 
 # One installable project, four packages, laid out as in the project doc (§12).
 [tool.setuptools.packages.find]

@@ -89,7 +89,16 @@ def run_job(db: Session) -> dict:
     with tracked_run(db, "forecast") as run:
         out = predict_latest(db)
         run.rows, run.details = out["written"], out
-        return out
+    from agripulse_api.modelcfg import models_config
+
+    if models_config()["tft"].get("write_forecasts"):  # V2-2, off by default; never replaces the display model
+        from .tft.forecast import write_forecasts
+
+        with tracked_run(db, "forecast_tft") as run:
+            tft = write_forecasts(db)
+            run.rows, run.details = tft["written"], tft
+        out["tft"] = tft
+    return out
 
 
 def main() -> None:
