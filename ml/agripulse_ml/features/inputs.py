@@ -36,13 +36,13 @@ class Inputs:
 
     @classmethod
     def from_synthetic(cls, seed: int = 7, start: date = date(2022, 1, 1), end: date = date(2026, 9, 25),
-                       n_mandis: int | None = None) -> "Inputs":
+                       n_mandis: int | None = None, propagation: str = "random") -> "Inputs":
         from ..synthetic import SYNTH_MANDIS as ALL
 
         from ..synthetic import generate
 
         SYNTH_MANDIS = ALL[:n_mandis] if n_mandis else ALL
-        p, w, a = generate(start, end, seed, SYNTH_MANDIS)
+        p, w, a = generate(start, end, seed, SYNTH_MANDIS, propagation=propagation)
         ids = {m[0]: i + 1 for i, m in enumerate(SYNTH_MANDIS)}
         for d in (p, w, a):
             d["mandi_id"] = d["mandi"].map(ids)
@@ -54,7 +54,8 @@ class Inputs:
             forecasts=simulate_forecasts(weather, seed), mandis=mandis,
             price_provenance={int(i): SYNTHETIC for i in mandis["mandi_id"]},
             weather_provenance=SYNTHETIC, forecast_provenance=SYNTHETIC,
-            notes=[f"synthetic generator seed {seed}, {start}..{end}",
+            notes=[f"synthetic generator seed {seed}, {start}..{end}"
+                   + (", PLANTED SIGNAL: spikes propagate by distance (positive control)" if propagation == "distance" else ""),
                    "weather forecasts are SIMULATED (future synthetic observation + lead-dependent error)"],
         )
 

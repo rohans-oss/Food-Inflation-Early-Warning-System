@@ -11,6 +11,12 @@ Dynamics (loosely shaped on Karnataka tomato behaviour):
   - a regional factor shared by all mandis + mandi-specific AR(1) noise
   - supply-shock spikes whose hazard rises after heavy-rain anomalies
   - arrivals move against price
+
+propagation="random" (default, the pinned V2 baseline): each mandi feels a spike 0-3 days late at random,
+  independent of geography. Distance carries NO information by construction.
+propagation="distance" (V2-3 POSITIVE CONTROL, "PLANTED SIGNAL"): spikes start at Kolar (the main tomato belt)
+  and reach each mandi after road-km / 40 km per day. It exists only to check that graph models can find a
+  spatial signal when one is there. Its results are never evidence about real prices.
 """
 from datetime import date
 
@@ -25,7 +31,22 @@ SYNTH_MANDIS = [
 ]
 
 
-def generate(start: date = date(2022, 1, 1), end: date = date(2026, 9, 25), seed: int = 7, mandis=None):
+PROPAGATION_ORIGIN = (13.137, 78.129)  # Kolar APMC
+PROPAGATION_KM_PER_DAY = 40.0
+PROPAGATION_ROAD_FACTOR = 1.3
+
+
+def propagation_lag_days(lat: float, lon: float) -> int:
+    from tracking.geo import haversine_km
+
+    km = haversine_km(PROPAGATION_ORIGIN[0], PROPAGATION_ORIGIN[1], lat, lon) * PROPAGATION_ROAD_FACTOR
+    return int(round(km / PROPAGATION_KM_PER_DAY))
+
+
+def generate(start: date = date(2022, 1, 1), end: date = date(2026, 9, 25), seed: int = 7, mandis=None,
+             propagation: str = "random"):
+    if propagation not in ("random", "distance"):
+        raise ValueError("propagation must be 'random' or 'distance'")
     rng = np.random.default_rng(seed)
     mandis = mandis or SYNTH_MANDIS
     days = pd.date_range(start, end, freq="D")
@@ -65,7 +86,9 @@ def generate(start: date = date(2022, 1, 1), end: date = date(2026, 9, 25), seed
         own = np.zeros(n)
         for t in range(1, n):
             own[t] = 0.9 * own[t - 1] + rng.normal(0, 0.06)
-        lag = int(rng.integers(0, 4))  # prices propagate with small delays
+        lag = int(rng.integers(0, 4))  # prices propagate with small delays (drawn in both modes: same RNG stream)
+        if propagation == "distance":
+            lag = propagation_lag_days(lat, lon)
         shifted_spike = np.roll(spike, lag)
         logp = np.log(level) + seasonal + regional + own + shifted_spike
         p = np.round(np.exp(logp) / 10) * 10

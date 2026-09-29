@@ -1,0 +1,32 @@
+# V2-3 mandi graph. Override the path with GRAPH_CONFIG=/path/file.toml
+#
+# Three edge types:
+#   distance       REAL: road km between mandis (OSRM; straight line x road factor when OSRM is not running,
+#                  distance_source says which). Mandi coordinates are still approximate (backlog #3).
+#   price_corr     from price history: correlation of 7-day log price changes. Synthetic until real history exists.
+#   flow_estimate  ESTIMATE: a relative trade-flow index from an arbitrage-gravity rule, NOT measured tonnes.
+# Edges that use prices/arrivals are built only from values published before the snapshot date (rule 12).
+
+[graph]
+backend = "networkx"          # "neo4j" also pushes each build to Neo4j (NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD in .env)
+snapshot_every_days = 28      # the feature table rebuilds the graph every N days, each from data published before it
+
+[distance]
+radius_km = 300               # road km; beyond this no distance edge
+max_neighbours = 5            # nearest N within the radius
+decay_km = 100                # edge weight = exp(-km / decay_km)
+
+[correlation]
+window_days = 365             # history used for each snapshot
+change_days = 7               # correlate 7-day log price changes
+min_overlap = 60              # days with both mandis present
+min_corr = 0.3
+max_neighbours = 5
+
+[flow_estimate]
+# ESTIMATE. Produce is assumed to move from mandi i to j when j's average price exceeds i's by more than the
+# transport cost: index ~ arrivals_i x (p_j - p_i - cost_ij) / km_ij, scaled to 0..1. It is a plausibility
+# index for "where would tomatoes go", not an observed flow. Replace with trader-confirmed origins when they exist.
+window_days = 90
+rate_per_quintal_km = 1.2     # = 12 INR per tonne-km in config/recommender.toml
+max_neighbours = 3

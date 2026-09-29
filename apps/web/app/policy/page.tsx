@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { MandiForecast } from "@/components/MandiForecast";
 import { MapMarker, MapView } from "@/components/MapView";
 import { Shell } from "@/components/Shell";
@@ -83,6 +84,12 @@ export default function Policy() {
         </Table>
       </Card>
       {focus && <Card title={`${t("priceForecast")} · ${focus.mandi}`}><MandiForecast mandiId={focus.mandi_id} /></Card>}
+      {mandis.length > 0 && (
+        <Card title={t("connectedMandis")}>
+          <ConnectedMandis key={focus?.mandi_id ?? "all"} initial={focus?.mandi_id}
+            mandis={mandis.map((m) => ({ id: m.mandi_id, name: m.mandi }))} />
+        </Card>
+      )}
       <Note>{(ov.data?.notes ?? []).join(" ")}</Note>
     </Shell>
   );

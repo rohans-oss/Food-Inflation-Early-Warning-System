@@ -22,8 +22,14 @@ date range, per-column missingness, provenance per group, lags). The synthetic t
 | `calendar` | always on (not in the name) | `cal_doy_{sin,cos}`, `cal_month`, `cal_festival`, `cal_festival_next14`, `cal_season` | known-future |
 | static | always | `mandi_id`, `st_district`, `st_state`, `st_lat`, `st_lon` | static covariates |
 | `satellite` | refuses until V2-4 | | |
-| `graph` | refuses until V2-3 | | |
+| `graph` | built (V2-3) | `gr_dist_chg_{7,14}`, `gr_dist_spread`, `gr_dist_risen`, `gr_corr_chg_7`, `gr_flow_up_chg_7` (flow = ESTIMATE), `gr_n_corr` | past-only |
 | `transit` | refuses until V2-5 | | |
+
+**Graph group time rule.** The graph is rebuilt every 28 days (`config/graph.toml`), each snapshot only from prices and
+arrivals published by its date; a row at t uses the latest snapshot on or before t, and its neighbours' own past-only
+features at t. A mandi's graph features mix in its neighbours' prices, so its provenance is the worst of the prices
+it listens to (one thin real mandi makes its neighbours `real_partial`). Leakage tests: tests/test_feature_store.py
+(truncation, snapshot edges, both verified against planted leaks). Details: docs/graph-results.md.
 
 Names are canonical: `weather+prices` → `prices+weather`. The name is stored on every run with `data_provenance`.
 

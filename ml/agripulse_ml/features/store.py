@@ -14,7 +14,8 @@ Time rules (V2 rule 12). A row is an ISSUE DATE t, the day a forecast would be m
   * Known-future inputs (calendar, weather forecasts) use only forecasts ISSUED on or before t.
 
 Groups: prices (past-only: price history + arrivals), weather (past-only observations + known-future
-forecasts), calendar (known-future, always on). satellite / graph / transit arrive in later phases.
+forecasts), calendar (known-future, always on), graph (V2-3, past-only: neighbour signals, see graph/features.py).
+satellite / transit arrive in later phases.
 """
 import json
 from dataclasses import dataclass, field
@@ -37,8 +38,11 @@ PRICES = ["px_chg_1", "px_chg_7", "px_chg_14", "px_chg_28", "px_rel_mean_7", "px
           "px_rel_max_28", "px_rel_min_28", "px_yoy", "px_level", "arr_7_rel", "arr_known"]
 WEATHER_PAST = ["wx_rain_7", "wx_rain_30", "wx_rain_30_anom", "wx_tmax_7", "wx_tmax_7_anom"]
 WEATHER_FUTURE = ["wf_rain_next7", "wf_rain_next14", "wf_tmax_next7", "wf_age_days", "wf_available"]  # windows fixed at 7/14
+from ..graph.features import GRAPH  # noqa: E402
+
 GROUP_COLUMNS = {"prices": {"past_only": PRICES},
-                 "weather": {"past_only": WEATHER_PAST, "known_future": WEATHER_FUTURE}}
+                 "weather": {"past_only": WEATHER_PAST, "known_future": WEATHER_FUTURE},
+                 "graph": {"past_only": GRAPH}}
 
 
 @dataclass
@@ -53,6 +57,7 @@ class FeatureTable:
     lags: dict[str, int]
     label_lag_days: int
     notes: list[str] = field(default_factory=list)
+    graphs: list = field(default_factory=list)  # graph group: the MandiGraph snapshots behind the features
 
     @property
     def feature_columns(self) -> list[str]:
@@ -260,6 +265,12 @@ def build_table(inputs: Inputs, feature_set="prices+weather", spike_threshold_pc
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if len(df):
         df = df[df["price"].notna()].reset_index(drop=True)
+    graphs = []
+    if "graph" in groups and len(df):
+        from ..graph.features import graph_features
+
+        gf, graphs = graph_features(df, inputs)
+        df = df.merge(gf, on=["date", "mandi_id"], how="left")
 
     columns = {"static": list(STATIC), "known_future": list(CALENDAR), "past_only": []}
     for g in groups:
@@ -268,11 +279,14 @@ def build_table(inputs: Inputs, feature_set="prices+weather", spike_threshold_pc
     group_prov = {"prices": worst(*inputs.price_provenance.values()) if inputs.price_provenance else REAL, "calendar": REAL}
     if "weather" in groups:
         group_prov["weather"] = worst(inputs.weather_provenance, inputs.forecast_provenance)
+    if "graph" in groups:  # distance edges are real; correlation / flow edges inherit the price provenance
+        group_prov["graph"] = group_prov["prices"]
     mandi_prov = {int(m): worst(inputs.price_provenance.get(int(m), REAL),
                                 *(group_prov[g] for g in groups if g != "prices")) for m in df["mandi_id"].unique()} if len(df) else {}
     overall = worst(*group_prov.values(), *mandi_prov.values())
     lags = {k: int(v) for k, v in cfg["publication_lag_days"].items()}
     return FeatureTable(df=df, feature_set=feature_set_name(groups), groups=groups, columns=columns,
                         data_provenance=overall, group_provenance=group_prov, mandi_provenance=mandi_prov,
-                        lags=lags, label_lag_days=L_p, notes=list(inputs.notes))
+                        lags=lags, label_lag_days=L_p, notes=list(inputs.notes)
+                        + (list(graphs[-1].notes) if graphs else []), graphs=graphs)
 

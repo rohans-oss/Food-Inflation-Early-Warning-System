@@ -58,12 +58,13 @@ def test_feature_set_naming():
     assert feature_set_name("weather+prices") == "prices+weather"
     assert feature_set_name(["prices", "calendar"]) == "prices"  # calendar is always on, not in the name
     assert parse_feature_set("prices+weather+transit") == ["prices", "weather", "transit"]
+    assert feature_set_name("graph+prices+weather") == "prices+weather+graph"
     with pytest.raises(ValueError):
         parse_feature_set("prices+vibes")
 
 
 def test_pending_groups_refuse_and_prices_required(inputs):
-    for fs in ("prices+satellite", "prices+graph", "prices+transit"):
+    for fs in ("prices+satellite", "prices+transit"):
         with pytest.raises(FeatureGroupNotBuilt):
             build_table(inputs, fs)
     with pytest.raises(ValueError):
@@ -232,7 +233,7 @@ def test_build_cli(tmp_path, capsys):
     assert card["label_lag_days"] == 1 and card["rows"] == len(pd.read_parquet(pq))
     out = capsys.readouterr().out
     assert "SYNTHETIC — METHODOLOGY DEMO" in out and "missing" in out
-    assert build_cli(["--feature-set", "prices+graph", "--provenance", "synthetic", "--out", str(tmp_path)]) == 2
+    assert build_cli(["--feature-set", "prices+transit", "--provenance", "synthetic", "--out", str(tmp_path)]) == 2
 
 
 def test_open_meteo_forecasts_are_archived_as_issued(db):
@@ -267,3 +268,76 @@ def test_forecast_archive_readiness(db):
     db.commit()
     r = next(m for m in compute(db, date(2026, 9, 25))["mandis"] if m["mandi_id"] == kolar.id)["weather_forecasts"]
     assert r["history_days"] == 5 and r["status"] == "collecting" and r["projected_ready_date"] == d0 + timedelta(days=364)
+
+
+# ---------------------------------------------------------------- graph group (V2-3)
+
+from agripulse_ml.graph.edges import build_graph  # noqa: E402
+from agripulse_ml.graph.features import GRAPH  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def ginputs():
+    return Inputs.from_synthetic(seed=11, start=START, end=END, n_mandis=5)  # 5 nearby mandis: every one has neighbours
+
+
+@pytest.fixture(scope="module")
+def gtable(ginputs):
+    return build_table(ginputs, "prices+weather+graph")
+
+
+def test_graph_features_unchanged_when_the_future_is_deleted(ginputs, gtable):
+    """Same truncation test as the other groups: neighbours' data published after t never reaches t."""
+    C = pd.Timestamp("2024-06-15")
+    cut = _replace(ginputs, prices=ginputs.prices[ginputs.prices["date"] <= C],
+                   arrivals=ginputs.arrivals[ginputs.arrivals["date"] <= C],
+                   weather=ginputs.weather[ginputs.weather["date"] <= C],
+                   forecasts=ginputs.forecasts[ginputs.forecasts["issued_on"] <= C + pd.Timedelta(days=1)])
+    tb2 = build_table(cut, "prices+weather+graph", as_of=C + pd.Timedelta(days=1))
+    window = (gtable.df["date"] >= C - pd.Timedelta(days=60)) & (gtable.df["date"] <= C + pd.Timedelta(days=1))
+    rows = gtable.df.loc[window, ["mandi_id", "date"]]
+    assert len(rows) > 200
+    assert gtable.df.loc[window, "gr_corr_chg_7"].notna().mean() > 0.5  # the test covers populated features
+    bad = []
+    for m, t in rows.itertuples(index=False):
+        bad += [f"{t.date()} m{m} {x}" for x in _same(_at(gtable, m, t), _at(tb2, m, t), GRAPH)]
+    assert not bad, "graph features use data published after t:\n" + "\n".join(bad[:10])
+
+
+def test_graph_edges_use_only_data_published_before_the_snapshot(ginputs):
+    # S: a day on which EVERY mandi has a price (dated S, published S + 1), or the test proves nothing
+    per_day = ginputs.prices.groupby("date")["mandi_id"].nunique()
+    S = per_day[(per_day.index >= "2024-09-01") & (per_day == ginputs.prices["mandi_id"].nunique())].index[0]
+    g = build_graph(ginputs, S)
+    # 1-day lag: a price dated d is usable from d + 1, so the snapshot on S may use d <= S - 1 only
+    later = ginputs.prices["date"] > S - pd.Timedelta(days=1)
+    tampered = ginputs.prices.copy()
+    tampered.loc[later, "price"] *= np.where(tampered.loc[later, "mandi_id"] % 2 == 0, 3.0, 0.3)
+    g2 = build_graph(_replace(ginputs, prices=tampered), S)
+    pd.testing.assert_frame_equal(g.edges.reset_index(drop=True), g2.edges.reset_index(drop=True))
+    # power check: the same tampering BEFORE S changes the correlation / flow edges
+    early = (ginputs.prices["date"] > S - pd.Timedelta(days=120)) & (ginputs.prices["date"] <= S - pd.Timedelta(days=1))
+    t3 = ginputs.prices.copy()
+    t3.loc[early, "price"] *= np.where(t3.loc[early, "mandi_id"] % 2 == 0, 1.0, np.linspace(0.3, 3, early.sum()))
+    g3 = build_graph(_replace(ginputs, prices=t3), S)
+    assert not g.of_type("price_corr").reset_index(drop=True).equals(g3.of_type("price_corr").reset_index(drop=True))
+
+
+def test_graph_snapshots_are_built_before_the_rows_they_serve(gtable):
+    snaps = [g.as_of for g in gtable.graphs]
+    assert snaps == sorted(snaps) and len(snaps) > 10
+    assert all(b - a == pd.Timedelta(days=28) for a, b in zip(snaps, snaps[1:]))
+    assert snaps[0] == gtable.df["date"].min()  # first snapshot: one published price day, too few to correlate
+    assert "price_corr" not in set(gtable.graphs[0].edges["edge_type"])
+    assert "price_corr" in set(gtable.graphs[-1].edges["edge_type"])
+
+
+def test_graph_edge_labels(gtable):
+    e = pd.concat([g.edges for g in gtable.graphs])
+    assert (e.loc[e.edge_type == "distance", "data_provenance"] == "real").all()
+    assert (e.loc[e.edge_type != "distance", "data_provenance"] == "synthetic").all()
+    assert e.loc[e.edge_type == "flow_estimate", "is_estimate"].all()
+    assert not e.loc[e.edge_type != "flow_estimate", "is_estimate"].any()
+    assert gtable.group_provenance["graph"] == "synthetic"
+    assert any("ESTIMATE" in n for n in gtable.notes)
+    assert set(GRAPH) <= set(gtable.columns["past_only"]) and set(GRAPH) <= set(gtable.feature_columns)

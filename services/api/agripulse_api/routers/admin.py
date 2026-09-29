@@ -24,6 +24,7 @@ EXPECTED_EVERY = {
     "open_meteo": timedelta(hours=2),
     "nasa_power": timedelta(hours=26),
     "forecast": timedelta(hours=26),
+    "graph_build": timedelta(days=8),  # V2-3, weekly
 }
 
 

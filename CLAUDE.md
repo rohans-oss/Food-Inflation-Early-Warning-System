@@ -142,3 +142,9 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - Sequence models set `uses_history = True`; the harness passes `history` (rows < cutoff) and `context` (rows < test
   end) and the model must use only rows <= each test row's issue date (tests/test_tft.py tamper test).
 - TFT needs the `tft` extra (`pip install -e .[tft]`); tests/test_tft.py skips without it.
+- Mandi graph (V2-3): edges ONLY via `agripulse_ml.graph.edges.build_graph(inputs, as_of)` (uses data published by
+  `as_of`); config in `config/graph.toml`. Edge provenance: distance = real, price_corr / flow_estimate = the prices'
+  provenance; flow_estimate always has is_estimate = true and shows an ESTIMATE badge (`EstimateBadge`). Stored builds
+  live in `graph_edges` (`python -m agripulse_ml.graph.build`, weekly job); Neo4j is an optional mirror only.
+- Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
+  about prices. The pinned baseline is `propagation="random"` (the default).

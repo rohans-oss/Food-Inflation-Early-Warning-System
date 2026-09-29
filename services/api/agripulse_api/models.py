@@ -168,6 +168,29 @@ class WeatherForecast(Base):
     fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
 
+class GraphEdge(Base):
+    """Mandi graph edges (V2-3), one row per (build, src, dst, edge_type). Written by `python -m agripulse_ml.graph.build`.
+    distance: REAL road km. price_corr: from price history (synthetic until real history exists).
+    flow_estimate: an ESTIMATE (is_estimate = true), a relative index, never measured tonnes."""
+
+    __tablename__ = "graph_edges"
+    __table_args__ = (UniqueConstraint("build_id", "src_mandi_id", "dst_mandi_id", "edge_type"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    build_id: Mapped[str] = mapped_column(String(32), index=True)
+    as_of: Mapped[date] = mapped_column(Date, index=True)  # built from data published before this date
+    src_mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    dst_mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    edge_type: Mapped[str] = mapped_column(String(20))  # distance | price_corr | flow_estimate
+    weight: Mapped[float] = mapped_column(Float)
+    km: Mapped[float | None] = mapped_column(Float)
+    distance_source: Mapped[str | None] = mapped_column(String(20))  # osrm | haversine
+    correlation: Mapped[float | None] = mapped_column(Float)
+    flow_index: Mapped[float | None] = mapped_column(Float)
+    data_provenance: Mapped[str] = mapped_column(String(20))
+    is_estimate: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class Forecast(Base):
     """Always a range + spike probability, never a single point (rule 3)."""
 

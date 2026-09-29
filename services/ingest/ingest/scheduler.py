@@ -55,6 +55,12 @@ def job_forecast_and_alerts(db):
     return out
 
 
+def job_graph_build(db):
+    from agripulse_ml.graph.build import run_job
+
+    return run_job(db)
+
+
 def job_trip_monitor(db):
     from tracking.monitor import check_stale_trips
 
@@ -68,6 +74,7 @@ JOBS = [
     ("nasa_power_daily", job_nasa_power, CronTrigger(hour=6, minute=20, timezone=TZ)),
     ("forecast_daily", job_forecast_and_alerts, CronTrigger(hour=20, minute=30, timezone=TZ)),
     ("trip_monitor", job_trip_monitor, CronTrigger(minute="*", timezone=TZ)),
+    ("graph_weekly", job_graph_build, CronTrigger(day_of_week="sun", hour=21, minute=10, timezone=TZ)),
 ]
 
 

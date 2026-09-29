@@ -89,6 +89,16 @@ export function ProvenanceBadge({ p, compact = false }: { p: string | null | und
   );
 }
 
+/** V2 rule 13: trade-flow graph edges are ESTIMATES, and say so in text. */
+export function EstimateBadge({ title }: { title?: string }) {
+  return (
+    <span title={title ?? "ESTIMATE — relative trade-flow index, not measured tonnes"}
+      className="inline-flex items-center whitespace-nowrap rounded-full border border-dashed border-ink2 px-2 py-0.5 text-xs font-semibold text-ink2">
+      ESTIMATE
+    </span>
+  );
+}
+
 /** Rule 1: anything simulated says so. */
 export function SimBadge({ on, label = "Simulated" }: { on: boolean | null | undefined; label?: string }) {
   return on ? <Badge kind="sim">{label}</Badge> : null;

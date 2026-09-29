@@ -47,6 +47,7 @@ P = {
     "trips:read": {"farmer", "fpo", "driver", "fleet_owner", "trader", "lender", "admin"},
     "arrivals:confirm": {"trader"},
     "intransit:read": {"trader", "buyer", "policy", "fpo", "admin"},
+    "graph:read": {"fpo", "trader", "buyer", "policy", "admin"},  # V2-3 mandi graph
     "policy:read": {"policy", "admin"},
     "lender:read": {"lender", "admin"},
     "admin:all": {"admin"},

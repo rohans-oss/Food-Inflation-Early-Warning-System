@@ -168,7 +168,7 @@ data once the archive is about 13 months old.
 **How to verify**
 - `pytest tests/test_feature_store.py`: 18 tests, including per-group leakage tests (see the doc for the planted-leak check).
 - `python -m agripulse_ml.features.build --feature-set prices+weather --provenance synthetic` prints a data card
-  and writes Parquet; `--feature-set prices+graph` refuses with "built in V2-3".
+  and writes Parquet; `--feature-set prices+transit` refuses with "built in V2-5".
 - Admin → Real-data readiness now has a "Forecast archive" column.
 
 ## V2-2: Temporal Fusion Transformer (TFT)
@@ -197,6 +197,43 @@ only. LightGBM also doesn't beat naive (−1.7% to −3.1%). TFT stays off the d
   `docs/results/tft-synthetic.csv`; the full run (no flags) is ~80 min on 2 cores and reproduces docs/tft-results.md.
 - `python -m agripulse_ml.tft.forecast` does nothing while `write_forecasts = false`; with `--force` it writes
   `tft` rows, and the farmer / buyer screens still show the LightGBM forecast.
+
+## V2-3: mandi graph + GNN
+
+A mandi graph with three edge types, each labelled with its source: **distance** (real road km; straight line × 1.3 until
+OSRM runs), **price correlation** (from price history, so synthetic for now), and **trade flow** (an **ESTIMATE**:
+a relative index from an arbitrage-gravity rule, never tonnes). It is used three ways:
+
+- **`graph` feature group** in the feature store: neighbours' recent price moves. It is rebuilt every 28 days, each
+  snapshot only from data published by its date, and leakage-tested against planted leaks.
+- **GNN** (plain torch: GRU + 2 graph-convolution layers) compared with the same network without edges, with LightGBM
+  with and without graph features, and with naive / seasonal naive. Same folds, 3 draws, run on the pinned generator
+  and on a **PLANTED SIGNAL** positive control where spikes spread by distance.
+- **Product:** `graph_edges` table (migration 0006), weekly `python -m agripulse_ml.graph.build`,
+  `GET /graph/mandi/{id}/neighbours`, a "Connected mandis" card on the policy and admin pages, and an optional Neo4j
+  mirror (`docker compose --profile graph up -d neo4j`).
+
+Results: [docs/graph-results.md](docs/graph-results.md) — SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT.
+**Graph features help LightGBM by 1–3% on every draw and horizon, which brings it level with naive, not ahead.**
+On the pinned generator distance carries no information, so this is not evidence that geography matters. The GNN
+loses to naive by 10–32% and is unstable. The positive control is a weak pass: message passing helps once a spatial
+signal is planted, but far mandis gain no more than near ones. Nothing user-facing changes; LightGBM on
+`prices+weather` stays the display model.
+
+**How to verify**
+- `pytest tests/test_graph.py tests/test_feature_store.py`:
+  - GNN tamper test (no mandi's rows after t reach t)
+  - message passing moves only the graph model
+  - snapshot-before-cutoff
+  - graph leakage tests (each checked against a planted leak)
+  - edge labels
+  - API (roles, 404, before-first-build)
+  - Neo4j statements (parameterised; FLOW_ESTIMATE carries the ESTIMATE label)
+  - config-only switch to real data
+- `python -m agripulse_ml.graph.build` then, as policy or admin, open the policy page → "Connected mandis". Distance
+  rows say REAL (approx.), correlation rows SYNTHETIC, flow rows SYNTHETIC + ESTIMATE.
+- `python -m agripulse_ml.graph.experiment --generators random --seeds 7 --folds 1` (~2 min); the full run (~22 min)
+  reproduces docs/graph-results.md. Admin → Evaluation runs marks planted-signal runs "PLANTED SIGNAL".
 
 ## V1 status
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -13,6 +14,7 @@ const SOURCE_LABEL: Record<string, string> = {
   open_meteo: "Open-Meteo weather",
   nasa_power: "NASA POWER weather",
   forecast: "Daily forecast job",
+  graph_build: "Mandi graph (weekly)",
 };
 const ROLES = ["farmer", "fpo", "driver", "fleet_owner", "trader", "buyer", "policy", "lender", "admin"];
 
@@ -26,6 +28,7 @@ export default function Admin() {
   const sim = useApi<any>("/admin/simulator", { poll: 10000 });
   const ready = useApi<any>("/admin/data-readiness", { poll: 300000 });
   const runs = useApi<any[]>("/admin/eval-runs", { query: { limit: 10 } });
+  const mandiList = useApi<any[]>("/mandis");
   const [simCfg, setSimCfg] = useState({ trips: "8", speedup: "10" });
   const act = useAction();
 
@@ -146,12 +149,17 @@ export default function Admin() {
         <Table head={["When", "Purpose", "Feature set", "Models", "Data", "Folds", "Provenance"]} empty="No evaluation runs recorded yet.">
           {runs.data?.map((r) => (
             <tr key={r.run_id}>
-              <Td>{dateTime(r.started_at)}</Td><Td>{r.purpose || "–"}</Td><Td className="font-mono text-xs">{r.feature_set}</Td>
+              <Td>{dateTime(r.started_at)}</Td>
+              <Td>{r.purpose || "–"}{r.purpose?.includes("planted") && <div className="mt-1"><Badge kind="sim">PLANTED SIGNAL · positive control</Badge></div>}</Td><Td className="font-mono text-xs">{r.feature_set}</Td>
               <Td>{r.models.join(", ")}</Td><Td>{day(r.data_start)} → {day(r.data_end)}<div className="text-xs text-muted">{r.n_mandis} mandis</div></Td>
               <Td>{r.folds}</Td><Td><ProvenanceBadge p={r.data_provenance} compact /></Td>
             </tr>
           ))}
         </Table>
+      </Card>
+
+      <Card title={t("connectedMandis")}>
+        {mandiList.data && <ConnectedMandis mandis={mandiList.data.map((m) => ({ id: m.id, name: m.name }))} />}
       </Card>
 
       <Card title={t("dataQuality")}>

@@ -28,3 +28,25 @@ early_stopping_patience = 2
 validation_days = 60             # last days of the fitting window, for early stopping
 calibration_days = 120           # held out for conformal calibration, same as V1 LightGBM
 seed = 42
+
+[gnn]
+# V2-3 graph model (ml/agripulse_ml/graph/gnn.py). Same switches as [tft]: "real" reads real DB rows.
+data_provenance = "synthetic"
+feature_set = "prices+weather+graph"   # gnn / gru_nograph ignore the gr_* columns (they learn from the graph);
+                                       # lightgbm_graph uses them
+synthetic_seeds = [7, 1, 2]
+generators = ["random", "distance"]    # "random" = pinned baseline; "distance" = PLANTED SIGNAL positive control
+n_folds = 4
+# no write_forecasts: the GNN has no forecast writer (docs/graph-results.md); it never reaches users
+
+seq_len = 28
+hidden = 32
+learning_rate = 0.001
+weight_decay = 0.0001
+batch_size = 32
+max_epochs = 40
+early_stopping_patience = 5
+validation_days = 60
+calibration_days = 120                 # same held-out conformal window as TFT and V1 LightGBM
+spike_loss_weight = 1.0
+seed = 42
