@@ -10,7 +10,9 @@ NASA POWER  GET https://power.larc.nasa.gov/api/temporal/daily/point
     -> {"properties": {"parameter": {"<PARAM>": {"YYYYMMDD": value}}}}
     Missing values come back as -999 (NASA POWER's fill value) and are stored as NULL.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 import httpx
 from sqlalchemy import select
@@ -39,6 +41,20 @@ def _upsert(db: Session, mandi_id: int, day: date, source: str, **vals) -> None:
         setattr(w, k, v)
 
 
+def _archive_forecast(db: Session, mandi_id: int, issued_on: date, row: dict) -> None:
+    """Keep the forecast as issued today (V2-1). Later fetches on the same day replace it."""
+    from agripulse_api.models import WeatherForecast
+
+    f = db.scalar(select(WeatherForecast).where(
+        WeatherForecast.mandi_id == mandi_id, WeatherForecast.issued_on == issued_on,
+        WeatherForecast.target_date == row["date"], WeatherForecast.source == "open_meteo"))
+    if f is None:
+        f = WeatherForecast(mandi_id=mandi_id, issued_on=issued_on, target_date=row["date"], source="open_meteo")
+        db.add(f)
+    f.lead_days = (row["date"] - issued_on).days
+    f.precip_mm, f.tmax_c, f.tmin_c, f.rh_pct = row["precip_mm"], row["tmax_c"], row["tmin_c"], row["rh_pct"]
+
+
 def parse_open_meteo(payload: dict, today: date) -> list[dict]:
     d = payload["daily"]
     out = []
@@ -61,7 +77,7 @@ def run_open_meteo(db: Session, client: httpx.Client | None = None, past_days: i
     s = get_settings()
     own = client is None
     client = client or httpx.Client()
-    today = date.today()
+    today = datetime.now(IST).date()  # "issued on" is an IST calendar day
     try:
         with tracked_run(db, "open_meteo") as run:
             n, failed = 0, {}
@@ -85,6 +101,8 @@ def run_open_meteo(db: Session, client: httpx.Client | None = None, past_days: i
                     failed[m.name] = str(exc)[:200]
                     continue
                 for row in rows:
+                    if row["is_forecast"]:
+                        _archive_forecast(db, m.id, today, row)
                     _upsert(db, m.id, row.pop("date"), "open_meteo", **row)
                     n += 1
             if failed and n == 0:

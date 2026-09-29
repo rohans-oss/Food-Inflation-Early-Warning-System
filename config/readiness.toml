@@ -22,6 +22,10 @@ max_missing_pct = 10
 min_real_days = 365         # arrival tonnes come from bulk CSV backfill + trader-confirmed weighings
 max_missing_pct = 40
 
+[weather_forecasts]         # V2-1 archive of forecasts AS ISSUED (known-future weather for backtests)
+min_real_days = 365         # issue days archived; the hourly Open-Meteo job fills this from its first run
+max_missing_pct = 10
+
 [transit]                   # used by V2-5 (in-transit feature); reported now so the gap is visible
 min_real_trips = 50         # completed, non-simulated trips to this mandi
 min_days_covered = 90

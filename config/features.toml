@@ -1,0 +1,32 @@
+# V2 feature store configuration. Override the path with FEATURES_CONFIG=/path/file.toml
+
+# A value dated d is PUBLISHED (usable) from day d + lag. A feature at issue date t only uses
+# values with d + lag <= t. Labels too: the price on target date T is only known on T + lag,
+# so walk-forward folds train only on labels known before the fold cutoff.
+[publication_lag_days]
+prices = 1              # Agmarknet posts through the day; the scheduled pulls are 13:10 and 19:40 IST
+arrivals = 1            # trader-confirmed weighings are same-day; bulk reports lag more (they're backfill)
+nasa_power = 3          # NASA POWER daily point data runs a few days behind
+open_meteo = 1          # Open-Meteo's past_days values for yesterday
+synthetic_weather = 1   # synthetic weather stands in for the Open-Meteo-filled recent series
+# Weather FORECASTS have no lag: a forecast issued on day t is usable at issue date t (archived by issue date).
+
+[groups]
+# Canonical order: a feature_set name lists enabled groups in this order, joined by "+".
+# "calendar" is always on and is not part of the name.
+order = ["prices", "weather", "satellite", "graph", "transit"]
+default = ["prices", "weather"]
+
+[weather_forecast]
+max_lead_days = 16      # Open-Meteo forecast_days maximum; horizons beyond this get no forecast features
+windows = [7, 14]       # forecast-rain sums over the next N days
+
+# SYNTHETIC runs only: forecasts are simulated as the future synthetic observation plus error that
+# grows with lead time. Labelled synthetic. Real runs use archived real forecasts (weather_forecasts).
+[synthetic_forecast]
+rain_log_sigma_base = 0.35
+rain_log_sigma_per_day = 0.06
+rain_additive_sd_per_day = 0.4
+tmax_sd_base = 0.8
+tmax_sd_per_day = 0.15
+seed_offset = 1000

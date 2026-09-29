@@ -148,6 +148,26 @@ class Weather(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
 
+class WeatherForecast(Base):
+    """Archive of weather forecasts AS ISSUED (V2-1). The weather table keeps only the latest forecast and
+    overwrites it hourly; backtests need what the forecast said on each past day, so every run is kept here,
+    keyed by the IST date it was issued on (the day's last fetch wins)."""
+
+    __tablename__ = "weather_forecasts"
+    __table_args__ = (UniqueConstraint("mandi_id", "issued_on", "target_date", "source"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), index=True)
+    issued_on: Mapped[date] = mapped_column(Date, index=True)
+    target_date: Mapped[date] = mapped_column(Date)
+    lead_days: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(20), default="open_meteo")
+    precip_mm: Mapped[float | None] = mapped_column(Float)
+    tmax_c: Mapped[float | None] = mapped_column(Float)
+    tmin_c: Mapped[float | None] = mapped_column(Float)
+    rh_pct: Mapped[float | None] = mapped_column(Float)
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+
+
 class Forecast(Base):
     """Always a range + spike probability, never a single point (rule 3)."""
 

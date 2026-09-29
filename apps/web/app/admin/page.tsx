@@ -103,13 +103,13 @@ export default function Admin() {
       <Card title={t("readiness")} action={ready.data && <span className="text-xs text-muted">thresholds from {ready.data.config_file} · real rows only</span>}>
         {ready.data && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {(["prices", "weather", "arrivals", "transit"] as const).map((g) => {
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {(["prices", "weather", "weather_forecasts", "arrivals", "transit"] as const).map((g) => {
                 const s = ready.data.summary[g];
                 const th = ready.data.thresholds[g];
                 return (
                   <div key={g} className="rounded-xl border border-line p-3 text-sm">
-                    <div className="flex items-center justify-between"><b className="capitalize">{g}</b>
+                    <div className="flex items-center justify-between"><b className="capitalize">{g.replace("_", " ")}</b>
                       <span className="tnum">{s.ready}/{s.total} ready</span></div>
                     <div className="mt-1 text-xs text-muted">
                       {g === "transit" ? `needs ${th.min_real_trips} real trips over ${th.min_days_covered} days`
@@ -121,11 +121,11 @@ export default function Admin() {
                 );
               })}
             </div>
-            <Table head={["Mandi", "Prices", "Weather", "Arrivals", "Real trips"]}>
+            <Table head={["Mandi", "Prices", "Weather", "Forecast archive", "Arrivals", "Real trips"]}>
               {ready.data.mandis.map((m: any) => (
                 <tr key={m.mandi_id}>
                   <Td>{m.mandi}<div className="text-xs text-muted">{m.district}</div></Td>
-                  {(["prices", "weather", "arrivals"] as const).map((g) => (
+                  {(["prices", "weather", "weather_forecasts", "arrivals"] as const).map((g) => (
                     <Td key={g}>
                       <StatusBadge s={m[g].status} />
                       <div className="text-xs text-muted tnum">

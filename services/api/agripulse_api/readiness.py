@@ -16,7 +16,7 @@ from .models import Arrival, Mandi, Price, Trip, Weather
 from .provenance import REAL, REAL_PARTIAL, SYNTHETIC
 
 _DEFAULT = Path(__file__).resolve().parents[3] / "config" / "readiness.toml"
-GROUPS = ("prices", "weather", "arrivals", "transit")
+GROUPS = ("prices", "weather", "weather_forecasts", "arrivals", "transit")
 
 
 @lru_cache
@@ -58,6 +58,17 @@ def _date_stats(db: Session, model, where) -> dict[int, tuple]:
     return {r[0]: (r[1], r[2], r[3]) for r in rows}
 
 
+def _issue_stats(db: Session) -> dict[int, tuple]:
+    """Archived forecasts count by the day they were ISSUED (V2-1 weather_forecasts table)."""
+    from .models import WeatherForecast
+
+    rows = db.execute(
+        select(WeatherForecast.mandi_id, func.min(WeatherForecast.issued_on), func.max(WeatherForecast.issued_on),
+               func.count(func.distinct(WeatherForecast.issued_on))).group_by(WeatherForecast.mandi_id)
+    ).all()
+    return {r[0]: (r[1], r[2], r[3]) for r in rows}
+
+
 def compute(db: Session, today: date | None = None, commodity: str = "Tomato") -> dict:
     cfg = readiness_config()
     today = today or date.today()
@@ -66,6 +77,7 @@ def compute(db: Session, today: date | None = None, commodity: str = "Tomato") -
         "prices": _date_stats(db, Price, [Price.commodity == commodity, Price.source != "synthetic", Price.is_outlier.is_(False)]),
         "weather": _date_stats(db, Weather, [Weather.source != "synthetic", Weather.is_forecast.is_(False)]),
         "arrivals": _date_stats(db, Arrival, [Arrival.commodity == commodity, Arrival.source != "synthetic"]),
+        "weather_forecasts": _issue_stats(db),
     }
     trips = db.execute(
         select(Trip.mandi_id, func.count(Trip.id), func.min(Trip.started_at), func.max(Trip.started_at))
@@ -77,7 +89,7 @@ def compute(db: Session, today: date | None = None, commodity: str = "Tomato") -
     mandis, summary = [], {g: {"ready": 0, "total": 0, "latest_projected_ready_date": None, "no_data": 0} for g in GROUPS}
     for m in db.scalars(select(Mandi).order_by(Mandi.name)):
         row = {"mandi_id": m.id, "mandi": m.name, "district": m.district, "state": m.state}
-        for g in ("prices", "weather", "arrivals"):
+        for g in ("prices", "weather", "weather_forecasts", "arrivals"):
             first, last, n = stats[g].get(m.id, (None, None, 0))
             row[g] = _series_stats(first, last, n, cfg[g], stale_after, today)
         n_trips, t0, t1 = trip_stats.get(m.id, (0, None, None))

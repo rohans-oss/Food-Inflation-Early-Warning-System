@@ -69,6 +69,9 @@ Seeded coordinates are approximate town centroids with `coords_verified = false`
   `parameters=T2M_MAX,T2M_MIN,PRECTOTCORR,RH2M,ALLSKY_SFC_SW_DWN&community=AG&format=JSON`,
   `start` / `end` as `YYYYMMDD`. Response `properties.parameter.<NAME>.<YYYYMMDD>`. `-999` fill values are stored as NULL.
 - For model features, NASA POWER is preferred for history, and Open-Meteo fills the recent days NASA hasn't published yet.
+- **Forecast archive (V2-1):** every Open-Meteo run also stores its future days in `weather_forecasts`, keyed by the IST
+  issue date (the day's last fetch wins). This is the only record of what the forecast said on past days, which
+  backtests of known-future weather need. It starts empty; see `docs/feature-store.md`.
 
 ## Synthetic data
 

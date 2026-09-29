@@ -132,4 +132,7 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   metrics. Record runs with `eval.tracking.record` (DB) + `log_mlflow`. Provenance values and labels
   live in `agripulse_api.provenance`; readiness thresholds in `config/readiness.toml`.
 - UI: forecast / backtest numbers always render with `ProvenanceBadge` (apps/web/components/ui.tsx).
+- Features for V2 models: ONLY via `agripulse_ml.features.store.build_table(Inputs..., feature_set)`; train/evaluate
+  with `table.fold_spec()` (carries the label publication lag). Lags live in `config/features.toml`. V1 LightGBM keeps
+  `features/legacy.py`. Any new feature needs a leakage test in tests/test_feature_store.py.
 - Tests set MLFLOW_DISABLE=1 (conftest) so they never write to the real mlruns/.

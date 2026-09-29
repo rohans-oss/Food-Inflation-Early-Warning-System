@@ -156,6 +156,21 @@ run on synthetic data, and every output says so (`data_provenance`: `real` / `re
 - Any forecast screen (farmer, buyer, policy, admin): the red SYNTHETIC — METHODOLOGY DEMO badge is visible, including
   in the chart tooltip and table view.
 
+## V2-1: feature store
+
+Group-based, publication-lag-aware training tables ([docs/feature-store.md](docs/feature-store.md)):
+`prices` and `weather` built, `calendar` always on, and `satellite` / `graph` / `transit` registered but refusing until
+their phases. Columns are tagged static / known-future / past-only (TFT needs this split). Every source has a publication
+lag (prices 1 day, NASA POWER 3), and labels are only used for training once published. Weather forecasts are now
+archived *as issued* (`weather_forecasts` table, migration 0005), so known-future weather can be backtested on real
+data once the archive is about 13 months old.
+
+**How to verify**
+- `pytest tests/test_feature_store.py`: 18 tests, including per-group leakage tests (see the doc for the planted-leak check).
+- `python -m agripulse_ml.features.build --feature-set prices+weather --provenance synthetic` prints a data card
+  and writes Parquet; `--feature-set prices+graph` refuses with "built in V2-3".
+- Admin → Real-data readiness now has a "Forecast archive" column.
+
 ## V1 status
 
 | Done-criterion | Status |
