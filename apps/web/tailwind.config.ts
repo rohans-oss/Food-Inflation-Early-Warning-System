@@ -1,11 +1,11 @@
 import type { Config } from "tailwindcss";
 
-// Colours are CSS variables (app/globals.css) so light and dark are each chosen, not auto-flipped.
+// Colours are CSS variables (app/globals.css). The app is light-only.
 const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
-  darkMode: "media",
+  darkMode: "class", // light only: no `dark` class is ever set
   theme: {
     extend: {
       colors: {

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db
 from ..lifecycle import history, move
-from ..models import AuditLog, Lot, Organization, Shipment, Trip, User, Vehicle
+from ..models import AuditLog, Lot, Mandi, Organization, Shipment, Trip, User, Vehicle
 from ..rbac import forbid, get_current_user, require
 from ..scoping import lot_filter, scoped_lots
 
@@ -52,6 +52,8 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
         "shipment_id": lot.shipment_id,
         "mandi": lot.shipment.mandi.name if lot.shipment else None,
         "mandi_id": lot.shipment.mandi_id if lot.shipment else None,
+        "preferred_mandi_id": lot.preferred_mandi_id,
+        "preferred_mandi": db.get(Mandi, lot.preferred_mandi_id).name if lot.preferred_mandi_id else None,
         "delivered_weight_kg": lot.delivered_weight_kg,
         "sale_price_per_quintal": lot.sale_price_per_quintal,
         "payout_status": lot.payout_status,
@@ -142,6 +144,29 @@ def lot_history(lot_id: int, db: Session = Depends(get_db), user: User = Depends
         for tid in db.scalars(select(Trip.id).where(Trip.shipment_id == lot.shipment_id)):
             rows += [{"entity": "trip", "trip_id": tid, **h} for h in history(db, "trip", tid)]
     return sorted(rows, key=lambda r: r["at"])
+
+
+class PreferIn(BaseModel):
+    mandi_id: int | None  # None clears the choice
+
+
+@router.post("/lots/{lot_id}/preferred-mandi")
+def choose_mandi(lot_id: int, body: PreferIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
+    """The farmer picks where they want to sell (usually from Best mandi). It is a request: the FPO sees it and
+    pre-selects it when grouping; once the lot is grouped the shipment's mandi decides."""
+    lot = get_scoped_lot(db, user, lot_id)
+    if lot.status != "registered":
+        raise HTTPException(409, "The lot is already grouped into a shipment; ask your FPO to change the mandi")
+    if body.mandi_id is not None and db.get(Mandi, body.mandi_id) is None:
+        raise HTTPException(400, "Unknown mandi")
+    before = lot.preferred_mandi_id
+    lot.preferred_mandi_id = body.mandi_id
+    name = lambda mid: db.get(Mandi, mid).name[:24] if mid else "none"  # noqa: E731
+    db.add(AuditLog(entity="lot", entity_id=lot.id, field="preferred_mandi", from_state=name(before) if before else None,
+                    to_state=name(body.mandi_id), actor_id=user.id,
+                    details={"preferred_mandi_id": body.mandi_id, "was": before}))
+    db.commit()
+    return lot_out(db, lot, user)
 
 
 class ShareIn(BaseModel):

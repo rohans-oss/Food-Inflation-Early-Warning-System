@@ -28,7 +28,11 @@ export default function Fpo() {
     api("/orgs/directory", { query: { kind: "fleet" } }).then(setFleets).catch(() => {});
   }, []);
 
-  const toggle = (id: number) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: number) => {
+    const pref = lots.data?.find((l) => l.id === id)?.preferred_mandi_id;
+    if (!picked.has(id) && pref && !mandiId) setMandiId(String(pref)); // start from the farmer's own choice
+    setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
   const pickedTons = (lots.data ?? []).filter((l) => picked.has(l.id)).reduce((a, l) => a + l.quantity_tons, 0);
   const firstPicked = [...picked][0];
 
@@ -48,7 +52,7 @@ export default function Fpo() {
     <Shell roles={["fpo"]} title="FPO dispatch">
       <ErrorNote error={act.error} />
       <Card title={`Members' lots ready to ship`}>
-        <Table head={["", "Lot", "Farmer", t("quantityTons"), t("grade"), t("pickupPoint")]} empty="No registered lots from your members.">
+        <Table head={["", "Lot", "Farmer", t("quantityTons"), t("grade"), t("pickupPoint"), "Farmer's choice"]} empty="No registered lots from your members.">
           {lots.data?.map((l) => (
             <tr key={l.id} className={picked.has(l.id) ? "bg-page" : ""}>
               <Td><input type="checkbox" aria-label={`Select lot ${l.id}`} checked={picked.has(l.id)} onChange={() => toggle(l.id)} /></Td>
@@ -57,6 +61,7 @@ export default function Fpo() {
               <Td>{tons(l.quantity_tons)}</Td>
               <Td>{l.grade}</Td>
               <Td className="text-ink2">{l.pickup_label || `${num(l.pickup_lat, 3)}, ${num(l.pickup_lon, 3)}`}</Td>
+              <Td>{l.preferred_mandi ?? <span className="text-muted">–</span>}</Td>
             </tr>
           ))}
         </Table>

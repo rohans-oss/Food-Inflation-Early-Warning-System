@@ -350,6 +350,8 @@ class Lot(Base):
     org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)  # FPO
     lender_org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))  # farmer-granted
     shipment_id: Mapped[int | None] = mapped_column(ForeignKey("shipments.id"), index=True)
+    # the farmer's own choice from "Best mandi" (a request to the FPO; the shipment's mandi is what actually happens)
+    preferred_mandi_id: Mapped[int | None] = mapped_column(ForeignKey("mandis.id"))
     crop: Mapped[str] = mapped_column(String(50), default="Tomato")
     quantity_tons: Mapped[float] = mapped_column(Float)
     grade: Mapped[str] = mapped_column(String(20), default="Local")

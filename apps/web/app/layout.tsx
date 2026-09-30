@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 // Public demo builds set NEXT_PUBLIC_DEMO_NOTICE (docs/deployment.md "Public demo"); a real deployment leaves it empty.
 const DEMO_NOTICE = process.env.NEXT_PUBLIC_DEMO_NOTICE ?? "";
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, colorScheme: "light" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

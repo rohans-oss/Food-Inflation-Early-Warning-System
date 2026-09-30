@@ -2,9 +2,8 @@
   --bg: #f7f8f5; --fg: #1a1f16; --muted: #5d6657; --card: #fff; --line: #dfe3d8;
   --brand: #14532d; --brand-fg: #fff; --warn: #b45309; --live: #dc2626;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #111410; --fg: #e8ece4; --muted: #9aa393; --card: #1a1e18; --line: #2d332a; --brand: #22c55e; --brand-fg: #06210f; }
-}
+/* light theme only (the whole product is light; phones in dark mode get the same look) */
+:root { color-scheme: light; }
 * { box-sizing: border-box; }
 /* the hidden attribute must win over display:flex/grid rules (the TRACKING ON bar stayed visible after a trip ended) */
 [hidden] { display: none !important; }

@@ -9,7 +9,14 @@ import { ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstP
 
 /** Best mandi: the V1 rule or the V3 optimizer (config/recommender.toml). Ranked by p50 net value; p10-p90 shown so
  * overlap is visible. With the optimizer, options that break a hard limit (spoilage, mandi room) are listed last. */
-export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId: number) => void }) {
+export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
+  lotId: number;
+  onPick?: (mandiId: number) => void;
+  /** farmer's own choice: the chosen mandi is highlighted and each row gets a "Sell here" button */
+  chosenId?: number | null;
+  onChoose?: (mandiId: number | null) => void;
+  chooseLocked?: string | null;
+}) {
   const { t } = useSession();
   const [weeks, setWeeks] = useState(1);
   const r = useApi<any>("/recommend/best-mandi", { query: { lot_id: lotId, weeks } });
@@ -29,10 +36,10 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
         <ProvenanceBadge p={prov} />
       </div>
       <ErrorNote error={r.error} />
-      <Table head={["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk")]}
+      <Table head={["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk"), ...(onChoose ? ["Your choice"] : [])]}
         empty={r.loading ? t("loading") : "No mandis with a forecast nearby."}>
         {ranked.map((m) => (
-          <tr key={m.mandi_id} className={m.feasible === false ? "opacity-60" : m.rank === 1 ? "bg-page" : ""}>
+          <tr key={m.mandi_id} className={m.mandi_id === chosenId ? "bg-brand/10" : m.feasible === false ? "opacity-60" : m.rank === 1 ? "bg-page" : ""}>
             <Td>{m.rank}</Td>
             <Td>
               <div className="font-medium">{m.mandi}</div>
@@ -46,6 +53,21 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
             <Td>−{num(m.spoilage_pct, 1)}%<div className="text-xs text-muted">{num(m.temp_c, 0)}°C{m.temp_source === "default" && " (assumed)"}</div></Td>
             <Td><b>{inr(m.net_value.p50)}</b><div className="text-xs text-muted">{inr(m.net_value.p10)}–{inr(m.net_value.p90)}</div></Td>
             <Td><SpikeBadge p={m.spike_prob_14d} /></Td>
+            {onChoose && (
+              <Td>
+                {m.mandi_id === chosenId ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="whitespace-nowrap rounded-full bg-brand px-2.5 py-1 text-xs font-semibold text-brand-ink">✓ Chosen</span>
+                    {!chooseLocked && <button onClick={() => onChoose(null)} className="text-xs text-ink2 underline">clear</button>}
+                  </span>
+                ) : (
+                  <button onClick={() => onChoose(m.mandi_id)} disabled={!!chooseLocked} title={chooseLocked ?? undefined}
+                    className="whitespace-nowrap rounded-md border border-brand px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand hover:text-brand-ink disabled:cursor-not-allowed disabled:opacity-40">
+                    Sell here
+                  </button>
+                )}
+              </Td>
+            )}
           </tr>
         ))}
       </Table>

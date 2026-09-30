@@ -24,6 +24,7 @@ export default function LotDetail() {
   const [forecastMandi, setForecastMandi] = useState<number | null>(null);
   const [lenders, setLenders] = useState<{ id: number; name: string }[]>([]);
   const share = useAction();
+  const choose = useAction();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => { api("/orgs/directory", { query: { kind: "lender" } }).then(setLenders).catch(() => {}); }, []);
@@ -47,7 +48,8 @@ export default function LotDetail() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label={t("quantityTons")} value={tons(l.quantity_tons)} sub={`${t("grade")}: ${l.grade}`} />
             <Stat label={t("status")} value={<StatusBadge s={l.status} />} sub={l.pickup_label || undefined} />
-            <Stat label={t("mandi")} value={<span className="text-lg">{l.mandi ?? "Not grouped yet"}</span>} />
+            <Stat label={t("mandi")} value={<span className="text-lg">{l.mandi ?? l.preferred_mandi ?? "Not chosen yet"}</span>}
+              sub={l.mandi ? "shipment booked" : l.preferred_mandi ? "your choice · your FPO confirms it when grouping" : "pick one below with Sell here"} />
             <Stat label={t("payout")} value={<StatusBadge s={l.payout_status} />} />
           </div>
 
@@ -85,7 +87,13 @@ export default function LotDetail() {
 
           {!l.trip && ["registered", "grouped"].includes(l.status) && (
             <Card title={t("bestMandi")}>
-              <BestMandi lotId={l.id} onPick={setForecastMandi} />
+              <ErrorNote error={choose.error} />
+              <BestMandi lotId={l.id} onPick={setForecastMandi} chosenId={l.mandi_id ?? l.preferred_mandi_id}
+                onChoose={(mid) => choose.run(async () => {
+                  await api(`/lots/${l.id}/preferred-mandi`, { method: "POST", body: { mandi_id: mid } });
+                  lot.reload();
+                })}
+                chooseLocked={l.status !== "registered" ? "Already grouped into a shipment" : null} />
               {l.status === "registered" && !l.fpo_org_id && (
                 <p className="mt-2 text-xs text-muted">Your FPO groups lots into a shipment and books the vehicle. This lot isn't linked to an FPO.</p>
               )}
