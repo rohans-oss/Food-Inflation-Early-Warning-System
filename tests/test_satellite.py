@@ -311,3 +311,19 @@ def test_version_1_file_keeps_only_old_baseline_rows(tmp_path):
     kept = pd.read_csv(p, dtype={"baseline": str})
     assert list(kept.columns) == FIELDS and kept["baseline"].tolist() == ["00.01", "02.14", "03.01"]
     assert migrate_v1(p, log=lambda *a: None) is None  # already version 2: untouched
+
+
+def test_a_shared_trend_is_exposed_by_the_detrended_correlation():
+    """Real pilot lesson: greenness and tomato area both rose 2018-2022; r = 0.60 within district, -0.14 detrended."""
+    from agripulse_ml.satellite.validate import compare
+
+    years = range(2016, 2024)
+    rng = np.random.default_rng(1)
+    sig = pd.DataFrame([{"district": d, "agri_year": y, "n_obs": 40, "n_composites": 30, "complete": True,
+                         "complete_strict": True, "ndvi_mean": 0.3 + 0.02 * (y - 2016) + rng.normal(0, .002),
+                         "ndvi_peak": 0.6, "ndvi_amp": 0.3} for d in ("A", "B") for y in years])
+    truth = pd.DataFrame([{"district": d, "agri_year": y, "crop": "Tomato", "variable": "area",
+                           "value": 1000 + 100 * (y - 2016) + rng.normal(0, 30), "unit": "ha", "source": "test"}
+                          for d in ("A", "B") for y in years])
+    c = [x for x in compare(sig, truth) if x.metric == "ndvi_mean"][0]
+    assert c.pearson_within > 0.9 and abs(c.pearson_detrended) < 0.8

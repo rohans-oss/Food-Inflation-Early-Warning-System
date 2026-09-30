@@ -1,8 +1,8 @@
 # V2-4: Sentinel-2 crop signal (REAL data)
 
-Status: **pipeline built and tested on local fixtures. The real pilot fetch and the validation are waiting on
-two inputs:** the imagery download (runs on your machine; this build workspace cannot reach the sources) and the
-ground-truth files. No satellite result exists yet. This page is updated when one does.
+Status: **done for the 2-district pilot.** Result (REAL data): [docs/satellite-results.md](satellite-results.md).
+District-wide cropland NDVI shows no evidence of tracking tomato area or production beyond a shared time trend,
+but it is a physically sensible, seasonal crop signal and is available as the `satellite` feature group.
 
 ## What it measures
 
@@ -42,7 +42,7 @@ ESTIMATE (~3 MB and ~4 s per scene per district) until the smoke test measures i
 An acquisition dated d is usable from d + 2 (config/features.toml). Mandis in districts without satellite data get
 NaN. Leakage tests: tests/test_satellite.py (lag and truncation, both checked against a planted zero-lag leak).
 
-## Validation (waiting for ground truth)
+## Validation
 
 `satellite/validate.py` compares per district and agricultural year (July–June):
 

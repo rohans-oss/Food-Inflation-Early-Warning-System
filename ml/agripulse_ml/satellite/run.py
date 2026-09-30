@@ -22,10 +22,10 @@ from .stac import search
 BASE_FIELDS = ["district", "scene_id", "date", "tile", "baseline", "scene_cloud_pct", "cropland_px", "in_scene_px",
                "clear_px", "clear_frac", "ndvi_median", "ndvi_mean", "ndvi_p25", "ndvi_p75"]
 FIELDS = BASE_FIELDS + ["offset_red", "pipeline_version"]
-# Rough cost of one scene x district at 80 m: three overview windows. Measured on the first real scenes you run;
-# until then this is an ESTIMATE used only for the dry-run warning.
+# Cost of one scene x district at 80 m (three overview windows). Seconds MEASURED on the 2026-09-30 pilot
+# (3.9-4.8 s on a home connection); MB per scene is still an estimate (not logged).
 EST_MB_PER_SCENE = 3.0
-EST_SECONDS_PER_SCENE = 4.0
+EST_SECONDS_PER_SCENE = 4.4
 
 
 def bbox_of(d: dict) -> tuple[float, float, float, float]:

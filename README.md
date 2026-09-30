@@ -235,30 +235,38 @@ signal is planted, but far mandis gain no more than near ones. Nothing user-faci
 - `python -m agripulse_ml.graph.experiment --generators random --seeds 7 --folds 1` (~2 min); the full run (~22 min)
   reproduces docs/graph-results.md. Admin → Evaluation runs marks planted-signal runs "PLANTED SIGNAL".
 
-## V2-4: Sentinel-2 crop signal (in progress)
+## V2-4: Sentinel-2 crop signal (REAL data)
 
-Built and tested on local fixtures (no satellite result yet; see [docs/satellite.md](docs/satellite.md)):
+Sentinel-2 cropland NDVI for Kolar and Chikkaballapur, 2018–2026 (2,610 scene × district rows). It was fetched on a
+machine that could reach Earth Search, then validated against the district tomato statistics printed in
+Horticultural Statistics at a Glance (2015-16 to 2023-24). Results: [docs/satellite-results.md](docs/satellite-results.md).
 
-- Scene search on Earth Search, and cropland NDVI per district from 80 m COG overviews.
-  - Per-scene reflectance offset, cloud masking with the scene classification layer, ESA WorldCover cropland.
-  - Endpoints and fields checked against real responses (docs/data-sources.md).
-- A resumable pilot runner with a dry-run cost estimate.
-- `satellite_obs` table (migration 0007) and a loader.
-- `satellite` feature group with a 2-day publication lag, leakage-tested against a planted leak.
-- Within-district validation statistics that say "too few points" when n is small.
+**Result: negative for tomato.** On 6 pre-planned comparisons, district-wide cropland greenness does not track
+tomato area or production. The one correlation that passes (area vs mean NDVI, r = 0.60) disappears once the shared
+2018→2022 trend is removed (r = −0.14). Tomato is only about 8% of the cropland. The signal itself is sound: NDVI
+0.15–0.88, lowest in March–May and highest after the monsoon, and lowest in the 2019 drought year. It is available
+as the `satellite` feature group (provenance real).
 
-Waiting on: the imagery fetch on a machine that can reach the sources, and the ground-truth files. The ICRISAT
-apportioned data ends in 2011 and has no tomato, so it can't validate Sentinel-2 (2015+).
+Found on the real data and fixed:
+- items without band assets
+- duplicate reprocessed scenes
+- overlapping tiles on the same day
+- an offset applied twice. Earth Search's `raster:bands` says −0.1 on items whose pixels are already corrected;
+  this was verified on raw values.
+
+Details are in docs/data-sources.md.
 
 **How to verify**
-- `pytest tests/test_satellite.py`: 7 tests.
-  - STAC paging and cloud filter
-  - NDVI exactly 0.75 / 0.50 under the two offset conventions
-  - cloud and non-cropland pixels dropped
-  - resumable run and idempotent load
-  - lag and truncation leakage
-  - validation verdicts
-- `python -m agripulse_ml.satellite.run --out data/satellite --dry-run` (needs network to Earth Search).
+- `pytest tests/test_satellite.py`: 14 tests, including:
+  - offset-flag handling
+  - refusing NDVI outside [−1, 1]
+  - version-1 file migration
+  - the ground-truth adapter
+  - the detrended check
+  - lag and truncation leakage, both checked against a planted leak
+- `python -m agripulse_ml.satellite.validate data/satellite/observations.csv` reproduces the table in
+  docs/satellite-results.md from the committed pilot file.
+- `python -m agripulse_ml.satellite.load data/satellite/observations.csv` loads it into `satellite_obs` (idempotent).
 
 ## V1 status
 

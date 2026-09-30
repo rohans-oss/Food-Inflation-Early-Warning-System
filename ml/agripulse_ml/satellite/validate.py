@@ -14,6 +14,10 @@ Satellite side, per district and agricultural year (from satellite_obs, clear-pi
     ndvi_amp    peak minus lowest 10-day composite (seasonality: how much crop grows and is harvested)
     n_obs       clear acquisitions behind it (clouds thin the monsoon months)
 
+pearson_detrended repeats the within-district correlation after removing a linear time trend from both sides:
+two series that merely both rise over the years correlate strongly without one tracking the other (real pilot:
+area x ndvi_mean r = 0.60 within district, -0.14 detrended).
+
 The test is WITHIN district: both sides are demeaned per district, so the question is "in years when the satellite
 saw more / greener cropland, did the statistics report more area / production?", not "are big districts big".
 Correlations come with n, a bootstrap 95% interval and the number of comparisons made; with few district-years the
@@ -51,9 +55,16 @@ def annual_signal(obs: pd.DataFrame, composite_days: int = 10, min_obs: int = 6)
     c = comp.groupby(["district", "agri_year"])["ndvi"].agg(["max", "min", "count"]).reset_index()
     yr = yr.merge(c, on=["district", "agri_year"])
     yr["ndvi_peak"], yr["ndvi_amp"], yr["n_composites"] = yr["max"], yr["max"] - yr["min"], yr["count"]
-    # a year seen only partly (pilot start / current year) is not comparable to a full year
-    yr["complete"] = (yr["n_composites"] >= 30) & (yr["n_obs"] >= min_obs)
-    return yr[["district", "agri_year", "n_obs", "n_composites", "complete", *METRICS]]
+    # A year seen only partly (pilot start / current year) is not comparable to a full year.
+    # complete_strict (the pre-registered rule, set before any real data): >= 30 of 36 ten-day windows with a clear
+    #   view. On the real pilot, monsoon cloud leaves 23-33 windows in most FULL years, so this also drops full years.
+    # complete (the rule's intent, adopted after seeing the data and reported alongside the strict one): clear views
+    #   within 31 days of both ends of the agricultural year (July 1 .. June 30), and >= min_obs of them.
+    start = pd.to_datetime(yr["agri_year"].astype(str) + "-07-01")
+    end = pd.to_datetime((yr["agri_year"] + 1).astype(str) + "-06-30")
+    yr["complete_strict"] = (yr["n_composites"] >= 30) & (yr["n_obs"] >= min_obs)
+    yr["complete"] = ((yr["first"] - start).dt.days <= 31) & ((end - yr["last"]).dt.days <= 31) & (yr["n_obs"] >= min_obs)
+    return yr[["district", "agri_year", "n_obs", "n_composites", "complete", "complete_strict", *METRICS]]
 
 
 def check_truth(truth: pd.DataFrame) -> pd.DataFrame:
@@ -77,6 +88,7 @@ class Comparison:
     spearman_within: float | None
     ci95: tuple[float, float] | None
     verdict: str
+    pearson_detrended: float | None = None  # after removing a within-district linear time trend from both sides
 
 
 def _within(df: pd.DataFrame, col: str) -> pd.Series:
@@ -95,9 +107,10 @@ def _boot(x: np.ndarray, y: np.ndarray, reps: int = 2000, seed: int = 0) -> tupl
     return (round(float(np.percentile(rs, 2.5)), 3), round(float(np.percentile(rs, 97.5)), 3)) if rs else None
 
 
-def compare(signal: pd.DataFrame, truth: pd.DataFrame) -> list[Comparison]:
+def compare(signal: pd.DataFrame, truth: pd.DataFrame, completeness: str = "complete") -> list[Comparison]:
+    """completeness: "complete" (coverage of both ends of the year) or "complete_strict" (>= 30 windows)."""
     t = check_truth(truth)
-    s = signal[signal["complete"]]
+    s = signal[signal[completeness]]
     out = []
     for (crop, var), g in t.groupby(["crop", "variable"]):
         j = s.merge(g[["district", "agri_year", "value"]], on=["district", "agri_year"])
@@ -112,6 +125,12 @@ def compare(signal: pd.DataFrame, truth: pd.DataFrame) -> list[Comparison]:
             p = float(np.corrcoef(x, y)[0, 1]) if np.std(x) > 0 and np.std(y) > 0 else None
             sp = float(pd.Series(x).rank().corr(pd.Series(y).rank())) if p is not None else None
             ci = _boot(x, y)
+            yr_w = _within(j, "agri_year").to_numpy(float)
+            det = None
+            if n >= 4 and np.std(yr_w) > 0:
+                rx = x - np.polyval(np.polyfit(yr_w, x, 1), yr_w)
+                ry = y - np.polyval(np.polyfit(yr_w, y, 1), yr_w)
+                det = round(float(np.corrcoef(rx, ry)[0, 1]), 3) if np.std(rx) > 0 and np.std(ry) > 0 else None
             if n < MIN_N:
                 verdict = f"too few points to say (n = {n} < {MIN_N})"
             elif ci and (ci[0] > 0 or ci[1] < 0):
@@ -119,7 +138,7 @@ def compare(signal: pd.DataFrame, truth: pd.DataFrame) -> list[Comparison]:
             else:
                 verdict = "no clear signal: interval includes 0"
             out.append(Comparison(crop, var, m, n, j["district"].nunique(), None if p is None else round(p, 3),
-                                  None if sp is None else round(sp, 3), ci, verdict))
+                                  None if sp is None else round(sp, 3), ci, verdict, det))
     return out
 
 
@@ -144,7 +163,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     obs = pd.read_csv(a.observations, parse_dates=["date"])
     sig = annual_signal(obs)
-    rep = report(compare(sig, hsg_tomato()))
+    truth = hsg_tomato()
+    rep = pd.concat([report(compare(sig, truth, c)).assign(year_rule=c) for c in ("complete", "complete_strict")],
+                    ignore_index=True)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     sig.assign(data_provenance="real").to_csv(out / "satellite-signal.csv", index=False)

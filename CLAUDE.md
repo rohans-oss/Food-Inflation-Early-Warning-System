@@ -146,8 +146,9 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `as_of`); config in `config/graph.toml`. Edge provenance: distance = real, price_corr / flow_estimate = the prices'
   provenance; flow_estimate always has is_estimate = true and shows an ESTIMATE badge (`EstimateBadge`). Stored builds
   live in `graph_edges` (`python -m agripulse_ml.graph.build`, weekly job); Neo4j is an optional mirror only.
-- Satellite (V2-4): Sentinel-2 via `agripulse_ml.satellite` (config/satellite.toml). Read scale/offset PER SCENE
-  (baseline >= 04.00 has offset -0.1). Observations live in `satellite_obs`; the `satellite` feature group uses lag
+- Satellite (V2-4): Sentinel-2 via `agripulse_ml.satellite` (config/satellite.toml). Read scale/offset PER SCENE,
+  and when `earthsearch:boa_offset_applied` is true the offset is 0 even though raster:bands lists -0.1 (verified on
+  raw pixels). NDVI outside [-1, 1] is refused, never stored. Observations live in `satellite_obs`; the `satellite` feature group uses lag
   `sentinel2` from config/features.toml. Ground truth goes through an adapter into validate.py's normalised schema,
   written only after inspecting the real file. The ICRISAT apportioned DLD (1966-2011, no tomato) cannot validate it.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
