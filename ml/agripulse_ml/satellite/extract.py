@@ -16,6 +16,8 @@ import numpy as np
 
 from .stac import Scene
 
+PIPELINE_VERSION = 2  # 2: honours earthsearch:boa_offset_applied (2026-09-30); rows from version 1 are redone
+
 GDAL_ENV = {  # anonymous HTTP range reads of public COGs
     "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
     "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif",
@@ -111,13 +113,16 @@ def district_stats(scene: Scene, district: dict, cfg: dict) -> dict:
     n = nir * scene.scale["nir"] + scene.offset["nir"]
     with np.errstate(invalid="ignore", divide="ignore"):
         ndvi = (n - r) / (n + r)
-    v = ndvi[clear & np.isfinite(ndvi) & ((n + r) > 0)]
+    # reflectance must be positive: a negative one means a wrong offset or a bad pixel, never a real surface
+    v = ndvi[clear & np.isfinite(ndvi) & (r > 0) & (n > 0)]
     base = {"district": district["name"], "scene_id": scene.id, "date": scene.date, "tile": scene.tile,
-            "baseline": scene.baseline, "scene_cloud_pct": scene.cloud, "cropland_px": int(crop.sum()),
+            "baseline": scene.baseline, "offset_red": scene.offset["red"], "pipeline_version": PIPELINE_VERSION, "scene_cloud_pct": scene.cloud, "cropland_px": int(crop.sum()),
             "in_scene_px": int(in_scene.sum()), "clear_px": int(v.size),
             "clear_frac": round(float(v.size / in_scene.sum()), 4) if in_scene.sum() else 0.0}
     if v.size < int(ex["min_valid_pixels"]):
         return {**base, "ndvi_median": None, "ndvi_mean": None, "ndvi_p25": None, "ndvi_p75": None}
     q25, q50, q75 = np.percentile(v, [25, 50, 75])
+    if not (-1.0 <= q50 <= 1.0):  # physically impossible: refuse to store it (it would be a scaling bug)
+        raise ValueError(f"{scene.id}: NDVI median {q50:.3f} outside [-1, 1]; check scale/offset")
     return {**base, "ndvi_median": round(float(q50), 4), "ndvi_mean": round(float(v.mean()), 4),
             "ndvi_p25": round(float(q25), 4), "ndvi_p75": round(float(q75), 4)}

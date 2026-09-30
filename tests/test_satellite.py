@@ -263,3 +263,51 @@ def test_hsg_tomato_ground_truth_adapter():
     assert area[("Kolar", 2016)] == 8510 and area[("Kolar", 2015)] == 5960
     assert area[("Chikkaballapur", 2023)] == 10879 and t["agri_year"].between(2015, 2023).all()
     assert t["source"].str.contains("Table 7.4.1|Table 7.5.32").all()
+
+
+def test_offset_is_not_applied_twice_when_the_provider_already_removed_it(cogs):
+    """Real finding (2026-09-30): Earth Search items with earthsearch:boa_offset_applied = true still list
+    raster:bands offset -0.1, but their pixels already had the +1000 removed (verified on raw DNs:
+    S2B_43PHQ_20191105_0 vs _1, red median 768 vs 773). Applying -0.1 again gave NDVI > 1."""
+    from agripulse_ml.satellite.extract import district_stats
+    from agripulse_ml.satellite.stac import parse
+
+    f = _feature(cogs, "S2B_43PHQ_20191105_1_L2A", "2019-11-05", 2.0, -0.1)
+    f["properties"]["earthsearch:boa_offset_applied"] = True
+    sc = parse(f)
+    assert sc.offset == {"red": 0.0, "nir": 0.0, "scl": 0.0} and sc.boa_offset_applied is True
+    row = district_stats(sc, KOLAR, _cfg(cogs))
+    assert row["ndvi_median"] == pytest.approx(0.50, abs=1e-3)  # 0.15 / 0.45 reflectance, no second offset
+    assert row["offset_red"] == 0.0 and row["pipeline_version"] == 2
+    g = _feature(cogs, "S2B_43PHQ_20191105_0_L2A", "2019-11-05", 2.0, -0.1)
+    g["properties"]["earthsearch:boa_offset_applied"] = False
+    assert parse(g).offset["red"] == -0.1  # flag false: the listed offset is real and applied
+
+
+def test_impossible_ndvi_is_refused_not_stored(cogs):
+    """If a wrong offset makes reflectance negative, those pixels are dropped; nothing outside [-1, 1] is stored."""
+    from agripulse_ml.satellite.extract import district_stats
+    from agripulse_ml.satellite.stac import parse
+
+    f = _feature(cogs, "S2B_43PHQ_20220301_0_L2A", "2022-03-01", 2.0, -0.2)  # red 0.15 - 0.2 < 0 everywhere
+    row = district_stats(parse(f), KOLAR, _cfg(cogs))
+    assert row["clear_px"] == 0 and row["ndvi_median"] is None
+
+
+def test_version_1_file_keeps_only_old_baseline_rows(tmp_path):
+    from agripulse_ml.satellite.run import BASE_FIELDS, FIELDS, migrate_v1
+
+    p = tmp_path / "observations.csv"
+    rows = [dict.fromkeys(BASE_FIELDS, "1") | {"scene_id": f"S{i}", "district": "Kolar", "baseline": b}
+            for i, b in enumerate(["00.01", "02.14", "03.01", "04.00", "05.00", "05.11"])]
+    with open(p, "w", newline="") as f:
+        import csv as _csv
+
+        w = _csv.DictWriter(f, fieldnames=BASE_FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+    out = migrate_v1(p, log=lambda *a: None)
+    assert out == {"kept": 3, "redo": 3} and (tmp_path / "observations.v1.csv").exists()
+    kept = pd.read_csv(p, dtype={"baseline": str})
+    assert list(kept.columns) == FIELDS and kept["baseline"].tolist() == ["00.01", "02.14", "03.01"]
+    assert migrate_v1(p, log=lambda *a: None) is None  # already version 2: untouched

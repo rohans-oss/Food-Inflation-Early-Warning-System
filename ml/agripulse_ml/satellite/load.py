@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from agripulse_api.models import SatelliteObs
 
-from .run import FIELDS
+from .run import BASE_FIELDS as FIELDS
 
 NUM = ["scene_cloud_pct", "clear_frac", "ndvi_median", "ndvi_mean", "ndvi_p25", "ndvi_p75"]
 INT = ["cropland_px", "in_scene_px", "clear_px"]

@@ -100,6 +100,15 @@ so the checks were made through a web fetch and the pilot fetch runs on the user
     pixels in view); features and validation keep the most complete view per district and day.
   First values (2018-01-04, dry season): cropland NDVI median 0.31-0.40, 83-99% of cropland pixels clear;
   WorldCover marks ~70% of each circle as cropland.
+- **Offset trap, verified on pixels (2026-09-30).** The full pilot returned NDVI up to 1.93 (impossible) on every
+  scene with processing baseline >= 04.00 (2022+ and the reprocessed 2018-2021 `_1` items). Those items carry
+  `earthsearch:boa_offset_applied: true` but still list `raster:bands` offset **-0.1**. Raw pixel check, same tile
+  and day: `S2B_43PHQ_20191105_0_L2A` (baseline 02.13, flag false) red DN median 768 / NIR 3098 vs `..._1_L2A`
+  (05.00, flag true) 773 / 3149. A +1000 offset would push every value above 1000, so the pixels are already
+  harmonised and the listed offset must NOT be applied. Rule in `stac.parse`: flag true -> offset 0. Earth Search's
+  README says to apply any non-zero `raster:bands` offset; for these items that instruction is wrong. Guards added:
+  negative reflectance is dropped and an NDVI median outside [-1, 1] is refused. Version-1 rows from baselines
+  >= 04.00 are re-fetched (`observations.v1.csv` keeps the original).
 
 ## Ground truth for the satellite signal (V2-4)
 

@@ -11,6 +11,12 @@ Found on the first real pilot run (2026-09-29):
   * some items lack the red / nir / scl COG assets -> they are skipped and reported, never guessed at;
   * old scenes appear twice, e.g. S2B_43PHQ_20180213_0_L2A (baseline 00.01) and ..._1_L2A (baseline 05.00, the
     reprocessed version) with the same tile and time -> only the highest version number is kept.
+
+Found on the full pilot (2026-09-30), VERIFIED ON PIXELS: items with `earthsearch:boa_offset_applied: true` still
+list `raster:bands` offset -0.1, but their COG values have ALREADY had the +1000 removed. Same place, same day,
+S2B_43PHQ_20191105_0_L2A (baseline 02.13, flag false) vs _1_L2A (05.00, flag true): red DN median 768 vs 773,
+NIR 3098 vs 3149 (a +1000 would put every value above 1000). Applying -0.1 again drove red reflectance negative and
+NDVI above 1. Rule: when the flag is true the offset is 0; otherwise use raster:bands.
 """
 import re
 from dataclasses import dataclass
@@ -27,6 +33,7 @@ class Scene:
     epsg: int
     tile: str | None
     baseline: str | None
+    boa_offset_applied: bool | None
     href: dict        # {"red": url, "nir": url, "scl": url}
     scale: dict       # per asset
     offset: dict      # per asset
@@ -52,12 +59,15 @@ def parse(feature: dict) -> Scene:
     epsg = p.get("proj:epsg")
     if epsg is None and str(p.get("proj:code", "")).startswith("EPSG:"):
         epsg = int(p["proj:code"].split(":")[1])
+    applied = p.get("earthsearch:boa_offset_applied")
     sc, off = {}, {}
     for k in ("red", "nir", "scl"):
         sc[k], off[k] = _band(a[k])
+        if applied is True:
+            off[k] = 0.0  # the provider already removed BOA_ADD_OFFSET from the pixels (see module docstring)
     return Scene(id=feature["id"], datetime=p["datetime"], date=p["datetime"][:10], cloud=p.get("eo:cloud_cover"),
                  epsg=int(epsg), tile=p.get("grid:code"), baseline=p.get("s2:processing_baseline"),
-                 href={k: a[k]["href"] for k in ("red", "nir", "scl")}, scale=sc, offset=off)
+                 boa_offset_applied=applied, href={k: a[k]["href"] for k in ("red", "nir", "scl")}, scale=sc, offset=off)
 
 
 def _version(scene_id: str) -> int:

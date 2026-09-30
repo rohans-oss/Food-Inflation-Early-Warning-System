@@ -19,8 +19,9 @@ from pathlib import Path
 from .config import satellite_config
 from .stac import search
 
-FIELDS = ["district", "scene_id", "date", "tile", "baseline", "scene_cloud_pct", "cropland_px", "in_scene_px",
-          "clear_px", "clear_frac", "ndvi_median", "ndvi_mean", "ndvi_p25", "ndvi_p75"]
+BASE_FIELDS = ["district", "scene_id", "date", "tile", "baseline", "scene_cloud_pct", "cropland_px", "in_scene_px",
+               "clear_px", "clear_frac", "ndvi_median", "ndvi_mean", "ndvi_p25", "ndvi_p75"]
+FIELDS = BASE_FIELDS + ["offset_red", "pipeline_version"]
 # Rough cost of one scene x district at 80 m: three overview windows. Measured on the first real scenes you run;
 # until then this is an ESTIMATE used only for the dry-run warning.
 EST_MB_PER_SCENE = 3.0
@@ -33,6 +34,30 @@ def bbox_of(d: dict) -> tuple[float, float, float, float]:
     dlat = float(d["radius_km"]) / 111.32
     dlon = float(d["radius_km"]) / (111.32 * math.cos(math.radians(float(d["lat"]))))
     return (float(d["lon"]) - dlon, float(d["lat"]) - dlat, float(d["lon"]) + dlon, float(d["lat"]) + dlat)
+
+
+def migrate_v1(path: Path, log=print) -> dict | None:
+    """A version-1 file (no pipeline_version column) applied the -0.1 offset to scenes whose pixels already had it
+    removed. Keep only rows from processing baselines < 04.00 (never offset, verified correct); the rest are
+    re-fetched. The original file is kept as observations.v1.csv."""
+    if not path.exists():
+        return None
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+        header = rows[0].keys() if rows else []
+    if "pipeline_version" in header:
+        return None
+    backup = path.with_name("observations.v1.csv")
+    path.replace(backup)
+    keep = [r for r in rows if r.get("baseline") and r["baseline"] < "04.00"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w.writeheader()
+        for r in keep:
+            w.writerow({**{k: r.get(k) for k in BASE_FIELDS}, "offset_red": 0.0, "pipeline_version": 2})
+    log(f"migrated {path.name}: kept {len(keep)} rows from baselines < 04.00, {len(rows) - len(keep)} will be "
+        f"re-fetched with the corrected offset (original saved as {backup.name})")
+    return {"kept": len(keep), "redo": len(rows) - len(keep)}
 
 
 def done_keys(path: Path) -> set:
@@ -48,6 +73,8 @@ def run(out: Path, start: str, end: str, districts: list[dict], cfg: dict, dry_r
 
     out.mkdir(parents=True, exist_ok=True)
     obs = out / "observations.csv"
+    if not dry_run:
+        migrate_v1(obs, log)
     done = done_keys(obs)
     plan = []
     for d in districts:
