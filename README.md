@@ -509,6 +509,51 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - Policy page → Scenario simulator → rainfall failure, Kolar + Chikkaballapur, 50%, a window about 2–4 months ago
   → Run. Channel B shows about +10% in those mandis.
 
+## V3-3: languages, dashboard polish, per-module status, backlog closure
+
+- **Languages.** English, Kannada and **Hindi** for every alert template and all 83 UI strings (web: Shell language
+  picker and register; alerts follow `users.preferred_lang`).
+  - **Not native-reviewed yet.** Kannada and Hindi are machine drafts; every string carries a `_review` status and the
+    Admin "Translations" card counts reviewed vs machine (today 0 reviewed).
+  - Review workflow (docs/alerts.md): `python -m agripulse_api.i18n_tools export --lang kn --out kn.csv` → the
+    reviewer fills `corrected` and/or `approve` → `python -m agripulse_api.i18n_tools import --lang kn kn.csv
+    --reviewer "<name>"`. Placeholders must match or the whole import is refused.
+- **Per-module data status (rule 23).** Admin and Policy show one row per module: price forecast, mandi graph,
+  satellite, in-transit feature, optimizer (shared + return loads), scenario simulator. Each is `real`,
+  `real_partial`, `synthetic` or `not_yet_evaluable`, computed live from readiness and stored provenance, with
+  per-mandi counts where they apply. `GET /module-status` (Policy and Admin).
+- **Dashboard polish** (all 9 roles, desktop; farmer, driver and trader at 390 px), checked with a headless-browser
+  audit for horizontal overflow, API errors and SYNTHETIC labels. Fixed:
+  - the mobile header overflowed by 27 px → sign-out moved to the new **Account** page (devices list, sign out one
+    device or everywhere);
+  - the farmer's price table hid the price column on a phone → columns reordered (mandi, price, range);
+  - the trader's "expected vs normal" showed "0%, well below normal" when nothing was tracked → now "–, no tracked or
+    weighed arrivals yet — not a supply signal".
+  Every page that shows a forecast or price number carries `ProvenanceBadge`; pages without model numbers (FPO,
+  driver, fleet, lender) have none to label.
+- **Backlog closed** (details and the deferred list with reasons in [docs/backlog.md](docs/backlog.md)):
+  - #3 mandi location tool: Admin → Mandi locations, OSM candidates from Nominatim, a person confirms; moves are
+    audited and reset `verified`. **The 18 mandis still need confirming by a person in a deployment.**
+  - #7 map tiles: self-hosted PMTiles, a style URL or raster tiles ([docs/map-tiles.md](docs/map-tiles.md)); Admin
+    warns while the public OSM default is in use.
+  - #4 end-trip guard (+ fleet-owner close with a reason), #6 WebSocket tickets, #11 pinned synthetic draw, #17 no
+    delay alerts from a paused phone, #19 device list, #21 session clean-up; #1, #5 and #18 closed as superseded.
+  - Fixed in passing: prod CORS had dropped `https://localhost`, which the Android app needs.
+
+**How to verify**
+- `pytest tests/test_i18n.py tests/test_mandi_locations.py tests/test_module_status.py tests/test_backlog_v33.py`:
+  17 tests. The i18n test fails on any missing kn/hi string or placeholder mismatch; the import is all-or-nothing.
+- `python -m agripulse_api.i18n_tools status`: counts per file and language.
+- Switch the language to हिन्दी in the header: the screens and new alerts are in Hindi.
+- Admin → Module status: with the demo data every price-dependent module says `synthetic`; satellite follows the
+  stored observations.
+- Admin → Mandi locations → pick a mandi → OSM candidates appear (needs `NOMINATIM_CONTACT` in .env and outbound
+  access to nominatim.openstreetmap.org) → "Use" one or click the map → "Confirm location" → the mandi shows
+  verified; saving a different point again clears that.
+- A driver pressing "End trip" before the delivery scan is refused; a fleet owner closes such a trip with
+  `POST /trips/{id}/close {"reason": ...}` (API only: there is no Fleet-screen button yet).
+- Account page lists your devices; signing one out ends its WebSocket within the recheck interval.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

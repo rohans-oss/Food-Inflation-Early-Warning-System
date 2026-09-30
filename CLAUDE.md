@@ -264,5 +264,16 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   Channel B `assumptions.py` (sourced chain, low/central/high) and channel A `model.py` (perturb the display model's
   raw inputs, ratios) are NEVER blended. Runs live in `scenario_runs`; nothing writes `forecasts` (test compares it
   byte for byte). Every output carries `label()` = the rule-22 text; UI uses `CounterfactualBadge`.
+- i18n (V3-3): languages en / kn / hi in `services/api/agripulse_api/i18n/alerts.json` and `apps/web/lib/messages.json`.
+  Every non-English string has a `_review` status (machine / reviewed); only `i18n_tools import` (reviewer CSV,
+  placeholders checked, all-or-nothing) sets `reviewed`. tests/test_i18n.py fails on any missing string or placeholder
+  mismatch, so a new English string needs kn + hi drafts in the same change.
+- Module status (V3-3, rule 23): `agripulse_api.module_status.compute(db)` is the ONE place that says real /
+  real_partial / synthetic / not_yet_evaluable per module (Admin + Policy `ModuleStatus`). Derive from readiness data
+  and stored provenance, never hardcode "real".
+- WebSockets (V3-3): clients get a ticket from `POST /auth/ws-ticket` (60 s, single use) and pass `?ticket=`; never
+  put an access token in a URL in new code. Map tiles: ONLY through `apps/web/lib/mapstyle.ts` (docs/map-tiles.md).
+- Mandi locations (V3-3): moved only via `PATCH /admin/mandis/{id}` (audited; moving resets `verified`). `verified`
+  means a person confirmed it; OSM candidates (`/osm-candidates`, Nominatim) are suggestions, never auto-applied.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).
