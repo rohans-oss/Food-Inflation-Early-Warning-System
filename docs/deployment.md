@@ -52,6 +52,28 @@ DOMAIN=agripulse.example.org docker compose -f docker-compose.yml -f docker-comp
   production traffic. For a pilot, run your own tile server or use a provider, and change `STYLE` in
   `apps/web/components/MapView.tsx`.
 
+## Public demo (Render + Vercel, $0)
+
+A shareable demo with **SYNTHETIC** data only. It is not the real system: nothing is collected, and it resets on every
+restart.
+
+- **API:** a Render web service built from `infra/Dockerfile.demo` (free plan).
+  - The image bakes a SQLite database: reference data, 8 demo logins (password `agripulse-demo`), labelled synthetic
+    history, a synthetic-trained model, forecasts and the mandi graph.
+  - `scripts/demo_start.py` starts it with `JWT_SECRET=auto`, a random secret per process, so a restart signs
+    everyone out.
+  - The admin account is **disabled** unless you set `ADMIN_PASSWORD` in the Render dashboard yourself.
+  - Free instances sleep after about 15 minutes idle; the first request then takes about a minute, and all changes
+    are lost.
+- **Environment:** `PUBLIC_BASE_URL` = the web address, and `CORS_ORIGINS` = the web address plus
+  `https://localhost` (for the Android app). The API refuses to start on an `https` `PUBLIC_BASE_URL` with the
+  default JWT secret.
+- **Web:** a Vercel project with root `apps/web`, `NEXT_PUBLIC_API_URL` = the Render URL, and
+  `NEXT_PUBLIC_DEMO_NOTICE` = the banner text shown on every page.
+- **Driver app:** `https://<render-url>/driver/`.
+- **Not included:** the worker/scheduler, Redis, OSRM (routes are approximate and say so) and self-hosted tiles
+  (the public OSM tiles, fine for a demo).
+
 ## First run on real data
 
 ```bash

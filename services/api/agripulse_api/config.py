@@ -1,6 +1,8 @@
 """Runtime settings. Everything secret comes from the environment / .env (rule 6)."""
+import secrets
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,6 +62,13 @@ class Settings(BaseSettings):
 
     # --- jobs ---
     enable_scheduler: bool = False
+
+    @model_validator(mode="after")
+    def _auto_secret(self):
+        # JWT_SECRET=auto: a random secret per process (public demo on one instance; every restart signs everyone out)
+        if self.jwt_secret == "auto":
+            self.jwt_secret = secrets.token_urlsafe(48)
+        return self
 
     @property
     def cors_list(self) -> list[str]:

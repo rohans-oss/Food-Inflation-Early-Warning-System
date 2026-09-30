@@ -15,8 +15,10 @@ from .routers import admin, auth, graph, lots, mandis, prices, proposals, roles,
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    if settings.jwt_secret in ("", "change-me-in-.env") and not settings.database_url.startswith("sqlite"):
-        raise RuntimeError("Set JWT_SECRET in .env before running against a real database")
+    public = settings.public_base_url.startswith("https://")
+    if settings.jwt_secret in ("", "change-me-in-.env") and (public or not settings.database_url.startswith("sqlite")):
+        raise RuntimeError("Set JWT_SECRET (or JWT_SECRET=auto for a one-instance demo) before running against a real "
+                           "database or on a public https address")
     await hub.start()
     scheduler = None
     if settings.enable_scheduler:

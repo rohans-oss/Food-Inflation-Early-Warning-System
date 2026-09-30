@@ -1,0 +1,32 @@
+# PUBLIC DEMO image (docs/deployment.md "Public demo"): the API with a SQLite database baked in at build time.
+# Everything in it is SYNTHETIC or simulated and labelled so; it resets whenever the container restarts.
+# Not for real data: use docker-compose.prod.yml (Postgres, worker, backups) for that.
+FROM python:3.11-slim
+
+# libgomp1 is LightGBM's OpenMP runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY pyproject.toml alembic.ini ./
+COPY services ./services
+COPY ml ./ml
+COPY apps/driver-pwa ./apps/driver-pwa
+COPY config ./config
+COPY scripts ./scripts
+RUN pip install --no-cache-dir -e .
+
+ENV PYTHONUNBUFFERED=1 MLFLOW_DISABLE=1 \
+    DATABASE_URL=sqlite:////app/demo/agripulse.db \
+    MODEL_DIR=/app/demo/models
+# Build the demo database: reference data + 8 demo logins (the admin gets a random throwaway password and is
+# disabled at start unless ADMIN_PASSWORD is set), labelled synthetic history, a synthetic-trained model,
+# forecasts and the mandi graph.
+RUN mkdir -p /app/demo \
+ && alembic upgrade head \
+ && ADMIN_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" python -m agripulse_api.seed --demo \
+ && python -m ingest.run synthetic \
+ && python -m agripulse_ml.train --synthetic \
+ && python -m agripulse_ml.predict \
+ && (python -m agripulse_ml.graph.build || echo "graph build skipped")
+
+EXPOSE 8000
+CMD ["python", "scripts/demo_start.py"]
