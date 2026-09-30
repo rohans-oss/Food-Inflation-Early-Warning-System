@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { BestMandi } from "@/components/BestMandi";
+import { SharedLoadsCard } from "@/components/LoadProposals";
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
@@ -80,6 +81,8 @@ export default function Fpo() {
           </div>
         )}
       </Card>
+
+      <SharedLoadsCard onChanged={() => { lots.reload(); shipments.reload(); }} />
 
       <Card title={t("shipments")}>
         <div className="space-y-3">

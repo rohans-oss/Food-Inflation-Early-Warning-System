@@ -83,6 +83,27 @@ class User(Base):
     org: Mapped[Organization | None] = relationship()
 
 
+class LoadProposal(Base):
+    """V3-1: an optimizer proposal a person accepts or rejects. kind = consolidation (FPO: shared truckloads) or
+    return_load (fleet owner: a job for a truck's drive home). Accepting creates shipments / trips through the normal
+    checked paths and writes audit_log; a proposal is decided once."""
+
+    __tablename__ = "load_proposals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # consolidation | return_load
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)  # FPO or fleet: the data scope
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    status: Mapped[str] = mapped_column(String(12), default="proposed")  # proposed | accepted | rejected | stale
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    reject_reason: Mapped[str | None] = mapped_column(String(200))
+    est_saving: Mapped[float] = mapped_column(Float, default=0.0)  # Rs, vs the no-sharing / drive-home-empty baseline
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    data_provenance: Mapped[str] = mapped_column(String(16), default="synthetic")
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class UserSession(Base):
     """Pre-V3 B-3: one row per sign-in (device). Access and refresh tokens carry its id (`sid`); every request checks
     it, so revoking a session cuts the device off at its next request, not when the access token expires."""

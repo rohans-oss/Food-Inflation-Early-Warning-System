@@ -54,8 +54,23 @@ FLEET_TOWNS = [(13.14, 78.13), (13.43, 77.73), (12.97, 77.59), (14.23, 76.40), (
 CAPACITIES, CAP_P = (2.5, 5.0, 9.0, 10.0), (0.3, 0.4, 0.2, 0.1)
 
 
-def forecasts(seed: int) -> pd.DataFrame:
-    """Calibrated V1 LightGBM predictions on V2-0's final 8 folds for one synthetic dataset."""
+CACHE = ROOT / "data" / "cache"
+
+
+def forecasts(seed: int, cache: bool = True) -> pd.DataFrame:
+    """Calibrated V1 LightGBM predictions on V2-0's final 8 folds for one synthetic dataset.
+    Cached in data/cache/ (gitignored): the same deterministic run, ~4-5 min per dataset otherwise."""
+    f = CACHE / f"decision_forecasts_seed{seed}.parquet"
+    if cache and f.exists():
+        return pd.read_parquet(f)
+    out = _forecasts(seed)
+    if cache:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        out.to_parquet(f)
+    return out
+
+
+def _forecasts(seed: int) -> pd.DataFrame:
     feat = synthetic_features(seed=seed)
     spec = FoldSpec(n_folds=V2_0_FOLDS + WARMUP_FOLDS)
     r = run(feat, {"lightgbm_quantile": LightGBMQuantileForecaster}, feature_set="prices+weather",
@@ -67,7 +82,8 @@ def forecasts(seed: int) -> pd.DataFrame:
     return cal[cal["date"] >= pd.Timestamp(scored[0]["cutoff"])]
 
 
-def run_seed(seed: int, cfg: dict) -> list[dict]:
+def decision_days(seed: int, cfg: dict, n_days: int = DAYS_PER_SEED):
+    """(day, mandis with forecasts, realised prices) for evenly spaced days of one dataset."""
     preds = forecasts(seed)
     _, weather, arrivals = generate(DATA_START, DATA_END, seed, SYNTH_MANDIS)
     ids = {m[0]: i + 1 for i, m in enumerate(SYNTH_MANDIS)}
@@ -76,8 +92,7 @@ def run_seed(seed: int, cfg: dict) -> list[dict]:
     weather["date"], arrivals["date"] = pd.to_datetime(weather["date"]), pd.to_datetime(arrivals["date"])
     ok = preds.dropna(subset=["y_h1", "q50_h1"]).groupby("date")["mandi_id"].nunique()
     days = ok[ok == len(SYNTH_MANDIS)].index.sort_values()
-    days = [days[int(i)] for i in np.linspace(0, len(days) - 1, DAYS_PER_SEED)]
-    rows = []
+    days = [days[int(i)] for i in np.linspace(0, len(days) - 1, n_days)]
     for di, day in enumerate(days):
         d = preds[preds["date"] == day].set_index("mandi_id")
         wx = weather[weather["date"] == day].set_index("mandi_id")["tmax_c"]
@@ -91,6 +106,12 @@ def run_seed(seed: int, cfg: dict) -> list[dict]:
                                       temp_c=float(wx.get(mid, cfg["spoilage"]["default_temp_c"])),
                                       typical_daily_tons=float(typical.get(mid)) if mid in typical else None))
             realised[mid] = px * float(np.exp(r["y_h1"]))
+        yield di, day, mandis, realised
+
+
+def run_seed(seed: int, cfg: dict) -> list[dict]:
+    rows = []
+    for di, day, mandis, realised in decision_days(seed, cfg):
         forecast_p50 = {m.id: m.p50 for m in mandis}
         for density in DENSITY:
             rng = np.random.default_rng([seed, di, list(DENSITY).index(density)])

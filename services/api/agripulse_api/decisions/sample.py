@@ -13,12 +13,14 @@ FLEET_TOWNS = [(13.14, 78.13), (13.43, 77.73), (12.97, 77.59), (14.23, 76.40), (
 CAPACITIES, CAP_P = (2.5, 5.0, 9.0, 10.0), (0.3, 0.4, 0.2, 0.1)
 
 
-def scenario(rng: np.random.Generator, density: str) -> tuple[list[Lot], list[Vehicle]]:
-    """sparse: 6 lots / 8 trucks; medium: 20 / 18; dense_tight: 60 lots, trucks for ~70% of the tonnage."""
+def scenario(rng: np.random.Generator, density: str, clustered: bool = False) -> tuple[list[Lot], list[Vehicle]]:
+    """sparse: 6 lots / 8 trucks; medium: 20 / 18; dense_tight: 60 lots, trucks for ~70% of the tonnage.
+    clustered=True (V3-1): all lots come from 2 of the 8 belts instead of all 8 (draws differ from spread)."""
     n_lots, n_veh, cap_ratio = DENSITY[density]
+    belts = [BELTS[i] for i in rng.choice(len(BELTS), 2, replace=False)] if clustered else BELTS
     lots = []
     for i in range(n_lots):
-        c = BELTS[rng.integers(len(BELTS))]
+        c = belts[rng.integers(len(belts))]
         t = float(np.clip(np.round(rng.lognormal(np.log(3.0), 0.6), 1), 0.5, 9.0))
         lots.append(Lot(i, c[0] + rng.normal(0, 0.12), c[1] + rng.normal(0, 0.12), t))
     need = sum(x.tons for x in lots) * cap_ratio if cap_ratio else None

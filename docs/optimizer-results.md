@@ -5,6 +5,17 @@
 > running in the study environment. `data_provenance = "synthetic"` for every row of
 > `docs/results/optimizer-synthetic.csv`.
 
+> **Update, 2026-09-30 (re-run in progress).** The optimizer now stops on a deterministic work limit, not
+> wall-clock seconds (`[optimizer] deterministic_time_limit`, 1 worker). With the old 10-second wall-clock limit, the
+> dense results depended on how busy the machine was. The re-run with the new setting is in
+> `docs/results/optimizer-synthetic.csv`:
+> - **Verdict unchanged: the optimizer stays the default.**
+> - Mean realised net value is ₹16,20,608 for the optimizer vs ₹16,17,042 for the rule (+0.2%; was +0.07%).
+> - Violations are still 0 vs 140.
+> - Dense solves that stopped at the limit: 19/80 (p50) and 10/80 (p10), down from 43 and 37.
+>
+> The tables below are still from the wall-clock run. They will be regenerated with the V3-1 section.
+
 ## Real data (rule 23)
 
 | Module | Real data today | Status |

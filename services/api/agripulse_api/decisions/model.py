@@ -37,6 +37,7 @@ class MandiOption:
     temp_c: float
     typical_daily_tons: float | None = None  # None = unknown -> no absorption cap
     data_provenance: str = "synthetic"
+    tons_already_coming: float = 0.0  # live only: tonnes on the road to this mandi now (V1 tracking) use up its room
 
 
 @dataclass
@@ -82,11 +83,52 @@ class Problem:
 
     def mandi_cap(self, m: MandiOption) -> float | None:
         share = self.cfg["constraints"]["mandi_extra_share"]
-        return None if m.typical_daily_tons is None else share * m.typical_daily_tons
+        return None if m.typical_daily_tons is None else share * m.typical_daily_tons - m.tons_already_coming
 
     @property
     def max_spoilage(self) -> float:
         return self.cfg["constraints"]["max_spoilage_pct"]
+
+    @property
+    def stop_minutes(self) -> float:
+        return float(self.cfg.get("consolidation", {}).get("loading_minutes_per_stop", 0.0))
+
+    def route(self, v: "Vehicle", trips: list[tuple["MandiOption", list[Lot]]]) -> dict:
+        """One truck's day: base -> trip 1 pickups (in order) -> mandi 1 -> trip 2 pickups -> mandi 2 ... -> base.
+        Returns km, minutes (incl. loading stops after the first pickup of each trip), empty km, and per lot the
+        minutes from its pickup to its mandi (spoilage clock). For ONE lot it equals V3-0's vehicle_km / spoilage."""
+        km = minutes = empty = 0.0
+        clock = {}
+        pos = (v.lat, v.lon)
+        for m, lots in trips:
+            first = True
+            ride = []  # (lot, minutes since its pickup)
+            for lot in lots:
+                d, t, _ = self.leg(*pos, lot.lat, lot.lon)
+                extra = 0.0 if first else self.stop_minutes
+                km, minutes = km + d, minutes + t + extra
+                if first:
+                    empty += d
+                ride = [(x, s + t + extra) for x, s in ride] + [(lot, 0.0)]
+                pos, first = (lot.lat, lot.lon), False
+            d, t, _ = self.leg(*pos, m.lat, m.lon)
+            km, minutes = km + d, minutes + t
+            for x, s in ride:
+                clock[x.id] = s + t
+            pos = (m.lat, m.lon)
+        if self.cfg["transport"]["vehicle"].get("count_return_leg", True):
+            d, t, _ = self.leg(*pos, v.lat, v.lon)
+            km, minutes, empty = km + d, minutes + t, empty + d
+        return {"km": km, "minutes": minutes, "empty_km": empty, "clock": clock}
+
+    def spoilage_after(self, lot: Lot, m: "MandiOption", minutes: float) -> float:
+        from ..supply import spoilage_pct as _sp
+
+        return _sp(minutes / 60, m.temp_c, lot.crop)
+
+    @property
+    def max_driver_minutes(self) -> float:
+        return 60.0 * float(self.cfg.get("consolidation", {}).get("max_driver_hours", 1e9))
 
 
 @dataclass
@@ -94,6 +136,8 @@ class Assignment:
     lot_id: int | str
     mandi_id: int | str
     vehicle_id: int | str | None  # None = no vehicle could take it (the rule's failure mode)
+    seq: int = 0   # V3-1: pickup order within the trip (shared loads)
+    trip: int = 1  # V3-1: 1 = outbound; 2 = return load after the first delivery
 
 
 @dataclass

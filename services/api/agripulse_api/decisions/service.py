@@ -29,6 +29,7 @@ def mandi_options(db: Session, weeks: int = 1, near: list[tuple[float, float]] |
     are subtracted by `absorption_room`."""
     cfg = cost_config()
     radius = cfg["search"]["radius_km"]
+    moving = in_transit(db)
     out = []
     for m in db.scalars(select(Mandi).where(Mandi.lat.is_not(None))):
         if near and min(haversine_km(a, b, m.lat, m.lon) for a, b in near) > radius:
@@ -38,18 +39,14 @@ def mandi_options(db: Session, weeks: int = 1, near: list[tuple[float, float]] |
             continue
         typical = typical_daily_arrivals(db, m.id)
         out.append(MandiOption(m.id, m.name, m.lat, m.lon, f.p10, f.p50, f.p90, _temp_c(db, m.id)[0],
-                               typical["tons"], f.data_provenance))
+                               typical["tons"], f.data_provenance,
+                               tons_already_coming=moving.get(m.id, {}).get("tons_in_transit", 0.0)))
     return out
 
 
-def absorption_room(db: Session, problem: Problem) -> dict:
+def absorption_room(problem: Problem) -> dict:
     """Per mandi: cap (share x typical daily arrivals) minus tonnes already on the road to it (V1 tracking)."""
-    moving = in_transit(db)
-    out = {}
-    for m in problem.mandis:
-        cap = problem.mandi_cap(m)
-        out[m.id] = None if cap is None else round(cap - moving.get(m.id, {}).get("tons_in_transit", 0.0), 2)
-    return out
+    return {m.id: None if problem.mandi_cap(m) is None else round(problem.mandi_cap(m), 2) for m in problem.mandis}
 
 
 def hired_truck(lot: Lot, cfg: dict) -> Vehicle:
@@ -72,7 +69,7 @@ def recommend_single(db: Session, lat: float, lon: float, tons: float, weeks: in
     lot = Lot("farmer", lat, lon, tons)
     mandis = {m.id: m for m in mandi_options(db, weeks, near=[(lat, lon)])}
     prob = Problem([lot], [hired_truck(lot, cfg)], list(mandis.values()), road_distance, cfg)
-    room = absorption_room(db, prob)
+    room = absorption_room(prob)
     truck = prob.vehicles[0]
     for r in base["ranked"]:
         m = mandis.get(r["mandi_id"])
@@ -114,7 +111,8 @@ def compare(db: Session, density: str = "medium", seed: int = 1, weeks: int = 1)
     prob = Problem(lots, vehicles, mandis, road_distance, cost_config())
     p50 = {m.id: m.p50 for m in mandis}
     results = []
-    for plan in (rule_plan(prob), optimize(prob, "p50"), optimize(prob, "p10")):
+    cap = prob.cfg["optimizer"]["time_limit_s"]  # wall-clock safety net for a web request
+    for plan in (rule_plan(prob), optimize(prob, "p50", time_limit_s=cap), optimize(prob, "p10", time_limit_s=cap)):
         e = evaluate(prob, plan, p50)
         e.pop("assignments")
         results.append(e)

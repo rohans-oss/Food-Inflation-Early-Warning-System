@@ -73,6 +73,16 @@ class TripIn(BaseModel):
 
 @router.post("/trips", status_code=201)
 def assign_trip(body: TripIn, db: Session = Depends(get_db), user: User = Depends(require("trips:assign"))):
+    t = make_trip(db, user, body.shipment_id, body.vehicle_id, body.driver_id)
+    db.commit()
+    db.refresh(t)
+    return trip_out(db, t, user)
+
+
+def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver_id: int, **audit) -> Trip:
+    """Assign vehicle + driver to a booked shipment (no commit). Used by POST /trips and by accepting a V3-1
+    return-load proposal, so both go through the same checks."""
+    body = TripIn(shipment_id=shipment_id, vehicle_id=vehicle_id, driver_id=driver_id)
     sh = db.get(Shipment, body.shipment_id)
     fleet_org = user.org_id
     if user.role == "fpo":
@@ -108,10 +118,8 @@ def assign_trip(body: TripIn, db: Session = Depends(get_db), user: User = Depend
     db.add(t)
     db.flush()
     db.add(AuditLog(entity="trip", entity_id=t.id, from_state=None, to_state="assigned", actor_id=user.id,
-                    details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source}))
-    db.commit()
-    db.refresh(t)
-    return trip_out(db, t, user)
+                    details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source, **audit}))
+    return t
 
 
 @router.get("/trips")

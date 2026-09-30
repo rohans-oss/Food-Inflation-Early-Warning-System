@@ -16,3 +16,4 @@ data/raw/
 .DS_Store
 tests/e2e/shots/
 data/feature_tables/
+data/cache/

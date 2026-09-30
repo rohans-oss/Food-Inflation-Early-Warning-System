@@ -49,6 +49,25 @@ mandi_extra_share = 0.25        # extra tonnes a mandi can take in one day, as a
 
 [optimizer]
 objective = "p50"               # "p50" = expected value; "p10" = risk-averse (plan on the low price)
-time_limit_s = 10.0
+# The solver stops on WORK done (deterministic time), not wall-clock seconds, so a plan is the same on any machine at
+# any load. A wall-clock limit made dense V3-0 results depend on how busy the machine was (found in V3-1).
+deterministic_time_limit = 10.0
+time_limit_s = 30.0             # wall-clock safety cap for the API only; the studies run without it
 max_mandis_per_lot = 12         # nearest N mandis considered per lot (same as [search] max_candidates)
-workers = 8
+workers = 1                     # 1 = reproducible; more workers on a 2-core machine only add contention
+
+# ---------------------------------------------------------------- V3-1: shared loads + return loads
+[consolidation]
+# Pre-registered switch (docs/optimizer-results.md, V3-1): turned on for users only if, scored at realised prices on
+# the V3-1 study, it earns at least what the V3-0 optimizer earns and adds no violations.
+enabled = false
+max_lots_per_load = 4           # lots sharing one truck (pickup order is optimised exactly: at most 4! orders)
+neighbours = 6                  # each lot is grouped only with its 6 nearest pickups ...
+cluster_radius_km = 20.0        # ... within this road distance (keeps the V1 single-pickup-point trip honest, backlog 9)
+loading_minutes_per_stop = 20   # each extra pickup stop; counts toward spoilage of lots already on board
+mandis_per_load = 4             # best mandis considered per shared load (single lots keep V3-0's full set)
+vehicles_per_load = 5           # nearest trucks that fit, per shared load
+max_driver_hours = 12.0         # whole day incl. the drive home; applies to what V3-1 ADDS (shared loads, return trips)
+
+[return_loads]
+enabled = false                 # same pre-registered switch as [consolidation]

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ReturnLoadsCard } from "@/components/LoadProposals";
 import { MapMarker, MapView } from "@/components/MapView";
 import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
@@ -79,6 +80,8 @@ export default function Fleet() {
           </div>
         </Card>
       </div>
+
+      <ReturnLoadsCard onChanged={ov.reload} />
 
       <Card title={`${t("vehicles")} · ${t("utilization")}`}>
         <Table head={["Vehicle", "Capacity", "Now", "Trips", "Hours on trip", "% of time", "Avg load", ""]}>

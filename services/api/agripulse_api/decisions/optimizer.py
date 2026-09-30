@@ -14,6 +14,18 @@ from ortools.sat.python import cp_model
 
 from .model import Assignment, Plan, Problem
 
+def make_solver(cfg: dict, time_limit_s: float | None = None) -> "cp_model.CpSolver":
+    """CP-SAT with a DETERMINISTIC work limit (same plan on any machine, at any load). `time_limit_s` adds a wall-clock
+    cap (API safety net); None / 0 = no wall-clock cap (the studies)."""
+    o = cfg["optimizer"]
+    s = cp_model.CpSolver()
+    s.parameters.max_deterministic_time = float(o.get("deterministic_time_limit", 10.0))
+    s.parameters.max_time_in_seconds = float(time_limit_s) if time_limit_s else 1e9
+    s.parameters.num_workers = int(o.get("workers", 1))
+    s.parameters.random_seed = 1
+    return s
+
+
 STATUS = {cp_model.OPTIMAL: "OPTIMAL", cp_model.FEASIBLE: "FEASIBLE", cp_model.INFEASIBLE: "INFEASIBLE",
           cp_model.MODEL_INVALID: "MODEL_INVALID", cp_model.UNKNOWN: "UNKNOWN"}
 
@@ -66,10 +78,7 @@ def optimize(problem: Problem, objective: str | None = None, time_limit_s: float
             model.Add(sum(round(tons[l] * 100) * var for l, var in by_mandi[m.id]) <= round(cap * 100))
     model.Maximize(sum(value[k] * var for k, var in x.items()))
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(time_limit_s or ocfg["time_limit_s"])
-    solver.parameters.num_workers = int(ocfg.get("workers", 8))
-    solver.parameters.random_seed = 1
+    solver = make_solver(problem.cfg, time_limit_s)
     st = solver.Solve(model)
     status = STATUS.get(st, str(st))
     assignments = []

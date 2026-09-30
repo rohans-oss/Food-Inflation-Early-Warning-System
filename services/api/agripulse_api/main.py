@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import get_settings
 from tracking.hub import hub
 
-from .routers import admin, auth, graph, lots, mandis, prices, roles, trips
+from .routers import admin, auth, graph, lots, mandis, prices, proposals, roles, trips
 
 
 @asynccontextmanager
@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, admin, mandis, prices, lots, trips, roles, graph):
+for r in (auth, admin, mandis, prices, lots, trips, roles, graph, proposals):
     app.include_router(r.router)
 
 

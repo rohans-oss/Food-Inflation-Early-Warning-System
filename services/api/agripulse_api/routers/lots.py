@@ -220,15 +220,16 @@ def _scoped_shipment(db: Session, user: User, shipment_id: int) -> Shipment:
     raise forbid()
 
 
-@router.post("/shipments", status_code=201)
-def create_shipment(body: ShipmentIn, db: Session = Depends(get_db), user: User = Depends(require("shipments:manage"))):
+def make_shipment(db: Session, user: User, mandi_id: int, lot_ids: list[int], **audit) -> Shipment:
+    """Group registered lots into a planned shipment (no commit). Used by POST /shipments and by accepting a V3-1
+    shared-load proposal, so both go through the same checks."""
     from ..models import Mandi
 
-    mandi = db.get(Mandi, body.mandi_id)
+    mandi = db.get(Mandi, mandi_id)
     if mandi is None or mandi.lat is None:
         raise HTTPException(400, "Unknown mandi, or its location is not set yet")
-    lots = db.scalars(select(Lot).where(Lot.id.in_(body.lot_ids), lot_filter(user))).all()
-    if len(lots) != len(set(body.lot_ids)):
+    lots = db.scalars(select(Lot).where(Lot.id.in_(lot_ids), lot_filter(user))).all()
+    if len(lots) != len(set(lot_ids)):
         raise HTTPException(404, "One or more lots not found in your organization")
     if any(lot.status != "registered" or lot.shipment_id for lot in lots):
         raise HTTPException(409, "Only registered lots that are not already grouped can be added")
@@ -236,10 +237,16 @@ def create_shipment(body: ShipmentIn, db: Session = Depends(get_db), user: User 
     db.add(sh)
     db.flush()
     db.add(AuditLog(entity="shipment", entity_id=sh.id, from_state=None, to_state="planned", actor_id=user.id,
-                    details={"lots": [lot.id for lot in lots], "mandi_id": mandi.id}))
+                    details={"lots": [lot.id for lot in lots], "mandi_id": mandi.id, **audit}))
     for lot in lots:
         lot.shipment_id = sh.id
         move(db, lot, "grouped", user.id, shipment_id=sh.id)
+    return sh
+
+
+@router.post("/shipments", status_code=201)
+def create_shipment(body: ShipmentIn, db: Session = Depends(get_db), user: User = Depends(require("shipments:manage"))):
+    sh = make_shipment(db, user, body.mandi_id, body.lot_ids)
     db.commit()
     db.refresh(sh)
     return shipment_out(db, sh)
