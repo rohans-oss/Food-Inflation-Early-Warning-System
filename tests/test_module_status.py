@@ -8,7 +8,8 @@ def test_each_module_reports_its_own_status(client, as_role, db):
     assert r.status_code == 200
     by = {m["module"]: m for m in r.json()}
     assert set(by) == {"Price forecast", "Mandi graph", "Satellite crop signal", "In-transit supply feature",
-                       "Optimizer, shared + return loads", "Scenario simulator"}
+                       "Optimizer, shared + return loads", "Scenario simulator", "Real spike backtest"}
+    assert by["Real spike backtest"]["status"] == "not_yet_evaluable"  # seed_forecasts writes no real prices
     assert by["Price forecast"]["status"] == "synthetic" and by["Price forecast"]["per_mandi"]["synthetic"] > 0
     assert by["Optimizer, shared + return loads"]["status"] == "not_yet_evaluable"
     assert by["Scenario simulator"]["counterfactual"] is True and by["Scenario simulator"]["status"] == "synthetic"

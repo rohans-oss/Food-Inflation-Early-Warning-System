@@ -16,7 +16,7 @@ export function ModuleStatus() {
               {m.counterfactual && <div className="mt-1"><Badge kind="warn">counterfactual</Badge></div>}
             </Td>
             <Td className="max-w-lg text-sm">{m.evidence}
-              {m.per_mandi && <div className="text-xs text-muted">{Object.entries(m.per_mandi).map(([k, v]) => `${k}: ${v}`).join(" · ")}</div>}
+              {m.per_mandi && <div className="text-xs text-muted">{Object.entries(m.per_mandi).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(" · ")}</div>}
             </Td>
             <Td><span className="font-mono text-xs text-muted">{m.doc}</span></Td>
           </tr>

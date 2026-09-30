@@ -1,0 +1,165 @@
+{
+  "status": "not_enough_real_data",
+  "reason": "Not enough history for a walk-forward backtest: 2026-09-25..2026-09-25 (need > 365 days + 28 days of targets)",
+  "prereg": {
+    "spike_pct": 30.0,
+    "spike_window_days": 14,
+    "event_gap_days": 7,
+    "min_events": 5,
+    "fixed_threshold": 0.5,
+    "threshold_grid": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95
+    ],
+    "label_lag_days": 1,
+    "real_min_train_days": 365,
+    "step_days": 28
+  },
+  "inventory": {
+    "real_price_rows": 17,
+    "mandis": 17,
+    "first_date": "2026-09-25",
+    "last_date": "2026-09-25",
+    "max_span_days": 1,
+    "per_mandi": [
+      {
+        "mandi_id": 1,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 3,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 4,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 5,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 6,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 7,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 8,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 9,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 10,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 11,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 12,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 13,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 14,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 15,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 16,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 17,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      },
+      {
+        "mandi_id": 19,
+        "first": "2026-09-25",
+        "last": "2026-09-25",
+        "days_with_price": 1,
+        "span_days": 1
+      }
+    ]
+  },
+  "earliest_first_fold": "2027-10-24",
+  "advanced_models": "TFT / GNN not run: they need this backtest to pass its minimums on real data first."
+}

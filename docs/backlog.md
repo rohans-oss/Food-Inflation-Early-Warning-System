@@ -46,6 +46,7 @@ Original rows kept for their context; the last column says why each waits.
 | 28 | Two scenario links are UNSOURCED | V3-2 rainfall chain: share of water need not replaced by irrigation; share of a mandi's arrivals from its own district | Irrigated tomato area / water use (district agriculture office, Minor Irrigation Census); arrival origins from APMC gate records or traders | Needs agronomy / APMC origin data. |
 | 29 | Scenario elasticity is RETAIL (RBI CPI) | Mandi (wholesale) prices usually move more, so channel B likely understates shifts | Estimate a wholesale price-arrivals elasticity from real Agmarknet prices + arrivals (also closes backlog 23) | Real-data item (same estimate as #23). |
 | 30 | Scenario channel A is not credible yet | The synthetic-trained model gives wrong-sign / erratic answers to drought and supply shocks | Retrain on real data; even then it only knows shocks present in its history. Keep A and B separate | Real-data item. |
+| 31 | Alert rule for real spike warnings | V3-4: the pre-registered learned threshold (best F1 on earlier folds) drifts to near always-on when spikes are frequent (67% of days for LightGBM on synthetic data) | Settle the rule BEFORE real events are scored, e.g. a fixed alert budget per mandi or a precision floor; keep 0.5 as the reference | Needs a decision, and real spike frequency |
 
 ### Noted in V3-3
 

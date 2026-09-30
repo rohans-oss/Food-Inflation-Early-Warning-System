@@ -1,15 +1,17 @@
 """V3-3 rule 23: one live data-status per module, per mandi where it applies, instead of one system-wide
 real/synthetic switch. Statuses: real | real_partial | synthetic | not_yet_evaluable (+ counts as evidence)."""
 from collections import Counter
+from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import readiness
 from .modelcfg import display_model
-from .models import (Forecast, GraphEdge, LoadProposal, Lot, Mandi, SatelliteObs, ScenarioRun, Trip)
+from .models import (Forecast, GraphEdge, LoadProposal, Lot, Mandi, Price, SatelliteObs, ScenarioRun, Trip)
 
 NOT_YET = "not_yet_evaluable"
+REAL_BACKTEST_MIN_SPAN = 365 + 28  # agripulse_ml.real_backtest: one walk-forward fold
 
 
 def _worst(counts: Counter) -> str:
@@ -40,6 +42,22 @@ def compute(db: Session) -> list[dict]:
                 "evidence": f"{p['ready']}/{p['total']} mandis have enough REAL price history "
                             f"(ready around {p['latest_projected_ready_date'] or 'unknown'}); calibration: {dict(calib) or 'n/a'}",
                 "doc": "docs/v2-summary.md"})
+
+    # V3-4 real spike backtest: needs one fold (365 days of training + 28 of targets) of REAL prices at a mandi
+    spans = db.execute(select(Price.mandi_id, func.min(Price.date), func.max(Price.date))
+                       .where(Price.commodity == "Tomato", Price.source != "synthetic").group_by(Price.mandi_id)).all()
+    span_days = {m: (b - a).days + 1 for m, a, b in spans}
+    can_run = [m for m, d in span_days.items() if d > REAL_BACKTEST_MIN_SPAN]
+    first = min((a for _, a, _ in spans), default=None)
+    out.append({"module": "Real spike backtest", "status": ("real" if len(can_run) == n_mandis else "real_partial")
+                if can_run else NOT_YET, "per_mandi": {"can_run": len(can_run), "with_real_prices": len(span_days)},
+                "evidence": (f"{len(can_run)} mandis have enough real history; run python -m agripulse_ml.real_backtest"
+                             if can_run else
+                             f"longest real price history {max(span_days.values(), default=0)} days; a first fold needs "
+                             f"{REAL_BACKTEST_MIN_SPAN + 1}" + (f" (from {first + timedelta(days=REAL_BACKTEST_MIN_SPAN + 1)} "
+                                                                  "if collection never stops)" if first else "")
+                             + ", unless older history is backfilled"),
+                "doc": "docs/backtest-real.md"})
 
     # mandi graph: distance edges are real; price / flow edges carry the prices' provenance
     build = db.scalar(select(GraphEdge.build_id).order_by(GraphEdge.created_at.desc()).limit(1))

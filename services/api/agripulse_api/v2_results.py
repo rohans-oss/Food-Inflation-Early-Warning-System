@@ -40,6 +40,14 @@ RESULTS = [
                  "+0.6 to +49%); export ban -> -0.3% (exports are 0.47% of output). The synthetic-trained model gives "
                  "wrong-sign or erratic answers for both: shown separately, never blended.",
      "data_provenance": SYNTHETIC, "doc": "docs/scenario-assumptions.md"},
+    {"phase": "V3-4", "title": "Spike backtest on REAL prices", "outcome": "not enough real data",
+     "headline": "17 real price rows (one day, 2026-09-25). A first walk-forward fold needs 365 + 28 days: 2027-10-24 at "
+                 "the earliest, sooner if older Agmarknet history is backfilled. No real number is reported.",
+     "data_provenance": REAL, "doc": "docs/backtest-real.md"},
+    {"phase": "V3-4", "title": "Spike warnings, event level (8 draws)", "outcome": "finding",
+     "headline": "At 0.5, LightGBM catches 40% of spikes (20-58%), median 12 days ahead, alerting on 16% of days; naive "
+                 "can't warn. The pre-registered learned threshold drifts to near always-on (backlog 31).",
+     "data_provenance": SYNTHETIC, "doc": "docs/backtest-real.md"},
     {"phase": "V3-0", "title": "Decisions on real data", "outcome": "not enough real data",
      "headline": "No real lots with a known sale outcome yet; decisions can't be scored on real data until the field "
                  "pilot and ~13 months of real prices.",
