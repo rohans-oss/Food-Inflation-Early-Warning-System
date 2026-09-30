@@ -1,0 +1,62 @@
+{
+ "A_screen_on_mounted": {
+  "note": "phone mounted, app open all trip, wake lock held; two 3-min dead zones",
+  "route_km_straight": 55.3,
+  "trip_min_to_arrival": 113.9,
+  "fixes_expected": 1488,
+  "fixes_recorded": 1488,
+  "fixes_lost_pct": 0.0,
+  "longest_gap_min": 0.1,
+  "farmer_view_stale_pct_of_minutes": 1.6,
+  "km_drawn_as_straight_line": 0.0,
+  "moving_minutes_without_fix": 0,
+  "false_no_signal_stop_events": 0,
+  "stop_or_delay_alerts": 0,
+  "reached_mandi_late_by_min": 0.0
+ },
+ "B_current_app_one_call": {
+  "note": "current code: a 2-min call at 25 min releases the wake lock and it is never re-acquired; the screen then auto-locks 1 min after each time the driver touches the phone (tea stop, arrival QR)",
+  "route_km_straight": 55.3,
+  "trip_min_to_arrival": 113.9,
+  "fixes_expected": 1488,
+  "fixes_recorded": 325,
+  "fixes_lost_pct": 78.2,
+  "longest_gap_min": 49.1,
+  "farmer_view_stale_pct_of_minutes": 75.6,
+  "km_drawn_as_straight_line": 40.7,
+  "moving_minutes_without_fix": 69,
+  "false_no_signal_stop_events": 2,
+  "stop_or_delay_alerts": 4,
+  "reached_mandi_late_by_min": 9.1
+ },
+ "C_wakelock_fixed_calls_and_tea_stop": {
+  "note": "wake lock works; two 3-min calls; phone locked during the tea stop",
+  "route_km_straight": 55.3,
+  "trip_min_to_arrival": 113.9,
+  "fixes_expected": 1488,
+  "fixes_recorded": 1176,
+  "fixes_lost_pct": 21.0,
+  "longest_gap_min": 20.1,
+  "farmer_view_stale_pct_of_minutes": 17.9,
+  "km_drawn_as_straight_line": 3.6,
+  "moving_minutes_without_fix": 6,
+  "false_no_signal_stop_events": 0,
+  "stop_or_delay_alerts": 0,
+  "reached_mandi_late_by_min": 0.0
+ },
+ "D_driver_uses_maps_navigation": {
+  "note": "Google Maps navigation in the foreground all trip; app visible only at start and on arrival (QR)",
+  "route_km_straight": 55.3,
+  "trip_min_to_arrival": 113.9,
+  "fixes_expected": 1488,
+  "fixes_recorded": 24,
+  "fixes_lost_pct": 98.4,
+  "longest_gap_min": 122.1,
+  "farmer_view_stale_pct_of_minutes": 97.6,
+  "km_drawn_as_straight_line": 54.7,
+  "moving_minutes_without_fix": 93,
+  "false_no_signal_stop_events": 1,
+  "stop_or_delay_alerts": 2,
+  "reached_mandi_late_by_min": 9.1
+ }
+}
