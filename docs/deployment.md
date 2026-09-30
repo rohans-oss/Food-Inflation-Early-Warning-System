@@ -67,7 +67,7 @@ Same image (`infra/Dockerfile.demo`); the mode is picked at run time by `DATABAS
 4. `.github/workflows/wake-live.yml` wakes the sleeping API after Agmarknet's midday and evening updates.
 
 Still simulated in LIVE mode: demo logins and the demo trucks / trips (labelled "Simulated"). Unset `DATABASE_URL` to go
-back to the synthetic demo.
+back to the synthetic demo, or set `DATA_MODE=demo` to keep the Postgres setting but serve the baked sample data.
 
 ## Public demo (Render, $0)
 

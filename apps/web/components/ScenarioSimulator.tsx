@@ -56,7 +56,7 @@ export function ScenarioSimulator() {
     <Card title="Scenario simulator" action={<CounterfactualBadge />}>
       <p className="mb-3 text-sm text-ink2">
         What would a shock do to the forecast? Two separate answers: <b>(B) a documented assumption chain</b> (sourced numbers, with
-        ranges) and <b>(A) what the current forecasting model does</b> when its inputs are changed. The model was trained on synthetic
+        ranges) and <b>(A) what the current forecasting model does</b> when its inputs are changed. The model was trained on sample
         data, so its answer can be flat or even point the wrong way. Neither is a prediction of what will happen.
       </p>
       <div className="mb-3 grid gap-3 md:grid-cols-4">
@@ -112,12 +112,12 @@ export function ScenarioSimulator() {
             </div>
             <div className="rounded-lg border border-line p-3 text-sm">
               <b>(A) Current model</b>: {sm.model_available ? <>p50 {pctOf(sm.model_p50_shift_pct)} at {week} wk.</> : <>not available: {sm.model_reason}</>}
-              <div className="text-xs text-muted">Trained on synthetic data; a sensitivity of the model, not of the market. {sm.model_notes?.join(" ")}</div>
+              <div className="text-xs text-muted">Trained on sample data; a sensitivity of the model, not of the market. {sm.model_notes?.join(" ")}</div>
             </div>
           </div>
           {sm.channels_disagree_weeks?.length > 0 && (
             <Note>The two channels point in opposite directions at {sm.channels_disagree_weeks.join(", ")} wk. Trust neither on its own: the
-              model learned from synthetic data in which this link doesn&apos;t exist the way the assumption chain says.</Note>
+              model learned from sample data in which this link doesn&apos;t exist the way the assumption chain says.</Note>
           )}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-ink2">Show</span>

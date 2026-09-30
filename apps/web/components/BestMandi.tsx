@@ -58,7 +58,7 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
             <Td>{num(m.road_km, 0)} km<div className="text-xs text-muted">{num(m.drive_hours, 1)} h{m.route_source !== "osrm" && " · approx."}</div></Td>
             {!noPrice && <Td>{inr(m.price_forecast?.p50)}<div className="text-xs text-muted">{inr(m.price_forecast?.p10)}–{inr(m.price_forecast?.p90)}/q</div></Td>}
             {noPrice && <Td>{m.price_today ? <>{inr(m.price_today.modal)}<span className="text-muted">/q</span>
-              <div className="text-xs text-muted">{day(m.price_today.date)}{m.data_provenance === "synthetic" ? " · SYNTHETIC" : ""}</div></>
+              <div className="text-xs text-muted">{day(m.price_today.date)}{m.data_provenance === "synthetic" ? " · sample" : ""}</div></>
               : <span className="text-xs text-muted">not reported</span>}</Td>}
             <Td>−{inr(m.transport_cost)}</Td>
             <Td>−{num(m.spoilage_pct, 1)}%<div className="text-xs text-muted">{num(m.temp_c, 0)}°C{m.temp_source === "default" && " (assumed)"}</div></Td>

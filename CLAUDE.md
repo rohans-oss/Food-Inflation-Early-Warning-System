@@ -295,4 +295,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `live.retrain_if_ready` (real rows, readiness-gated); without them `supply.forecast_available` is false and every crop
   gets `options_without_forecast` (latest real price, value at that price: never called a forecast). Farmers add
   vegetables via `POST /crops` → `crops.resolve` (custom_crops).
+- Public-demo wording (user decision 2026-09-30): in the web UI synthetic data is labelled "Sample data" / "Sample"
+  (ProvenanceBadge, banner from `/data-status`), never unlabelled. API values, docs, studies and exported reports keep
+  "synthetic" and the full rule-9 label. `DATA_MODE=demo` makes the demo image serve its baked sample database even when
+  DATABASE_URL points at Postgres.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

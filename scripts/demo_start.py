@@ -56,6 +56,9 @@ def prepare_live() -> None:
 
 def main():
     os.environ.setdefault("JWT_SECRET", "auto")
+    if os.environ.get("DATA_MODE", "").lower() == "demo":  # keep a configured Postgres for later, serve the baked demo
+        os.environ["DATABASE_URL"] = "sqlite:////app/demo/agripulse.db"
+        print("[demo] DATA_MODE=demo: serving the built-in sample-data database", flush=True)
     if os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql")):
         print("[live] real-data mode", flush=True)
         prepare_live()

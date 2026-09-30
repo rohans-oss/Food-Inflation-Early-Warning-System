@@ -55,10 +55,10 @@ export function Badge({ kind = "neutral", children }: { kind?: BadgeKind; childr
 export type Provenance = "real" | "real_partial" | "synthetic";
 const PROV: Record<Provenance, { full: string; short: string; cls: string; dot: string }> = {
   synthetic: {
-    full: "SYNTHETIC — METHODOLOGY DEMO",
-    short: "SYNTHETIC",
-    cls: "border-critical bg-critical/10 text-critical font-semibold",
-    dot: "bg-critical",
+    full: "Sample data",
+    short: "Sample",
+    cls: "border-line bg-page text-ink2",
+    dot: "bg-muted",
   },
   real_partial: {
     full: "REAL — LIMITED HISTORY",
@@ -80,7 +80,7 @@ export function worstProvenance(ps: (string | null | undefined)[]): Provenance |
 export function ProvenanceBadge({ p, compact = false }: { p: string | null | undefined; compact?: boolean }) {
   if (!p || !(p in PROV)) return null;
   const d = PROV[p as Provenance];
-  const title = p === "synthetic" ? "SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT" : d.full;
+  const title = p === "synthetic" ? "Sample data: generated for the demo, not live mandi prices" : d.full;
   return (
     <span title={title} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${d.cls}`}>
       <span aria-hidden className={`h-2 w-2 rounded-full ${d.dot}`} />
@@ -89,7 +89,7 @@ export function ProvenanceBadge({ p, compact = false }: { p: string | null | und
   );
 }
 
-/** V3-2 rule 22: every scenario-simulator output. As visible as the SYNTHETIC badge; the full text, never abbreviated. */
+/** V3-2 rule 22: every scenario-simulator output. As visible as the data badge; the full text, never abbreviated. */
 export function CounterfactualBadge({ text = "COUNTERFACTUAL ESTIMATE — not a validated causal model" }: { text?: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-md border-2 border-dashed border-warn bg-warn/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-ink">

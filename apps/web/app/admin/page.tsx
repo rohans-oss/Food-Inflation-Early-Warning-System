@@ -67,7 +67,7 @@ export default function Admin() {
           </Table>
         </Card>
         <Card title={t("simulator")} action={sim.data?.running ? <Badge kind="sim">Running · {sim.data.trips} trips</Badge> : <Badge>Stopped</Badge>}>
-          <p className="mb-3 text-sm text-ink2">Creates synthetic trucks on real routes, fed through the same GPS pipeline as real phones. Every one is flagged <b>Simulated</b> everywhere it appears.</p>
+          <p className="mb-3 text-sm text-ink2">Creates simulated trucks on real routes, fed through the same GPS pipeline as real phones. Every one is flagged <b>Simulated</b> everywhere it appears.</p>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Trips"><input className={`${inputCls} w-24`} type="number" min="1" max="100" value={simCfg.trips} onChange={(e) => setSimCfg({ ...simCfg, trips: e.target.value })} /></Field>
             <Field label="Speed-up ×"><input className={`${inputCls} w-24`} type="number" min="0.5" max="120" value={simCfg.speedup} onChange={(e) => setSimCfg({ ...simCfg, speedup: e.target.value })} /></Field>
@@ -98,8 +98,8 @@ export default function Admin() {
                   <Td>{v.spike.false_alarm_rate ?? "–"}</Td><Td>{v.spike.brier ?? "–"}</Td></tr>
               ))}
             </Table>
-            {p.data_provenance === "synthetic" && <Note>SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT. These numbers come from one
-              synthetic draw and prove only that the pipeline runs. &ldquo;Better&rdquo; here is not evidence: across 8 synthetic draws
+            {p.data_provenance === "synthetic" && <Note>Sample data: these numbers come from one generated
+              sample and prove only that the pipeline runs. &ldquo;Better&rdquo; here is not evidence: across 8 generated samples
               LightGBM has no reliable edge over naive (docs/backtest-synthetic.md). Re-train on real Agmarknet history before quoting any result.</Note>}
             {p.data_provenance === "real_partial" && <Note>REAL — LIMITED HISTORY: some mandis are below the readiness threshold, so these numbers are partial.</Note>}
           </div>

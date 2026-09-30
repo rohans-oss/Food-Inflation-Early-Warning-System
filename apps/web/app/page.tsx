@@ -60,7 +60,7 @@ const ROLES: { title: string; does: string[] }[] = [
   { title: "Fleet owner", does: ["Assign trucks and drivers to bookings", "See the fleet on a live map", "Fill empty return legs with nearby loads"] },
   { title: "Mandi trader", does: ["See supply heading to the mandi before it arrives", "Scan deliveries, weigh and price lots", "Compare today's arrivals with a normal day"] },
   { title: "Bulk buyer", does: ["Watch price ranges at chosen mandis", "See spike risk before buying", "Plan procurement 1–4 weeks out"] },
-  { title: "Policy analyst", does: ["District price-risk map for Karnataka", "Scenario simulator: rain failure, export ban", "Per-module data status: real or synthetic"] },
+  { title: "Policy analyst", does: ["District price-risk map for Karnataka", "Scenario simulator: rain failure, export ban", "Per-module data status: real or sample"] },
   { title: "Lender / insurer", does: ["Verified shipment history per farmer", "Pickup, trip and delivery evidence in one chain", "Reliability shared only with the farmer's consent"] },
   { title: "Admin / data ops", does: ["Data freshness and real-data readiness", "Model evaluation on shared folds", "Confirm mandi locations, manage sessions"] },
 ];
@@ -109,7 +109,7 @@ function Landing() {
               </a>
             </div>
             <p className="fade-up mt-4 text-xs text-muted" style={{ animationDelay: "320ms" }}>
-              The public demo runs on SYNTHETIC prices and SIMULATED trucks, labelled on every screen.
+              The public demo runs on sample prices and simulated trucks.
             </p>
           </div>
           <HeroIllustration />
@@ -120,7 +120,7 @@ function Landing() {
       <section className="border-y border-line bg-surface">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-8 md:grid-cols-4">
           {[["1–4 weeks", "price outlook as p10 / p50 / p90"], ["9 roles", "one chain from farm to mandi"],
-            ["18 mandis", "in the Karnataka pilot"], ["Every number", "labelled real or synthetic"]].map(([k, v], i) => (
+            ["18 mandis", "in the Karnataka pilot"], ["Every number", "labelled real or sample"]].map(([k, v], i) => (
             <Reveal key={k} delay={i * 80}>
               <p className="text-2xl font-semibold tracking-tight">{k}</p>
               <p className="mt-1 text-sm text-ink2">{v}</p>
@@ -194,7 +194,7 @@ function Landing() {
             </p>
           </Reveal>
           <div className="grid gap-3">
-            {[["SYNTHETIC", "bg-critical/10 text-critical", "Generated data used to test the method. Never presented as a real result."],
+            {[["SAMPLE DATA", "bg-page text-ink2", "Generated prices used to demonstrate the method, not live mandi rates."],
               ["REAL — LIMITED HISTORY", "bg-warn/15 text-ink", "Real data, but not yet enough for the model to be trusted."],
               ["REAL", "bg-good/10 text-good", "Real data past the readiness threshold, checked per mandi."],
               ["COUNTERFACTUAL ESTIMATE", "bg-brand/10 text-brand", "Scenario answers from stated, sourced assumptions — not a prediction."]].map(([b, cls, text], i) => (
