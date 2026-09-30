@@ -28,8 +28,12 @@ RESULTS = [
                  "per-dataset spread is not (3-5 of 8 datasets within +-5 pts per horizon after, 1-7 before).",
      "data_provenance": SYNTHETIC, "doc": "docs/calibration-results.md", "calibration": "applied"},
     {"phase": "V3-0", "title": "OR-Tools optimizer vs V1 rule (240 simulated batches)", "outcome": "mixed",
-     "headline": "Net value a tie (+0.07%), mandi-room violations 140 -> 0, transport cost -22 to -34%. The gain is truck "
-                 "assignment; in dense batches it earns 1.3% less by not flooding mandis. Now the default recommender.",
+     "headline": "Net value a tie (+0.2%), mandi-room violations 140 -> 0, transport cost -22 to -34%. The gain is truck "
+                 "assignment; in dense batches it earns 1.1% less by not flooding mandis. Now the default recommender.",
+     "data_provenance": SYNTHETIC, "doc": "docs/optimizer-results.md"},
+    {"phase": "V3-1", "title": "Shared truckloads + return loads (240 simulated batches)", "outcome": "finding",
+     "headline": "Better than V3-0 on 204/240 days, worse on 2, 0 violations: +2 to +13% in sparse/medium batches. Dense "
+                 "+38-47% is mostly shipping twice the lots (unshipped lots scored at 0); per tonne: transport -11 to -18%.",
      "data_provenance": SYNTHETIC, "doc": "docs/optimizer-results.md"},
     {"phase": "V3-0", "title": "Decisions on real data", "outcome": "not enough real data",
      "headline": "No real lots with a known sale outcome yet; decisions can't be scored on real data until the field "

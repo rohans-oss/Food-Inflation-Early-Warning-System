@@ -207,3 +207,17 @@ def test_fleet_gets_a_return_load_for_a_truck_that_delivered_today(client, as_ro
     assert new.vehicle_id == trip.vehicle_id and new.driver_id == trip.driver_id and new.status == "assigned"
     audit = db.scalar(select(AuditLog).where(AuditLog.entity == "trip", AuditLog.entity_id == new.id))
     assert audit.details["via"] == "v3-1 return-load proposal" and audit.details["after_trip"] == trip.id
+
+
+def test_v31_switches_follow_the_pre_registered_verdict():
+    """[consolidation] / [return_loads] enabled must equal what the committed V3-1 study says."""
+    import pandas as pd
+
+    from agripulse_ml.consolidation_study import switch_decision
+
+    df = pd.read_csv(ROOT / "docs" / "results" / "consolidation-synthetic.csv")
+    assert sorted(df["seed"].unique()) == list(range(1, 9)) and set(df["layout"]) == {"spread", "clustered"}
+    assert (df[df["method"] != "rule"]["violations_total"] == 0).all()  # no optimizer variant breaks a hard limit
+    verdict = switch_decision(df)["enable"]
+    cfg = cost_config()
+    assert cfg["consolidation"]["enabled"] == verdict and cfg["return_loads"]["enabled"] == verdict

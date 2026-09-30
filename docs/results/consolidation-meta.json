@@ -1,0 +1,110 @@
+{
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "days": "every 2nd of V3-0's 10 per dataset",
+  "layouts": [
+    "spread",
+    "clustered"
+  ],
+  "densities": {
+    "sparse": [
+      6,
+      8,
+      null
+    ],
+    "medium": [
+      20,
+      18,
+      null
+    ],
+    "dense_tight": [
+      60,
+      null,
+      0.7
+    ]
+  },
+  "methods": [
+    "rule",
+    "optimizer",
+    "optimizer+returns",
+    "optimizer_shared",
+    "optimizer_shared+returns"
+  ],
+  "config": {
+    "transport": {
+      "rate_per_km_ton": 12.0,
+      "vehicle": {
+        "base_rate_per_km": 18.0,
+        "rate_per_km_per_capacity_ton": 4.0,
+        "count_return_leg": true,
+        "sizes_tons": [
+          2.5,
+          5.0,
+          9.0,
+          10.0,
+          16.0
+        ]
+      }
+    },
+    "spoilage": {
+      "base_pct_per_hour": 0.4,
+      "reference_temp_c": 30.0,
+      "q10": 2.0,
+      "default_temp_c": 30.0,
+      "crop_sensitivity": {
+        "Tomato": 1.0
+      }
+    },
+    "search": {
+      "radius_km": 300,
+      "max_candidates": 12
+    },
+    "recommender": {
+      "default": "optimizer"
+    },
+    "constraints": {
+      "max_spoilage_pct": 8.0,
+      "mandi_extra_share": 0.25
+    },
+    "optimizer": {
+      "objective": "p50",
+      "deterministic_time_limit": 10.0,
+      "time_limit_s": 30.0,
+      "max_mandis_per_lot": 12,
+      "workers": 1
+    },
+    "consolidation": {
+      "enabled": false,
+      "max_lots_per_load": 4,
+      "neighbours": 6,
+      "cluster_radius_km": 20.0,
+      "loading_minutes_per_stop": 20,
+      "mandis_per_load": 4,
+      "vehicles_per_load": 5,
+      "max_driver_hours": 12.0
+    },
+    "return_loads": {
+      "enabled": false
+    }
+  },
+  "switch": {
+    "mean_net_v30": 1505176.375,
+    "mean_net_v31": 1948196.8083333333,
+    "violations_v30": 0,
+    "violations_v31": 0,
+    "net_ok": true,
+    "violations_ok": true,
+    "enable": true
+  },
+  "distances": "approximate (straight-line x road factor)",
+  "scored_at": "realised price (h=1)",
+  "data_provenance": "synthetic"
+}

@@ -254,5 +254,11 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   in studies score at REALISED prices. `[recommender] default` must equal `decision_study.switch_decision()` on the
   committed CSV (test pins it); re-run the study before changing costs, limits or the default. Mandi overload is a
   violation, never a modelled price drop (that would favour the optimizer by construction).
+- Loads (V3-1): shared loads `decisions.loads.optimize_loads`, return loads `decisions.returns.add_return_loads`; the
+  evaluator scores a truck's WHOLE day (multi-stop, 2nd trip, per-lot spoilage clock) and must equal V3-0 for one lot
+  per truck. CP-SAT ONLY via `optimizer.make_solver` (deterministic work limit, 1 worker: wall-clock limits made
+  results load-dependent). Proposals (`load_proposals`) are accepted only through `decisions.proposals.accept`, which
+  reuses `routers.lots.make_shipment` / `routers.trips.make_trip`. `[consolidation]`/`[return_loads] enabled` must
+  equal `consolidation_study.switch_decision()` on the committed CSV (test pins it).
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

@@ -60,7 +60,8 @@ workers = 1                     # 1 = reproducible; more workers on a 2-core mac
 [consolidation]
 # Pre-registered switch (docs/optimizer-results.md, V3-1): turned on for users only if, scored at realised prices on
 # the V3-1 study, it earns at least what the V3-0 optimizer earns and adds no violations.
-enabled = false
+# V3-1 result (SYNTHETIC): met (mean net 19.48 L vs 15.05 L, violations 0 vs 0). tests/test_loads.py pins this.
+enabled = true
 max_lots_per_load = 4           # lots sharing one truck (pickup order is optimised exactly: at most 4! orders)
 neighbours = 6                  # each lot is grouped only with its 6 nearest pickups ...
 cluster_radius_km = 20.0        # ... within this road distance (keeps the V1 single-pickup-point trip honest, backlog 9)
@@ -70,4 +71,4 @@ vehicles_per_load = 5           # nearest trucks that fit, per shared load
 max_driver_hours = 12.0         # whole day incl. the drive home; applies to what V3-1 ADDS (shared loads, return trips)
 
 [return_loads]
-enabled = false                 # same pre-registered switch as [consolidation]
+enabled = true                  # same pre-registered switch as [consolidation] (met)

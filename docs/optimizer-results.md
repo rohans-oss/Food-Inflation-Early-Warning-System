@@ -1,76 +1,80 @@
-# Optimizer vs the V1 rule (V3-0)
+# Decisions: optimizer vs the V1 rule (V3-0) and shared / return loads (V3-1)
 
 > **SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT.** Prices come from V2-0's 8 synthetic datasets. The lots and
 > trucks are simulated. Distances are approximate: straight-line distance × 1.3 at 40 km/h, because OSRM is not
-> running in the study environment. `data_provenance = "synthetic"` for every row of
-> `docs/results/optimizer-synthetic.csv`.
-
-> **Update, 2026-09-30 (re-run in progress).** The optimizer now stops on a deterministic work limit, not
-> wall-clock seconds (`[optimizer] deterministic_time_limit`, 1 worker). With the old 10-second wall-clock limit, the
-> dense results depended on how busy the machine was. The re-run with the new setting is in
-> `docs/results/optimizer-synthetic.csv`:
-> - **Verdict unchanged: the optimizer stays the default.**
-> - Mean realised net value is ₹16,20,608 for the optimizer vs ₹16,17,042 for the rule (+0.2%; was +0.07%).
-> - Violations are still 0 vs 140.
-> - Dense solves that stopped at the limit: 19/80 (p50) and 10/80 (p10), down from 43 and 37.
->
-> The tables below are still from the wall-clock run. They will be regenerated with the V3-1 section.
+> running in the study environment. Every row of `docs/results/optimizer-synthetic.csv` and
+> `consolidation-synthetic.csv` has `data_provenance = "synthetic"`.
 
 ## Real data (rule 23)
 
 | Module | Real data today | Status |
 |---|---|---|
-| Decisions (which mandi, which truck) | 0 real lots with a known sale outcome, 0 real multi-lot batches | **Not yet evaluable on real data.** Scoring a decision needs the price at the mandi it was sent to *and* at the mandis it wasn't sent to, on the sale day. That needs real Agmarknet history (started 2026-09-25) and real lots from the field pilot. |
+| Decisions (which mandi, which truck, shared loads, return loads) | 0 real lots with a known sale outcome; 0 real multi-lot batches; 0 real return trips | **Not yet evaluable on real data.** Scoring a decision needs the realised price at the mandi chosen *and* at the ones not chosen. That needs real Agmarknet history (started 2026-09-25) and real lots and trips from the field pilot. |
 | Forecasts the optimizer uses | Real prices for about 5 days | Display-model forecasts are `real_partial` at best; calibration is `not_yet_applicable` (B-1). |
 | Mandi room (typical arrivals) | Real arrivals are starting to accumulate | Uses real arrivals when there are ≥ 5 days in the last 28, otherwise synthetic (labelled). |
+| Distances and trips for return loads | Real (OSRM when configured; the V1 trips table) | The mechanics run on real data; their value is unproven until the field pilot. |
 
 ## Summary
 
-- **The pre-registered switch rule is met, so the optimizer is now the default** (`[recommender] default =
-  "optimizer"`). The rule was written before the study ran: at least the rule's mean realised net value, and fewer
-  constraint violations.
-  - **Money: effectively a tie.** Mean realised net value per decision day is ₹16,18,201 for the optimizer vs
-    ₹16,17,042 for the rule, a difference of **+0.07%**.
-  - **Violations: 0 vs 140.** The rule sent more tonnes to a mandi than it can absorb in 94% of the dense batches
-    and 59% of the medium ones.
-  - So the case for switching is the constraint violations, not the money.
-- **The dependable gain is truck assignment, not mandi choice.** Keeping V1's mandis but choosing trucks
-  optimally beats the rule on 80/80 medium days and 75/80 dense days (+2.0% to +2.1% net value). It cuts truck
-  kilometres by 6–17%.
-  - The full optimizer cuts transport cost by 22–34% and spoilage loss by 19–40%.
-  - In dense batches, part of that saving is given back because it refuses to overload mandis.
-- **Where it helps and where it doesn't:**
-  - **Sparse batches (few lots, spare trucks):** +1.7% on average, but the per-dataset range is −2.3% to +7.5%.
-    With little competition for trucks or mandis, V1's rule plus a sensible dispatcher is nearly as good.
-  - **Medium batches:** the clearest win. +2.3% mean net value, better on 64/80 days, with 26% less transport cost
-    and zero violations.
-  - **Dense, capacity-tight batches:** **the optimizer earns less than the rule (−1.3% mean; lower in 5 of 8
-    datasets).** It keeps each mandi within its room, while the rule floods the best-priced mandis (46 t over, on
-    average). **The scoring does not charge for flooding**: modelling that price drop would have favoured the
-    optimizer by construction. If flooding a mandi really depresses its price, which is likely but not modelled
-    here, the rule's dense-batch advantage is overstated.
-- **Risk-averse variant (plans on p10):** slightly lower realised value than the p50 optimizer (−0.4% to −1.1%),
-  with the lowest transport cost. It is available as `objective = "p10"` and is not the default.
-- **Solve time:** every sparse and medium solve is proven OPTIMAL. The median is 0.02 s (sparse) and 0.35 s
-  (medium); the slowest medium solve took 5.8 s.
-  - Dense batches (60 lots, about 25 trucks, 18 mandis) often hit the 10-second limit: 43 of 80 (p50) and 37 of 80
-    (p10) returned FEASIBLE rather than proven OPTIMAL. Their numbers are what a 10-second budget buys, not the
-    true optimum.
-- **None of this comes from better forecasting.** Every method used the same calibrated V1 forecast, which V2
-  found is no better than naive. The optimizer's value is in respecting capacity and mandi room and in choosing
-  the right trucks.
+**V3-0: the optimizer is the default recommender.**
+- The pre-registered switch rule was met. It required at least the rule's mean realised net value and fewer
+  violations.
+- **Money: effectively a tie.** Mean realised net value per decision day is ₹16,20,608 for the optimizer vs
+  ₹16,17,042 for the rule (+0.2%).
+- **Violations: 0 vs 140.** The rule overfilled a mandi on 94% of dense days and 59% of medium days.
+- **The dependable gain is truck assignment.** V1's mandis with optimal trucks beat the rule on 80/80 medium and
+  75/80 dense days. The full optimizer cuts transport cost by 22–34%.
+- **In dense batches the optimizer earns 1.1% less than the rule** (lower in 5 of 8 datasets). It refuses to
+  overfill mandis, and the scoring does not charge for overfilling (see honest reading).
 
-## Setup
+**V3-1: shared truckloads and return loads are switched on.**
+- The pre-registered rule was met. It required at least V3-0's mean realised net value and no more violations.
+- **Shared + return loads beat V3-0 on 204 of 240 days, tie on 34, and are worse on 2.** Violations stay at 0.
+- By batch, versus V3-0:
+  - **Sparse:** +2.4% (lots spread out) and +5.0% (clustered).
+  - **Medium:** +7.9% and +13.0%.
+  - **Dense:** +47% and +38%.
+- **Most of the dense gain is shipping more lots with the same trucks,** 53 of 60 instead of 27. **A lot left
+  unshipped counts as ₹0 in this scoring,** which overstates the gain: in reality it would be sold locally or the
+  next day.
+- **Per tonne actually shipped, the gain is modest and robust.** Shared loads cut transport cost per tonne by
+  11–18% and raise net value per tonne by 1–3%.
+- **Sharing helps most when lots are clustered and trucks are scarce.** With few, spread-out lots it barely matters:
+  only 14 of 40 sparse, spread days improve.
+- **Return loads mostly matter when trucks are short.** On their own they add about 2 return trips per medium day and
+  14–20 per dense day, but almost none in sparse batches.
+
+**Neither version forecasts better.** Every method uses the same calibrated V1 forecast, which V2 found is no better
+than naive. All of these gains come from constraint handling, truck assignment and routing.
+
+## Reproducibility (fixed during V3-1)
+
+The first V3-0 run stopped CP-SAT after 10 wall-clock seconds with 8 workers on a 2-core machine. Dense results
+therefore depended on how busy the machine was: re-solving one dense batch while another job was running gave a plan
+worth ₹5.6 L instead of ₹10.4 L.
+
+The solver now stops on a **deterministic work limit** (`deterministic_time_limit = 10`) with 1 worker, so a batch
+gets the same plan on any machine at any load. The API keeps a 30-second wall-clock cap as a safety net. V3-0 was
+re-run with this setting:
+- Sparse and medium results are identical.
+- Dense changed slightly: −1.3% → −1.1% vs the rule.
+- The verdict is unchanged.
+
+The tables below are from the re-run.
+
+## Setup (both studies)
 
 | | |
 |---|---|
 | Datasets | V2-0's 8 synthetic datasets (seeds 1–8), 18 mandis. |
-| Forecast | V1 LightGBM (the display model), B-1 track-record calibration, 1-week horizon (what `/recommend/best-mandi` uses). V2-0's final 8 folds; the walk-forward is extended back 13 folds only to build the calibration track record. |
-| Decision days | 10 per dataset, evenly spaced over the scored folds: 80 days. |
-| Batches | Seeded lots around 8 Karnataka tomato belts (median 3 t, 0.5–9 t); trucks of 2.5/5/9/10 t in 5 fleet towns. Sparse: 6 lots, 8 trucks. Medium: 20 lots, 18 trucks. Dense: 60 lots, trucks for about 70% of the tonnage. |
-| Scoring | Every plan is scored at the price **realised one week later** at the mandi it chose, not the forecast it planned on. One cost model is used for every method. |
-| Cost model (`config/recommender.toml`, assumptions) | Truck: ₹18/km + ₹4/km per tonne of capacity, return leg included. Spoilage: V1 formula (0.4%/h at 30 °C, Q10 = 2). |
-| Hard limits (optimizer) | Truck capacity; spoilage ≤ 8% per lot; tonnes into a mandi ≤ 25% of its typical daily arrivals (median of the last 28 days). |
+| Forecast | V1 LightGBM (the display model), B-1 track-record calibration, 1-week horizon (what `/recommend/best-mandi` uses). V2-0's final 8 folds; the walk-forward is extended back 13 folds only to build the calibration track record. Cached in `data/cache/`. |
+| Decision days | V3-0: 10 per dataset (80 in all). V3-1: every second V3-0 day (40 in all, to fit the compute budget). |
+| Batches | Seeded lots around 8 Karnataka tomato belts (median 3 t, 0.5–9 t); trucks of 2.5/5/9/10 t in 5 fleet towns. Sparse: 6 lots, 8 trucks. Medium: 20 lots, 18 trucks. Dense: 60 lots, trucks for about 70% of the tonnage. V3-1 also has each batch **spread** over 8 belts or **clustered** in 2. |
+| Scoring | Every plan is scored at the price **realised one week later** at the mandi it chose, with one cost model for every method (`agripulse_api.decisions.evaluate`). A truck's cost is its whole day's route. Each lot's spoilage runs from its own pickup to its mandi. |
+| Cost model (`config/recommender.toml`, assumptions) | Truck: ₹18/km + ₹4/km per tonne of capacity, drive home included. Spoilage: V1 formula (0.4%/h at 30 °C, Q10 = 2), plus 20 minutes per extra pickup stop. |
+| Hard limits | Truck capacity; spoilage ≤ 8% per lot; tonnes into a mandi ≤ 25% of its typical daily arrivals, minus trucks already on the way in live use. V3-1 adds a 12-hour driver day, applied to shared loads and return trips. |
+
+## V3-0: the V1 rule vs the optimizer
 
 **Methods**
 - **V1 rule (old):** each lot goes to its own top-ranked mandi, exactly as `/recommend/best-mandi` ranks it. The
@@ -83,86 +87,190 @@
 - **Optimizer:** CP-SAT over all lots, mandis and trucks together, maximising p50 net value under the hard limits.
 - **Optimizer, risk-averse:** the same, planning on p10.
 
-## Results
-
 All money is in lakh (L) rupees per decision day. "Violations" counts lots over the spoilage limit plus mandis
 filled beyond their room.
 
 **Sparse: 6 lots, 8 trucks** (80 decision days: 8 datasets x 10 days)
 
-| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | max solve |
+| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | stopped at work limit |
 |---|---|---|---|---|---|---|---|---|---|---|
-| V1 rule (old) | ₹4.52 L | – | – | ₹1.19 L | ₹0.10 L | 2,772 | 5.8 | 1 | 0.0 | 0.0 s |
-| V1 mandis + optimal trucks | ₹4.60 L | +1.8% | 68 / 80 | ₹1.07 L | ₹0.10 L | 2,609 | 5.7 | 1 | 0.0 | 0.0 s |
-| **Optimizer** | ₹4.59 L | +1.7% | 61 / 80 | ₹0.93 L | ₹0.08 L | 2,253 | 5.7 | 0 | 0.0 | 0.0 s |
-| Optimizer, risk-averse (p10) | ₹4.57 L | +1.1% | 56 / 80 | ₹0.89 L | ₹0.08 L | 2,154 | 5.6 | 0 | 0.0 | 0.0 s |
+| V1 rule (old) | ₹4.52 L | – | – | ₹1.19 L | ₹0.10 L | 2,772 | 5.8 | 1 | 0.0 | – |
+| V1 mandis + optimal trucks | ₹4.60 L | +1.8% | 68 / 80 | ₹1.07 L | ₹0.10 L | 2,609 | 5.7 | 1 | 0.0 | 0 / 80 |
+| **Optimizer** | ₹4.59 L | +1.7% | 61 / 80 | ₹0.93 L | ₹0.08 L | 2,253 | 5.7 | 0 | 0.0 | 0 / 80 |
+| Optimizer, risk-averse (p10) | ₹4.57 L | +1.1% | 56 / 80 | ₹0.89 L | ₹0.08 L | 2,154 | 5.6 | 0 | 0.0 | 0 / 80 |
 
 Optimizer vs V1 rule, mean realised net value per dataset: 1: +1.1%, 2: +2.7%, 3: +5.6%, 4: +7.5%, 5: -1.0%, 6: -2.3%, 7: +4.6%, 8: -1.5%
 
 **Medium: 20 lots, 18 trucks** (80 decision days: 8 datasets x 10 days)
 
-| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | max solve |
+| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | stopped at work limit |
 |---|---|---|---|---|---|---|---|---|---|---|
-| V1 rule (old) | ₹14.72 L | – | – | ₹3.41 L | ₹0.33 L | 8,495 | 17.3 | 49 | 9.6 | 0.0 s |
-| V1 mandis + optimal trucks | ₹15.01 L | +2.0% | 80 / 80 | ₹3.05 L | ₹0.32 L | 7,680 | 17.1 | 45 | 9.5 | 0.0 s |
-| **Optimizer** | ₹15.06 L | +2.3% | 64 / 80 | ₹2.52 L | ₹0.24 L | 6,306 | 17.2 | 0 | 0.0 | 2.0 s |
-| Optimizer, risk-averse (p10) | ₹15.00 L | +1.9% | 62 / 80 | ₹2.37 L | ₹0.23 L | 5,928 | 17.0 | 0 | 0.0 | 5.8 s |
+| V1 rule (old) | ₹14.72 L | – | – | ₹3.41 L | ₹0.33 L | 8,495 | 17.3 | 49 | 9.6 | – |
+| V1 mandis + optimal trucks | ₹15.01 L | +2.0% | 80 / 80 | ₹3.05 L | ₹0.32 L | 7,680 | 17.1 | 45 | 9.5 | 0 / 80 |
+| **Optimizer** | ₹15.06 L | +2.3% | 64 / 80 | ₹2.52 L | ₹0.24 L | 6,306 | 17.2 | 0 | 0.0 | 0 / 80 |
+| Optimizer, risk-averse (p10) | ₹15.00 L | +1.9% | 62 / 80 | ₹2.37 L | ₹0.23 L | 5,928 | 17.0 | 0 | 0.0 | 0 / 80 |
 
 Optimizer vs V1 rule, mean realised net value per dataset: 1: +2.3%, 2: +3.8%, 3: +4.3%, 4: +5.6%, 5: +1.0%, 6: -1.1%, 7: +1.4%, 8: +1.9%
 
 **Dense: 60 lots, trucks for ~70% of the tonnes** (80 decision days: 8 datasets x 10 days)
 
-| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | max solve |
+| method | realised net value (mean) | vs V1 rule | days it beats the rule | transport | spoilage loss | truck km | lots shipped | violations (total) | t over mandi room (mean) | stopped at work limit |
 |---|---|---|---|---|---|---|---|---|---|---|
-| V1 rule (old) | ₹29.28 L | – | – | ₹5.23 L | ₹0.60 L | 13,039 | 27.3 | 90 | 46.5 | 0.0 s |
-| V1 mandis + optimal trucks | ₹29.88 L | +2.1% | 75 / 80 | ₹4.39 L | ₹0.56 L | 10,880 | 27.3 | 89 | 48.0 | 0.1 s |
-| **Optimizer** | ₹28.89 L | -1.3% | 48 / 80 | ₹3.44 L | ₹0.36 L | 8,444 | 27.3 | 0 | 0.0 | 10.6 s |
-| Optimizer, risk-averse (p10) | ₹28.56 L | -2.4% | 50 / 80 | ₹3.30 L | ₹0.35 L | 8,103 | 27.3 | 0 | 0.0 | 10.5 s |
+| V1 rule (old) | ₹29.28 L | – | – | ₹5.23 L | ₹0.60 L | 13,039 | 27.3 | 90 | 46.5 | – |
+| V1 mandis + optimal trucks | ₹29.88 L | +2.1% | 75 / 80 | ₹4.39 L | ₹0.56 L | 10,880 | 27.3 | 89 | 48.0 | 0 / 80 |
+| **Optimizer** | ₹28.96 L | -1.1% | 49 / 80 | ₹3.44 L | ₹0.36 L | 8,420 | 27.3 | 0 | 0.0 | 19 / 80 |
+| Optimizer, risk-averse (p10) | ₹28.81 L | -1.6% | 50 / 80 | ₹3.23 L | ₹0.34 L | 7,907 | 27.3 | 0 | 0.0 | 10 / 80 |
 
-Optimizer vs V1 rule, mean realised net value per dataset: 1: -1.3%, 2: -3.3%, 3: +1.4%, 4: +2.1%, 5: -2.7%, 6: -0.3%, 7: +0.2%, 8: -4.3%
+Optimizer vs V1 rule, mean realised net value per dataset: 1: -0.8%, 2: -3.1%, 3: +1.4%, 4: +2.4%, 5: -2.7%, 6: -0.3%, 7: +0.5%, 8: -3.7%
 
-**Planned vs realised.** Every method realised 4–5% less than it planned at the forecast p50. The same optimism
-applies to all methods, so it doesn't change the comparison. It matches B-1's finding that the p50 is slightly
-above the outcome (median bias −0.1% to −2.4%).
+**Readings**
+- The optimizer is a better **dispatcher**: the same tonnes shipped for 22–34% less transport cost.
+- The risk-averse variant earns 0.4–0.6% less than the p50 optimizer, with the lowest transport cost.
+- The spoilage limit never bound, because no Karnataka trip here comes close to 8%.
+- Every method realised 3–4% less than it planned, which fits B-1's finding that the p50 sits slightly above the
+  outcome.
+- Solve times: sparse and medium are always proven optimal. The slowest medium solve took 4 s. Dense solves take a
+  median of 7.5 s; 19 of 80 (p50) stopped at the work limit.
 
-**The spoilage limit never bound.** 8% expected loss is about 20 hours at 30 °C, and no Karnataka trip here comes
-close, so that limit made no difference. A tighter limit would matter only with evidence that tomato quality falls
-faster. It is left unchanged, because tuning it after seeing results would break the pre-registration.
+## V3-1: shared truckloads and return loads
 
-## Honest reading
+**Methods** (identical batches; V3-1 adds the spread / clustered layouts):
+- **V1 rule** and **V3-0 optimizer**: as above.
+- **Shared loads** (`decisions/loads.py`):
+  - Candidates are each lot alone, plus groups of up to 4 lots drawn from each lot's 6 nearest pickups within
+    20 km that fit on some truck.
+  - The pickup order is exact: all orders are checked (at most 4! = 24).
+  - CP-SAT picks (load, truck, mandi). Lots travelling alone keep all of V3-0's options, so any V3-0 plan remains
+    possible and sharing is chosen only when it plans better.
+- **Return loads** (`decisions/returns.py`):
+  - After its first delivery, each truck may take one lot that is still waiting: first mandi → that lot → a second
+    mandi → home.
+  - It must pay for the extra kilometres, fit the 12-hour day and the spoilage cap, and fit the second mandi's
+    remaining room.
+- **Shared + return loads:** both together, which is what users get.
 
-1. The optimizer is a better **dispatcher**: same tonnes shipped, 22–34% less transport cost. It is not a better
-   price picker, because every method used the same forecast, and V2 showed that forecast is not better than
-   naive.
-2. The mandi-room limit is the optimizer's main cost in dense batches. Whether it is worth that depends on how
-   much a flooded mandi's price actually falls. That is **not measured anywhere in this project yet**. It is the
-   most important thing to learn from real arrivals and prices (backlog 23).
-3. On money alone the two methods tie. The switch is justified by zero violations at no average cost, not by a
-   money gain.
+**Pre-registered switch:** shared + return loads must earn ≥ the V3-0 optimizer on mean realised net value, with no
+more violations. Result: ₹19.48 L vs ₹15.05 L mean net value, and 0 vs 0 violations. **Met, so both are switched
+on.**
+
+"vs V3-0" and "days better" compare with the V3-0 optimizer on the same batch.
+
+**Sparse: 6 lots, 8 trucks**
+
+| layout | method | realised net value | vs V3-0 | days better than V3-0 | lots shipped | trucks | shared loads | return trips | transport | empty km | violations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| spread | V1 rule (old) | ₹4.02 L | – | – | 5.7 / 6 | 5.7 | 0.0 | 0.0 | ₹1.10 L | 1,813 | 0 |
+|  | V3-0 optimizer (1 lot/truck) | ₹4.11 L | – | – | 5.7 / 6 | 5.7 | 0.0 | 0.0 | ₹0.86 L | 1,437 | 0 |
+|  | V3-0 + return loads | ₹4.13 L | +0.6% | 3 / 40 | 5.7 / 6 | 5.7 | 0.0 | 0.1 | ₹0.86 L | 1,440 | 0 |
+|  | Shared loads | ₹4.20 L | +2.1% | 14 / 40 | 5.7 / 6 | 5.2 | 0.4 | 0.0 | ₹0.82 L | 1,364 | 0 |
+|  | **Shared + return loads** | ₹4.21 L | +2.4% | 16 / 40 | 5.8 / 6 | 5.2 | 0.4 | 0.1 | ₹0.82 L | 1,366 | 0 |
+| clustered | V1 rule (old) | ₹3.82 L | – | – | 5.8 / 6 | 5.8 | 0.0 | 0.0 | ₹1.24 L | 2,021 | 0 |
+|  | V3-0 optimizer (1 lot/truck) | ₹3.95 L | – | – | 5.7 / 6 | 5.7 | 0.0 | 0.0 | ₹0.97 L | 1,591 | 0 |
+|  | V3-0 + return loads | ₹4.02 L | +1.8% | 5 / 40 | 5.8 / 6 | 5.7 | 0.0 | 0.1 | ₹0.97 L | 1,598 | 0 |
+|  | Shared loads | ₹4.08 L | +3.2% | 26 / 40 | 5.7 / 6 | 4.8 | 0.8 | 0.0 | ₹0.83 L | 1,288 | 0 |
+|  | **Shared + return loads** | ₹4.15 L | +5.0% | 28 / 40 | 5.8 / 6 | 4.8 | 0.8 | 0.1 | ₹0.84 L | 1,293 | 0 |
+
+**Medium: 20 lots, 18 trucks**
+
+| layout | method | realised net value | vs V3-0 | days better than V3-0 | lots shipped | trucks | shared loads | return trips | transport | empty km | violations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| spread | V1 rule (old) | ₹13.54 L | – | – | 17.3 / 20 | 17.3 | 0.0 | 0.0 | ₹3.27 L | 5,708 | 18 |
+|  | V3-0 optimizer (1 lot/truck) | ₹13.93 L | – | – | 17.1 / 20 | 17.1 | 0.0 | 0.0 | ₹2.43 L | 4,251 | 0 |
+|  | V3-0 + return loads | ₹14.62 L | +4.9% | 38 / 40 | 18.9 / 20 | 17.1 | 0.0 | 1.8 | ₹2.56 L | 4,406 | 0 |
+|  | Shared loads | ₹14.67 L | +5.3% | 38 / 40 | 18.6 / 20 | 15.3 | 2.8 | 0.0 | ₹2.25 L | 3,752 | 0 |
+|  | **Shared + return loads** | ₹15.03 L | +7.9% | 40 / 40 | 19.2 / 20 | 15.3 | 2.8 | 0.6 | ₹2.29 L | 3,803 | 0 |
+| clustered | V1 rule (old) | ₹12.90 L | – | – | 17.6 / 20 | 17.6 | 0.0 | 0.0 | ₹3.76 L | 6,770 | 26 |
+|  | V3-0 optimizer (1 lot/truck) | ₹13.26 L | – | – | 16.9 / 20 | 16.9 | 0.0 | 0.0 | ₹2.76 L | 4,903 | 0 |
+|  | V3-0 + return loads | ₹14.20 L | +7.1% | 38 / 40 | 19.2 / 20 | 16.9 | 0.0 | 2.3 | ₹2.89 L | 5,069 | 0 |
+|  | Shared loads | ₹14.59 L | +10.0% | 38 / 40 | 19.0 / 20 | 13.4 | 4.1 | 0.0 | ₹2.21 L | 3,579 | 0 |
+|  | **Shared + return loads** | ₹14.99 L | +13.0% | 40 / 40 | 19.6 / 20 | 13.4 | 4.1 | 0.6 | ₹2.25 L | 3,620 | 0 |
+
+**Dense: 60 lots, trucks for ~70% of the tonnes**
+
+| layout | method | realised net value | vs V3-0 | days better than V3-0 | lots shipped | trucks | shared loads | return trips | transport | empty km | violations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| spread | V1 rule (old) | ₹28.49 L | – | – | 26.9 / 60 | 26.9 | 0.0 | 0.0 | ₹4.85 L | 8,347 | 45 |
+|  | V3-0 optimizer (1 lot/truck) | ₹28.43 L | – | – | 26.9 / 60 | 26.9 | 0.0 | 0.0 | ₹3.21 L | 5,324 | 0 |
+|  | V3-0 + return loads | ₹39.60 L | +39.3% | 40 / 40 | 46.5 / 60 | 26.9 | 0.0 | 19.6 | ₹4.40 L | 6,903 | 0 |
+|  | Shared loads | ₹32.74 L | +15.2% | 40 / 40 | 39.8 / 60 | 26.9 | 9.8 | 0.0 | ₹3.15 L | 5,242 | 0 |
+|  | **Shared + return loads** | ₹41.79 L | +47.0% | 40 / 40 | 53.1 / 60 | 26.9 | 9.8 | 13.4 | ₹3.96 L | 6,244 | 0 |
+| clustered | V1 rule (old) | ₹27.08 L | – | – | 27.0 / 60 | 27.0 | 0.0 | 0.0 | ₹5.84 L | 10,549 | 48 |
+|  | V3-0 optimizer (1 lot/truck) | ₹26.63 L | – | – | 26.7 / 60 | 26.7 | 0.0 | 0.0 | ₹4.48 L | 7,822 | 0 |
+|  | V3-0 + return loads | ₹33.89 L | +27.3% | 40 / 40 | 40.6 / 60 | 26.7 | 0.0 | 13.8 | ₹5.24 L | 8,874 | 0 |
+|  | Shared loads | ₹30.60 L | +14.9% | 40 / 40 | 40.2 / 60 | 26.6 | 10.1 | 0.0 | ₹4.53 L | 7,742 | 0 |
+|  | **Shared + return loads** | ₹36.73 L | +38.0% | 40 / 40 | 49.8 / 60 | 26.6 | 10.1 | 9.6 | ₹5.08 L | 8,452 | 0 |
+
+**Per tonne actually shipped** (so lots left at the farm don't count as ₹0):
+
+| method | net value per tonne shipped (sparse / medium / dense) | transport per tonne (sparse / medium / dense) | tonnes shipped (sparse / medium / dense) |
+|---|---|---|---|
+| V1 rule | ₹20,155 / 20,852 / 22,404 | ₹6,381 / 5,676 / 4,343 | 19 / 63 / 124 |
+| V3-0 optimizer | ₹20,980 / 21,668 / 22,392 | ₹4,942 / 4,213 / 3,151 | 19 / 62 / 123 |
+| V3-0 + return loads | ₹20,975 / 21,617 / 21,592 | ₹4,899 / 4,161 / 2,888 | 19 / 66 / 171 |
+| Shared loads | ₹21,507 / 22,386 / 22,598 | ₹4,415 / 3,474 / 2,759 | 19 / 65 / 140 |
+| **Shared + return loads** | ₹21,497 / 22,352 / 21,861 | ₹4,393 / 3,430 / 2,550 | 19 / 67 / 180 |
+
+**Readings**
+1. **Where it helps.** Sharing pays when lots are clustered: 4 shared loads per medium day, and 13 trucks instead of
+   17. Return loads pay when trucks are scarce: 10–20 extra lots moved per dense day. When lots are few and spread
+   out, both barely matter: +2.4%, and only 14 of 40 days improve.
+2. **Discount the dense headline.** Most of the +38% to +47% is moving about twice as many lots with the same trucks.
+   It is scored as though a lot left at the farm earns nothing, when really it would be sold locally or later at
+   some price. The per-tonne rows are the robust part: shared loads cut transport cost per tonne by 11–18% and raise
+   net value per tonne by 1–3%.
+3. **Return loads raise the total but lower value per tonne** (dense: ₹21,861/t vs ₹22,598/t for shared loads
+   alone). The extra lots are the ones the plan couldn't place well, carried on the way home. They are still worth
+   it, and none break a limit.
+4. **Rarely worse.** On 2 of 240 days, shared + return loads realised less than V3-0: it planned better, but the
+   realised prices moved against it. It is never worse on its own planning objective (`tests/test_loads.py`).
+5. **Assumptions that matter most here:**
+   - A same-day second sale at the realised price. Late arrivals may get worse prices.
+   - 20 minutes per extra pickup.
+   - A 12-hour driver day.
+   - Pickups within 20 km. Trips still track one pickup point, so wider groups would make geofences wrong
+     (backlog 9).
 
 ## Product
 
-- `/recommend/best-mandi` (farmer) now goes through the optimizer. It uses the same ranking data, the truck cost
-  model (the smallest standard truck that fits, hired at the farm, paid both ways), and the two hard limits.
-- Mandi room subtracts the tonnes **already on the road** to that mandi, from V1 tracking. Options that break a
-  limit are listed last with the reason. V1's formula is still used when `default = "rule"`.
-- **Admin → "Recommenders: V1 rule vs optimizer":** runs both on a simulated batch against today's real mandis and
-  forecasts, and shows net value, transport, spoilage, lots shipped, violations and solve time. That view is scored
-  at the forecast (a planning view); only this study scores at realised prices.
+- **Farmer best-mandi (V3-0):**
+  - `/recommend/best-mandi` goes through the optimizer: the truck cost model, the two hard limits, and room net of
+    trucks already on the way. Options that break a limit are listed last, with the reason.
+  - `[recommender] default = "rule"` brings V1 back.
+- **Admin → "Recommenders: V1 rule vs optimizer" (V3-0):** both methods on a simulated batch against today's
+  forecasts. It warns when mandis have no arrivals history, since then no mandi-room limit can be applied.
+- **FPO → "Plan shared truckloads" (V3-1):**
+  - Proposes shared hired-truck loads for the FPO's own waiting lots: lots in pickup order, mandi, truck size, and
+    the saving vs one truck per lot.
+  - **Accept** creates one shipment per load through the normal checked path. The pickup order and proposal id go
+    into the audit log.
+  - If a lot changed after the proposal was made, accept fails and the proposal is marked **stale**.
+- **Fleet owner → "Return loads" (V3-1):**
+  - For this fleet's trucks that reached their mandi today: shipments already booked with **this** fleet that have
+    no trip yet.
+  - Shows empty km saved and the driver's day. **Accept** assigns the same truck and driver (audited).
+  - A truck's home is taken as its delivering trip's start, because vehicles have no stored base.
+- Proposals live in `load_proposals` (migration 0011): proposed / accepted / rejected / stale, with who decided and
+  why. They are tenant-scoped; another org's proposal returns 404.
+- Switches: `[consolidation] enabled`, `[return_loads] enabled` in `config/recommender.toml`. Tests pin them to the
+  study's verdict.
 
 ## Reproduce
 
 ```
-python -m agripulse_ml.decision_study      # ~40 min: docs/results/optimizer-synthetic.csv, optimizer-meta.json
-pytest tests/test_decisions.py             # includes: config default == the pre-registered verdict on the CSV
+python -m agripulse_ml.decision_study         # V3-0, ~45 min first time (forecasts then cached in data/cache/)
+python -m agripulse_ml.consolidation_study    # V3-1, ~50 min with cached forecasts
+pytest tests/test_decisions.py tests/test_loads.py
 ```
 
 ## Known issues
 
 - Mandi price impact of oversupply is not modelled; it is counted as a violation only (backlog 23).
-- Dense batches often hit the 10 s limit (43/80 FEASIBLE, not proven OPTIMAL). A longer limit or a warm start from
-  the rule's plan may help (backlog 24).
-- One lot per truck; consolidation is V3-1.
-- Distances are approximate in the study; production uses OSRM when `OSRM_URL` is set.
-- Truck rates, the spoilage limit and the mandi room share are assumptions; replace them with fleet quotes and
-  field data.
+- Unshipped lots count as ₹0, which overstates gains for plans that ship more (V3-1 dense). The per-tonne table is
+  the conservative view (backlog 26).
+- Dense V3-0 solves sometimes stop at the work limit (19/80), so those plans are good but not proven optimal
+  (backlog 24).
+- A shared load becomes one shipment, and its trip still uses a single weighted pickup point, so multi-stop
+  tracking and geofences are approximate (backlog 9).
+- Distances are approximate in the studies; production uses OSRM when `OSRM_URL` is set.
+- Truck rates, the spoilage cap, the mandi-room share, the loading time and the driver day are assumptions; replace
+  them with fleet quotes and field data.

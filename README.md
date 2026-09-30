@@ -430,6 +430,49 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - Admin page → "Recommenders" → pick "Dense" → Compare. The rule shows mandi-room violations; the optimizer shows 0,
   with lower transport cost.
 
+## V3-1: shared truckloads and return loads
+
+> SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT for every study number below.
+
+- **Shared loads** (`agripulse_api.decisions.loads`): up to 4 lots within 20 km share a truck, in the best pickup
+  order (every order is checked).
+  - Each lot's spoilage runs from its own pickup; there are 20 minutes of loading per extra stop and a 12-hour
+    driver day.
+  - Lots travelling alone keep all of V3-0's options, so sharing is only chosen when it plans better.
+- **Return loads** (`decisions.returns`): after its first delivery, a truck takes one waiting lot on the way home
+  instead of driving back empty.
+- **Solver:** now stops on a deterministic work limit with 1 worker, so a batch gets the same plan on any machine at
+  any load. V3-0 was re-run with this setting and its verdict is unchanged.
+- **Results** ([docs/optimizer-results.md](docs/optimizer-results.md)): versus V3-0 on the same 240 batches, better
+  on 204, worse on 2, with 0 violations.
+  - +2% to +13% in sparse and medium batches.
+  - Dense is +38% to +47%, but mostly from shipping twice the lots, with unshipped lots scored at ₹0. The honest
+    per-tonne effect is 11–18% lower transport cost and 1–3% more value.
+  - The pre-registered switch was met, so both features are **on**.
+- **Product:**
+  - FPO → "Plan shared truckloads". Accept creates one shipment per load.
+  - Fleet owner → "Return loads" for trucks that delivered today. Accept assigns the same truck and driver.
+  - Proposals are stored in `load_proposals` (migration 0011), audited, tenant-scoped, and marked stale if lots
+    changed.
+
+**How to verify**
+- `pytest tests/test_loads.py`: 12 tests.
+  - The pickup order is exact.
+  - Sharing is never worse than one lot per truck on its own objective.
+  - Per-lot spoilage clocks are correct, and a zero radius means no sharing.
+  - Return loads only take waiting lots, one per truck, within the day and the mandi room.
+  - FPO plan → accept creates the shipments; it can't be accepted twice, and a changed lot makes it stale.
+  - Tenancy and reject work.
+  - Fleet return load → accept creates the trip.
+  - **The switches equal the pre-registered verdict on the committed CSV.**
+- `python -m agripulse_ml.consolidation_study` (~50 min with cached forecasts) regenerates
+  `docs/results/consolidation-synthetic.csv`.
+- `alembic upgrade head` (0011).
+- By hand:
+  1. As the FPO, register a few lots near each other (farmer → new lot, choose the FPO).
+  2. Go to FPO → "Plan loads". The shared loads and the saving are shown.
+  3. Accept. The shipments appear.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

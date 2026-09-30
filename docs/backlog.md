@@ -15,7 +15,7 @@ Each item says where it came from and why it's deferred.
 | 6 | JWT in WebSocket query string | Tokens can land in proxy logs (Caddy redacts them; other proxies may not) | Move to a short-lived WS ticket from an authenticated POST |
 | 7 | Public OSM tile server | Its usage policy doesn't allow production traffic | Self-host tiles or use a provider before a pilot |
 | 8 | Festival flags are approximate calendar windows | Lunar-calendar festivals move ±2 weeks year to year | Replace with a dated festival table |
-| 9 | Multi-pickup trips use one tonnage-weighted point | ETA and geofence are wrong for spread-out FPO pickups | Multi-stop routing is V3 (OR-Tools) |
+| 9 | Multi-pickup trips use one tonnage-weighted point | ETA and geofence are wrong for spread-out FPO pickups | V3-1 optimises the pickup ORDER and keeps shared loads within 20 km, but trips still track one point: multi-stop geofences remain open |
 | 10 | Spike alert threshold (0.5) fires almost never | Spike recall ≈ 0 for every model on synthetic data | Choose the threshold from precision/recall on **real** data |
 | 11 | `ingest.run synthetic` generates up to *today* | Every day's demo database is a different random draw, so demo backtests change daily | Pin the end date like `eval/baseline.py` does, or label the draw date |
 | 12 | V1 LightGBM intervals under-cover | p10–p90 holds the price 59–73% of the time on the V2 folds (target 80%); the 120-day conformal window often doesn't resemble the next 28 days (docs/tft-results.md) | **Partly addressed by B-1** (docs/calibration-results.md): mean coverage now on target on the 8 datasets; see item 16 for what remains |
@@ -32,6 +32,8 @@ Each item says where it came from and why it's deferred.
 | 23 | Price impact of oversupply is not modelled | V3-0: the rule's dense-batch "advantage" comes from flooding mandis at no modelled cost; the mandi-room limit (25% of typical arrivals) is an assumption | Estimate price response to arrivals from REAL Agmarknet prices + arrivals; then either price it in the evaluator or re-set the room share from data |
 | 24 | Dense batches hit the CP-SAT time limit | 43/80 dense solves FEASIBLE, not proven OPTIMAL, at 10 s | Warm-start from the rule's plan (AddHint), longer limit for batch planning, or symmetry breaking on identical trucks |
 | 25 | Spoilage cap (8%) never binds in Karnataka | V3-0: no trip got close; the limit is inert | Set from measured tomato quality loss (field pilot) before relying on it |
+| 26 | Unshipped lots are scored at Rs 0 | V3-1: plans that ship more lots (dense batches) look better than they are; a lot left at the farm is really sold locally or later | Value unshipped lots at a local/next-day price (from real data) and re-run consolidation_study |
+| 27 | Same-day second sale for return loads | V3-1 assumes the second mandi pays the realised price late in the day | Check late-arrival prices at real mandis (trader data) before trusting return-load value |
 
 ## V3 (by design)
 
