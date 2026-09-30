@@ -323,3 +323,12 @@ def fleet_overview(db: Session = Depends(get_db), user: User = Depends(require("
             "bookings_to_assign": [{"shipment_id": s.id, "mandi": s.mandi.name, "tons": round(sum(lot.quantity_tons for lot in s.lots), 2),
                                     "booked_at": s.booked_at} for s in pending
                                    if not db.scalar(select(Trip.id).where(Trip.shipment_id == s.id, Trip.status.not_in(["declined", "cancelled"])))]}
+
+
+@router.get("/module-status")
+def module_status(db: Session = Depends(get_db), _=Depends(require("policy:read"))):
+    """V3-3 rule 23 (Policy + Admin): each module's data status - real / real_partial / synthetic /
+    not_yet_evaluable - with the evidence, per mandi where it applies."""
+    from ..module_status import compute
+
+    return compute(db)

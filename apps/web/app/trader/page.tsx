@@ -58,8 +58,13 @@ export default function Trader() {
           <Stat label={t("expectedToday")} value={tons(s.expected_today_tons_total)} sub={`incl. ${tons(s.confirmed_today_tons)} already weighed`} />
           <Stat label={t("typicalDay")} value={s.typical_daily_tons != null ? tons(s.typical_daily_tons) : "–"}
             sub={<span className="inline-flex items-center gap-1">median of last 28 days <ProvenanceBadge p={s.typical_provenance} compact /></span>} />
-          <Stat label="Expected vs normal" value={ratio != null ? `${num(ratio * 100, 0)}%` : "–"}
-            sub={ratio != null ? (ratio < 0.7 ? "well below normal: watch prices" : ratio > 1.3 ? "above normal" : "near normal") : "no arrival history yet"} />
+          {/* V3-3: zero TRACKED supply is not zero supply - don't turn "nothing tracked" into a price warning */}
+          {!s.trucks && !s.confirmed_today_tons ? (
+            <Stat label="Expected vs normal" value="–" sub="no tracked or weighed arrivals yet — not a supply signal" />
+          ) : (
+            <Stat label="Expected vs normal" value={ratio != null ? `${num(ratio * 100, 0)}%` : "–"}
+              sub={ratio != null ? `${ratio < 0.7 ? "below" : ratio > 1.3 ? "above" : "near"} normal (tracked + weighed only)` : "no arrival history yet"} />
+          )}
         </div>
       )}
       {s?.note && <Note>{s.note}</Note>}

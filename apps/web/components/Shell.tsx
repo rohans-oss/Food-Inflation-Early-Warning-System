@@ -57,14 +57,14 @@ export function Shell({ roles, title, children, wide = false }: { roles: Role[];
             </select>
             <AlertsBell token={session!.access_token} />
             <Link href="/account" className="text-sm text-ink2 hover:text-ink">Account</Link>
-            <button onClick={async () => { await logout(); router.replace("/login"); }} className="text-sm text-ink2 hover:text-ink">
+            <button onClick={async () => { await logout(); router.replace("/login"); }} className="hidden text-sm text-ink2 hover:text-ink sm:inline">
               {t("signOut")}
             </button>
             {/* B-3: self-service, for a lost phone or a password someone else may know. Second click confirms. */}
             <button
               onClick={async () => { if (!confirmAll) { setConfirmAll(true); setTimeout(() => setConfirmAll(false), 5000); return; }
                 await logoutAll(); router.replace("/login"); }}
-              className={`text-sm ${confirmAll ? "font-semibold text-critical" : "text-ink2 hover:text-ink"}`}
+              className={`hidden text-sm sm:inline ${confirmAll ? "font-semibold text-critical" : "text-ink2 hover:text-ink"}`}
             >
               {confirmAll ? t("signOutAllConfirm") : t("signOutAll")}
             </button>

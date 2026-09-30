@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { MandiForecast } from "@/components/MandiForecast";
 import { MapMarker, MapView } from "@/components/MapView";
+import { ModuleStatus } from "@/components/ModuleStatus";
 import { ScenarioSimulator } from "@/components/ScenarioSimulator";
 import { Shell } from "@/components/Shell";
 import { Card, ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstProvenance } from "@/components/ui";
@@ -86,6 +87,7 @@ export default function Policy() {
       </Card>
       {focus && <Card title={`${t("priceForecast")} · ${focus.mandi}`}><MandiForecast mandiId={focus.mandi_id} /></Card>}
       <ScenarioSimulator />
+      <ModuleStatus />
       {mandis.length > 0 && (
         <Card title={t("connectedMandis")}>
           <ConnectedMandis key={focus?.mandi_id ?? "all"} initial={focus?.mandi_id}

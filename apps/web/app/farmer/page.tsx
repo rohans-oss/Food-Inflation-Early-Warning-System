@@ -123,12 +123,12 @@ export default function Farmer() {
 
         <Card title={t("pricesNearby")} action={<ProvenanceBadge p={worstProvenance((prices.data ?? []).map((p) => p.data_provenance))} />}>
           <ErrorNote error={prices.error} />
-          <Table head={[t("mandi"), t("distance"), t("modalPrice"), t("range")]} empty="No mandi prices within 150 km yet.">
+          <Table head={[t("mandi"), t("modalPrice"), t("range")]} empty="No mandi prices within 150 km yet.">
             {prices.data?.slice(0, 10).map((p) => (
               <tr key={p.mandi.id} onClick={() => setMandi(p.mandi)}
                 className={`cursor-pointer hover:bg-page ${mandi?.id === p.mandi.id ? "bg-page" : ""}`}>
-                <Td>{p.mandi.name} {p.data_provenance !== "real" && <ProvenanceBadge p={p.data_provenance} compact />}</Td>
-                <Td>{num(p.distance_km, 0)} km</Td>
+                <Td>{p.mandi.name} {p.data_provenance !== "real" && <ProvenanceBadge p={p.data_provenance} compact />}
+                  <div className="text-xs text-muted">{num(p.distance_km, 0)} km</div></Td>
                 <Td><b>{inr(p.modal_price)}</b><span className="text-muted">/q</span></Td>
                 <Td className="text-ink2">{inr(p.min_price)}–{inr(p.max_price)} <span className="text-xs text-muted">{day(p.date)}</span></Td>
               </tr>

@@ -1,17 +1,27 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, ErrorNote, Table, Td, useAction, useApi } from "@/components/ui";
 import { api, Role, ROLE_HOME } from "@/lib/api";
 import { dateTime } from "@/lib/format";
+import { useSession } from "@/lib/session";
 
 /** V3-3 (backlog 19): where am I signed in, and sign out one device. Every role. */
 export default function Account() {
   const list = useApi<any[]>("/auth/sessions");
+  const { t, logout, logoutAll } = useSession();
+  const router = useRouter();
   const act = useAction();
   const out = (id: string) => act.run(async () => { await api(`/auth/sessions/${id}/revoke`, { method: "POST" }); list.reload(); });
   return (
     <Shell roles={Object.keys(ROLE_HOME) as Role[]} title="Account">
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={async () => { await logout(); router.replace("/login"); }}>{t("signOut")}</Button>
+        <Button variant="danger" onClick={async () => { if (window.confirm("Sign out on every phone and computer?")) { await logoutAll(); router.replace("/login"); } }}>
+          {t("signOutAll")}</Button>
+      </div>
       <Card title="Where you're signed in">
         <ErrorNote error={act.error ?? list.error} />
         <Table head={["Device", "Signed in", "Last active", ""]} empty={list.loading ? "Loading…" : "No active sessions."}>
