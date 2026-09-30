@@ -87,7 +87,7 @@ real-trip segment. Use two browser windows side by side (farmer | driver phone m
 
 | Time | Screen | Say |
 |---|---|---|
-| 0:00–0:15 | Policy map | "Tomato prices in India swing 3–5× in weeks. AgriPulse forecasts them as ranges and watches supply physically moving toward mandis." |
+| 0:00–0:15 | Policy map | "In 2023 India's average retail tomato price rose from ₹25 to ₹109/kg in six months (Dept of Consumer Affairs). AgriPulse forecasts them as ranges and watches supply physically moving toward mandis." |
 | 0:15–0:40 | Farmer: register lot | "Tejas has 2 tonnes. He drops a pin at his farm." Show the nearby-prices table. |
 | 0:40–1:05 | Farmer: best mandi | "Not just a price: net value after transport and spoilage, with a range. When ranges overlap, we say so." Point at the forecast chart vs the naive baseline. |
 | 1:05–1:20 | FPO → Fleet | Group into shipment, book fleet, assign KA-01-XX-1234. (Cut quickly.) |

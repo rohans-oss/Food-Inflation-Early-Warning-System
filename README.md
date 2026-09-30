@@ -554,6 +554,36 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
   `POST /trips/{id}/close {"reason": ...}` (API only: there is no Fleet-screen button yet).
 - Account page lists your devices; signing one out ends its WebSocket within the recheck interval.
 
+## V3-4: real backtest and evaluation package
+
+- **Real spike backtest** (`python -m agripulse_ml.real_backtest`, [docs/backtest-real.md](docs/backtest-real.md)).
+  - Event-level rules were pre-registered: lead time, recall, false-alarm days, a fixed and a learned threshold, and a
+    minimum of 5 events.
+  - **Real result: not enough real data.** There are 17 real price rows (one day). A first fold is possible from
+    2027-10-24, or as soon as older Agmarknet history is backfilled (`ingest.run backfill`).
+  - The same rules on 8 synthetic draws (SYNTHETIC, never blended): LightGBM at 0.5 catches 40% of spikes, a median
+    of 12 days ahead; naive cannot warn; the learned threshold drifts to near always-on (backlog 31).
+  - Admin/Policy module status has a live "Real spike backtest" row.
+- **Evaluation package:**
+  - [docs/final-evaluation.md](docs/final-evaluation.md): real vs synthetic vs not yet provable, in one place (rule 24).
+  - [docs/paper.md](docs/paper.md): paper-style write-up.
+  - [docs/pitch-outline.md](docs/pitch-outline.md): pitch outline (also built as a slide deck).
+- **Demo videos:** `scripts/record_demo.py` records two captioned clips from a running demo stack:
+  - `tejas.mp4`: the journey from lot to delivery. The truck is SIMULATED, and the real driver app is clicked through.
+  - `decisions.mp4`: the optimizer, shared loads and the scenario simulator.
+  The real-phone video from the field test is still to be recorded. The videos are not committed.
+
+**How to verify**
+- `pytest tests/test_real_backtest.py`: 7 tests.
+  - Event and rise-date detection; lead time and false-alarm days.
+  - The 5-event gate withholds rates, and an always-on alarm is exposed.
+  - The learned threshold is unchanged when future labels are tampered with.
+  - The real path ignores synthetic rows, and runs end to end on planted real-source history.
+- `python -m agripulse_ml.real_backtest` on your database prints `not_enough_real_data` and the earliest fold date
+  until a year of real prices exists.
+- `DATABASE_URL=... python scripts/record_demo.py --out demo-videos` with the demo stack running (a fresh demo
+  database) writes both MP4s.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

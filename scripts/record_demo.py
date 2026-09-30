@@ -129,7 +129,7 @@ def tejas(d: Demo, browser) -> Path:
     kolar = next(m for m in mandis["ranked"] if "Kolar" in m["mandi"])
 
     d.scene(browser, "policy", "/policy", [
-        (6, "Tomato prices in India can swing 3–5× in weeks. AgriPulse forecasts them as ranges, not single numbers…"),
+        (7, "In 2023 India's average retail tomato price went from ₹25 to ₹109/kg by mid-July (Dept of Consumer Affairs). AgriPulse forecasts ranges…"),
         (6, "…and watches supply physically moving toward mandis. Every number here is labelled: this demo runs on SYNTHETIC prices.")],
         clips=clips)
     d.scene(browser, "farmer", f"/farmer/lots/{lot['id']}", [
