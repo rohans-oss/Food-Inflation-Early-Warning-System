@@ -1,0 +1,15 @@
+# Pre-V3 B-1: forecast interval calibration. PRE-REGISTERED on 2026-09-30, before any calibrated result was seen.
+# Override the path with CALIBRATION_CONFIG=/path/file.toml
+
+[calibration]
+target_coverage_pct = 80        # p10-p90 should hold the actual price 80% of the time
+tolerance_pct = 5               # coverage check: |coverage - target| <= this, per model and horizon
+method = "track_record"         # primary: rolling conformal on the model's own past out-of-sample errors
+window_days = 365               # a full seasonal cycle of past forecasts (the V1 in-training window was 120 days)
+min_scores = 100                # fewer published errors per horizon -> "not_yet_applicable", range left as is
+apply_to_display = true         # calibrate the ranges users see (the displayed MODEL does not change, rule 19)
+
+[calibration.aci]
+# Secondary method, declared up front and reported alongside: adaptive conformal inference
+# (Gibbs & Candes 2021), per horizon and side, step gamma, on the same window of scores.
+gamma = 0.005

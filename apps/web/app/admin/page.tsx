@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { Shell } from "@/components/Shell";
-import { Badge, Button, Card, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Badge, Button, CalibrationBadge, Card, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ago, dateTime, day, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -165,7 +165,7 @@ export default function Admin() {
             <tr key={`${r.phase}-${r.title}`}>
               <Td>{r.phase}</Td>
               <Td>{r.title}<div className="font-mono text-xs text-muted">{r.doc}</div></Td>
-              <Td className="max-w-md">{r.headline}</Td>
+              <Td className="max-w-md">{r.headline}{r.calibration && <div className="mt-1"><CalibrationBadge c={r.calibration} /></div>}</Td>
               <Td><Badge kind={r.outcome === "negative" ? "critical" : r.outcome === "not enough real data" ? "warn" : "neutral"}>{r.outcome}</Badge></Td>
               <Td><ProvenanceBadge p={r.data_provenance} compact /></Td>
             </tr>

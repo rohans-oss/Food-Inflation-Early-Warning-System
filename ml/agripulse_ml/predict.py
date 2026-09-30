@@ -54,6 +54,13 @@ def predict_latest(db: Session, model_dir: str | None = None) -> dict:
     latest = latest[latest["date"] >= newest - timedelta(days=MAX_STALENESS_DAYS)]
     preds = model.predict(latest)
 
+    # Pre-V3 B-1: calibrate the displayed range from this model's own track record (same model, rule 19)
+    from .calibration import calibrate_range, calibration_config, serving_offsets
+    from .features.config import lag
+
+    cal_on = bool(calibration_config()["calibration"]["apply_to_display"])
+    offsets = serving_offsets(db, "lightgbm_quantile", synthetic, newest, lag("prices")) if cal_on else {}
+
     written = 0
     for i, row in enumerate(latest.itertuples()):
         issue = row.date.date()
@@ -73,14 +80,21 @@ def predict_latest(db: Session, model_dir: str | None = None) -> dict:
                              model_name="lightgbm_quantile")
                 db.add(f)
             f.target_date = issue + timedelta(weeks=h)
-            f.p10, f.p50, f.p90 = round(vals["p10"], 0), round(vals["p50"], 0), round(vals["p90"], 0)
+            f.p10_raw, f.p50, f.p90_raw = round(vals["p10"], 0), round(vals["p50"], 0), round(vals["p90"], 0)
+            if cal_on:
+                lo, hi = calibrate_range(f.p10_raw, f.p50, f.p90_raw, offsets[h])
+                f.calibration = offsets[h]["calibration"]
+            else:
+                lo, hi, f.calibration = f.p10_raw, f.p90_raw, "none"
+            f.p10, f.p90 = round(lo, 0), round(hi, 0)
             f.spike_prob = round(float(preds["spike_prob"][i]), 3)
             f.model_version = meta.get("model_version", "")
             f.trained_on_synthetic = synthetic
             f.data_provenance = provenance_for(synthetic, ready.get(int(row.mandi_id), False))
             written += 1
     db.commit()
-    return {"written": written, "mandis": int(len(latest)), "issue_date": str(newest.date()), "synthetic": synthetic}
+    return {"written": written, "mandis": int(len(latest)), "issue_date": str(newest.date()), "synthetic": synthetic,
+            "calibration": {h: {k: v for k, v in o.items() if k != "off_lo" and k != "off_hi"} for h, o in offsets.items()}}
 
 
 def run_job(db: Session) -> dict:

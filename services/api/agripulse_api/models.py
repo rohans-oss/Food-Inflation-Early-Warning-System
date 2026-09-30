@@ -235,6 +235,11 @@ class Forecast(Base):
     model_version: Mapped[str] = mapped_column(String(40), default="")
     trained_on_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)  # V1 flag, kept for compatibility
     data_provenance: Mapped[str] = mapped_column(String(16), default="real", server_default="real")  # real|real_partial|synthetic
+    # Pre-V3 B-1: p10 / p90 above are what users see. calibration = applied | not_yet_applicable | none;
+    # p10_raw / p90_raw keep the model's own range (the calibrator learns from those, never from its own output).
+    calibration: Mapped[str] = mapped_column(String(24), default="none", server_default="none")
+    p10_raw: Mapped[float | None] = mapped_column(Float)
+    p90_raw: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 

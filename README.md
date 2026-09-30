@@ -302,6 +302,48 @@ Details are in docs/data-sources.md.
   `python -m agripulse_ml.ablation --provenance real` prints the readiness-based "not enough real data" report.
 - Admin page → "V2 results": six studies, each with a SYNTHETIC or REAL badge.
 
+## Pre-V3 B-1: forecast range calibration
+
+> SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT for every study number below.
+
+- **What changed:** a model-agnostic calibration wrapper, `agripulse_ml.calibration`, configured in
+  `config/calibration.toml`.
+  - It widens or narrows each horizon's p10–p90 range using the model's own track record.
+  - The track record is the last 365 days of forecasts whose outcomes are already published.
+  - The p50 is never moved, and the model itself is unchanged.
+  - The displayed model is still `lightgbm_quantile` (rule 19).
+- **Results** ([docs/calibration-results.md](docs/calibration-results.md)): same 8 datasets and final 8 folds as
+  V2-0.
+  - LightGBM mean coverage went from 79.4 / 78.4 / 76.8 / 74.2% to 80.8 / 79.7 / 79.1 / 78.6% at 1–4 weeks
+    (target 80, tolerance ±5).
+  - **The per-dataset spread is not fixed:** 17 of 32 dataset-horizons are within ±5 afterwards, against 15
+    before.
+  - Pinball loss gets 0.6–2.9% worse. Calibration makes the uncertainty labels honest; it does not improve
+    accuracy.
+- **Product:**
+  - Forecasts store `p10_raw` / `p90_raw` alongside the displayed `p10` / `p90`, plus `calibration`
+    (`applied` / `not_yet_applicable` / `none`). Migration 0008 adds these.
+  - The chart shows a "Range calibrated / not yet calibrated" badge.
+  - The baseline says "no calibration needed".
+  - Real data has too short a track record, so real forecasts show **not yet calibrated**.
+- **Harness:** every eval run reports `coverage_gap_pct` / `coverage_within_tol`.
+  `eval.coverage.assert_coverage` raises `CoverageDrift` beyond the configured tolerance.
+
+**How to verify**
+- `pytest tests/test_calibration.py`: 9 tests.
+  - Over-narrow ranges are calibrated to 80% on a controlled stream, by both methods.
+  - The leakage tamper test passes: future outcomes don't change today's range.
+  - A short record gives `not_yet_applicable`.
+  - The wrapper works on naive and LightGBM, and the drift check fires.
+  - The committed study keeps its mean coverage within tolerance.
+  - Live offsets come from stored forecasts, and the API labels match.
+  - The Admin card rows are present.
+- `python -m agripulse_ml.calibration_study` (~15 min) regenerates `docs/results/calibration-*.csv`.
+- `alembic upgrade head`, then `python -m agripulse_ml.predict`.
+  - The job output shows a `calibration` status per horizon.
+  - The Farmer page chart shows the calibration badge next to the provenance badge.
+- Admin → "V2 results" lists the B-1 study (SYNTHETIC) and the live calibration status of the displayed forecasts.
+
 ## V1 status
 
 | Done-criterion | Status |

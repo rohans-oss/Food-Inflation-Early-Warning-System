@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { inr } from "@/lib/format";
 
-import { ProvenanceBadge, worstProvenance } from "./ui";
+import { CalibrationBadge, ProvenanceBadge, worstProvenance } from "./ui";
 
 export interface Horizon { weeks: number; target_date?: string; p10: number; p50: number; p90: number }
-export interface ForecastBlock { issue_date: string; horizons: Horizon[]; trained_on_synthetic?: boolean; spike_prob_14d?: number; data_provenance?: string }
+export interface ForecastBlock { issue_date: string; horizons: Horizon[]; trained_on_synthetic?: boolean; spike_prob_14d?: number; data_provenance?: string; calibration?: string; calibration_label?: string }
 export interface HistoryPoint { date: string; modal_price: number }
 
 const H = 250, PAD = { l: 56, r: 16, t: 12, b: 28 };
@@ -87,10 +87,11 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
   return (
     <div ref={box}>
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink2">
-        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><rect x="0" y="1" width="22" height="8" rx="2" fill="var(--series-1)" opacity=".18" /><line x1="0" x2="22" y1="5" y2="5" stroke="var(--series-1)" strokeWidth="2" /></svg>Model p50 (band p10–p90)</span>
+        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><rect x="0" y="1" width="22" height="8" rx="2" fill="var(--series-1)" opacity=".18" /><line x1="0" x2="22" y1="5" y2="5" stroke="var(--series-1)" strokeWidth="2" /></svg>Model p50 (band p10–p90{forecast?.calibration === "applied" ? ", calibrated" : forecast?.calibration === "not_yet_applicable" ? ", not yet calibrated" : ""})</span>
         {baseline && <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><line x1="0" x2="22" y1="5" y2="5" stroke="var(--series-2)" strokeWidth="2" strokeDasharray="4 3" /></svg>Naive baseline</span>}
         <span className="text-muted">Rs/quintal</span>
         <ProvenanceBadge p={prov} />
+        {forecast?.calibration && <CalibrationBadge c={forecast.calibration} title={forecast.calibration_label} />}
         <button onClick={() => setShowTable((s) => !s)} className="ml-auto underline">{showTable ? "Hide table" : "Table view"}</button>
       </div>
       <div className="relative">
@@ -130,7 +131,7 @@ export function ForecastChart({ history, forecast, baseline, days = 90 }: {
       </div>
       {showTable && forecast && (
         <table className="mt-3 w-full text-sm tnum">
-          {prov && <caption className="mb-1 text-left"><ProvenanceBadge p={prov} /></caption>}
+          {prov && <caption className="mb-1 text-left"><span className="inline-flex flex-wrap items-center gap-2"><ProvenanceBadge p={prov} />{forecast.calibration_label && <span className="text-xs text-muted">{forecast.calibration_label}</span>}</span></caption>}
           <thead><tr className="text-left text-xs text-muted"><th className="py-1">Horizon</th><th>Model p10</th><th>p50</th><th>p90</th>{baseline && <th>Baseline p50</th>}</tr></thead>
           <tbody>
             {forecast.horizons.map((f, i) => (

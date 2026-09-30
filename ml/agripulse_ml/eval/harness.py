@@ -49,6 +49,12 @@ class EvalRun:
     finished_at: datetime
     extra: dict = field(default_factory=dict)
 
+    def coverage_check(self, target: float | None = None, tolerance: float | None = None) -> pd.DataFrame:
+        """Pooled p10-p90 coverage vs the target (config/calibration.toml), per model x horizon."""
+        from .coverage import coverage_check
+
+        return coverage_check(self.results, target, tolerance)
+
     def pooled(self) -> pd.DataFrame:
         """ALL-mandi rows only, as a model x (horizon, metric) table (handy for reports)."""
         r = self.results[self.results["mandi"] == "ALL"]
@@ -125,6 +131,9 @@ def run(
 
 
 def _score_group(g: pd.DataFrame, alert_probability: float) -> list[tuple[str, str, float | None]]:
+    from .coverage import coverage_rows, target_and_tolerance
+
+    target, tol = target_and_tolerance()
     rows = []
     for h in HORIZONS:
         ok = g[f"y_h{h}"].notna()
@@ -132,7 +141,10 @@ def _score_group(g: pd.DataFrame, alert_probability: float) -> list[tuple[str, s
         base = gg["price"].to_numpy()
         y = base * np.exp(gg[f"y_h{h}"].to_numpy())
         qp = [base * np.exp(gg[f"q{int(q * 100)}_h{h}"].to_numpy()) for q in QUANTILES]
-        for k, v in interval_metrics(y, *qp).items():
+        im = interval_metrics(y, *qp)
+        for k, v in im.items():
+            rows.append((str(h), k, v))
+        for k, v in coverage_rows(im.get("coverage_p10_p90_pct"), target, tol):  # B-1: reported on every run
             rows.append((str(h), k, v))
     s = g[g["spike"].notna()]
     for k, v in spike_metrics(s["spike"].to_numpy(), s["spike_prob"].to_numpy(), alert_probability).items():

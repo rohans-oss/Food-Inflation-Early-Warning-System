@@ -127,11 +127,30 @@ def forecast_block(db: Session, mandi_id: int, commodity: str = "Tomato", model:
         "data_provenance": rows[0].data_provenance,
         "spike_prob_14d": rows[0].spike_prob,
         "unit": "Rs/quintal",
+        # Pre-V3 B-1: applied (range calibrated from this model's track record) | not_yet_applicable (track record
+        # too short: the model's own range is shown) | none (calibration off or a forecast from before B-1)
+        "calibration": _calibration_summary(rows),
+        "calibration_label": CALIBRATION_LABEL[_calibration_summary(rows)],
         "horizons": [
-            {"weeks": f.horizon_weeks, "target_date": f.target_date, "p10": f.p10, "p50": f.p50, "p90": f.p90}
+            {"weeks": f.horizon_weeks, "target_date": f.target_date, "p10": f.p10, "p50": f.p50, "p90": f.p90,
+             "p10_raw": f.p10_raw, "p90_raw": f.p90_raw, "calibration": f.calibration}
             for f in rows
         ],
     }
+
+
+CALIBRATION_LABEL = {
+    "applied": "80% range, calibrated on this model's track record",
+    "not_yet_applicable": "80% range, not yet calibrated (track record too short)",
+    "partial": "80% range, calibrated for some horizons only",
+    "none": "80% range, uncalibrated",
+    "not_needed": "80% range from past price changes (baseline: no calibration needed)",
+}
+
+
+def _calibration_summary(rows) -> str:
+    kinds = {r.calibration or "none" for r in rows}
+    return kinds.pop() if len(kinds) == 1 else "partial"
 
 
 @router.get("/forecasts/baseline")
@@ -163,7 +182,8 @@ def baseline_forecast(mandi_id: int, commodity: str = "Tomato", db: Session = De
     synthetic = db.scalar(select(func.max(Price.source)).where(Price.mandi_id == mandi_id)) == "synthetic"
     return {"mandi_id": mandi_id, "model": "naive", "issue_date": rows[-1][0], "unit": "Rs/quintal",
             "latest_price": round(last), "horizons": horizons, "is_synthetic": synthetic,
-            "data_provenance": "synthetic" if synthetic else "real"}
+            "data_provenance": "synthetic" if synthetic else "real",
+            "calibration": "not_needed", "calibration_label": CALIBRATION_LABEL["not_needed"]}
 
 
 @router.get("/prices")

@@ -23,8 +23,38 @@ RESULTS = [
     {"phase": "V2-5", "title": "Real-data ablation", "outcome": "not enough real data",
      "headline": "Real prices start 2026-09-25; the harness needs about 13 months. Same command re-runs it then.",
      "data_provenance": REAL, "doc": "docs/ablation-results.md"},
+    {"phase": "B-1", "title": "Forecast range calibration (V1 LightGBM, 8 V2-0 datasets)", "outcome": "mixed",
+     "headline": "Mean p10-p90 coverage 79/78/77/74% -> 81/80/79/79% (1-4 wk, target 80). The average is fixed; "
+                 "per-dataset spread is not (3-5 of 8 datasets within +-5 pts per horizon after, 1-7 before).",
+     "data_provenance": SYNTHETIC, "doc": "docs/calibration-results.md", "calibration": "applied"},
 ]
 
 
-def v2_results() -> list[dict]:
-    return [{**r, "provenance_label": LABEL[r["data_provenance"]]} for r in RESULTS]
+def live_calibration(db) -> dict:
+    """Pre-V3 B-1: calibration status of the displayed model's newest forecasts (what users see right now)."""
+    from sqlalchemy import func, select
+
+    from .modelcfg import display_model
+    from .models import Forecast
+
+    name = display_model()
+    newest = db.scalar(select(func.max(Forecast.issue_date)).where(Forecast.model_name == name))
+    if newest is None:
+        kinds, prov = set(), REAL
+    else:
+        rows = db.execute(select(Forecast.calibration, Forecast.trained_on_synthetic)
+                          .where(Forecast.model_name == name, Forecast.issue_date == newest)).all()
+        kinds = {r[0] or "none" for r in rows}
+        prov = SYNTHETIC if any(r[1] for r in rows) else REAL
+    status = kinds.pop() if len(kinds) == 1 else ("partial" if kinds else "none")
+    text = {"applied": "applied: ranges widened from this model's own track record",
+            "not_yet_applicable": "not yet applicable: fewer than min_scores published outcomes in the window",
+            "partial": "applied for some horizons only", "none": "none (no forecasts yet, or calibration switched off)"}
+    return {"phase": "B-1", "title": f"Live calibration of displayed ranges ({name})", "outcome": "status",
+            "headline": f"Newest forecasts ({newest or 'none'}): calibration {text.get(status, status)}.",
+            "data_provenance": prov, "doc": "docs/calibration-results.md", "calibration": status}
+
+
+def v2_results(db=None) -> list[dict]:
+    rows = RESULTS + ([live_calibration(db)] if db is not None else [])
+    return [{**r, "provenance_label": LABEL[r["data_provenance"]]} for r in rows]

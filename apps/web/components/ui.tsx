@@ -89,6 +89,19 @@ export function ProvenanceBadge({ p, compact = false }: { p: string | null | und
   );
 }
 
+/** Pre-V3 B-1: whether the p10-p90 range shown is calibrated on the model's own track record. Text, not colour. */
+export function CalibrationBadge({ c, title }: { c: string; title?: string }) {
+  const text: Record<string, string> = {
+    applied: "Range calibrated", not_yet_applicable: "Range not yet calibrated", partial: "Range partly calibrated",
+    none: "Range uncalibrated", not_needed: "Baseline range",
+  };
+  return (
+    <span title={title} className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${c === "applied" ? "border-good/60 text-ink" : "border-line text-ink2"}`}>
+      {text[c] ?? c}
+    </span>
+  );
+}
+
 /** V2 rule 13: trade-flow graph edges are ESTIMATES, and say so in text. */
 export function EstimateBadge({ title }: { title?: string }) {
   return (

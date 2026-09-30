@@ -29,11 +29,11 @@ EXPECTED_EVERY = {
 
 
 @router.get("/v2-results")
-def v2_results_list(_=Depends(admin_only)):
-    """V2 findings with their data provenance (agripulse_api/v2_results.py)."""
+def v2_results_list(db: Session = Depends(get_db), _=Depends(admin_only)):
+    """V2 findings with their data provenance (agripulse_api/v2_results.py), plus the live calibration status."""
     from ..v2_results import v2_results
 
-    return v2_results()
+    return v2_results(db)
 
 
 @router.get("/freshness")

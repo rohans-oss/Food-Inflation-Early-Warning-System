@@ -176,5 +176,11 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   supply. Synthetic transit is simulated from synthetic arrivals: its gain is built in, never report it as evidence.
 - Ablation: `python -m agripulse_ml.ablation` (synthetic) / `--provenance real`; variants differ only in columns.
 - V2 findings for the Admin card live in `services/api/agripulse_api/v2_results.py`; update it when a study re-runs.
+- Calibration (B-1): `agripulse_ml.calibration` wraps ANY quantile model (config/calibration.toml). Scores use only
+  outcomes with known_on < issue date; offsets come from the model's OWN stored forecasts (`serving_offsets`), synthetic
+  and real never mixed. Forecast rows keep `p10_raw`/`p90_raw`; `p10`/`p90` are what is displayed; `calibration` is
+  applied / not_yet_applicable / none. p50 is never moved. Every eval run reports coverage; `eval.coverage.assert_coverage`
+  enforces the tolerance. Displays show `CalibrationBadge`. Re-run `python -m agripulse_ml.calibration_study` when the
+  models change (tests guard the committed CSV).
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

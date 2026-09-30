@@ -47,6 +47,10 @@ def write_forecasts(db: Session, cfg: dict | None = None, force: bool = False, a
     latest = latest[latest["date"] >= latest["date"].max() - timedelta(days=MAX_STALENESS_DAYS)].reset_index(drop=True)
     p = model.predict(latest, context=df)
     version = f"tft-{(cutoff - pd.Timedelta(days=1)).date()}"
+    from ..calibration import calibrate_range, calibration_config, serving_offsets
+
+    cal_on = bool(calibration_config()["calibration"]["apply_to_display"])
+    offsets = serving_offsets(db, MODEL_NAME, synthetic, latest["date"].max(), table.label_lag_days) if cal_on else {}
     written = 0
     for i, row in enumerate(latest.itertuples()):
         issue = row.date.date()
@@ -60,7 +64,10 @@ def write_forecasts(db: Session, cfg: dict | None = None, force: bool = False, a
                              model_name=MODEL_NAME)
                 db.add(f)
             f.target_date = issue + timedelta(weeks=h)
-            f.p10, f.p50, f.p90 = (round(float(row.price * np.exp(p[(h, q)][i])), 0) for q in ("p10", "p50", "p90"))
+            f.p10_raw, f.p50, f.p90_raw = (round(float(row.price * np.exp(p[(h, q)][i])), 0) for q in ("p10", "p50", "p90"))
+            lo, hi = calibrate_range(f.p10_raw, f.p50, f.p90_raw, offsets[h]) if cal_on else (f.p10_raw, f.p90_raw)
+            f.calibration = offsets[h]["calibration"] if cal_on else "none"
+            f.p10, f.p90 = round(lo, 0), round(hi, 0)
             f.spike_prob = round(float(p["spike_prob"][i]), 3)
             f.model_version = version
             f.trained_on_synthetic = synthetic
