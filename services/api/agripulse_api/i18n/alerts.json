@@ -43,6 +43,22 @@
     "transport_requested": {
       "title": "Transport requested for lot #{lot}",
       "body": "{farmer} asks to ship lot #{lot} ({tons} t) to {mandi}. Group it into a shipment and book a fleet on the FPO dispatch page."
+    },
+    "booking_requested": {
+      "title": "New booking: {tons} t to {mandi}",
+      "body": "{farmer} booked a pickup for {time} ({tons} t to {mandi}). Assign a truck and driver on the Fleet page, or decline it."
+    },
+    "booking_confirmed": {
+      "title": "Transport confirmed for lot #{lot}",
+      "body": "{fleet} confirmed your pickup for {time}. Truck {vehicle} is assigned; you can track it live once it starts."
+    },
+    "booking_declined": {
+      "title": "Booking declined for lot #{lot}",
+      "body": "{fleet} could not take your booking: {reason}. Choose another transporter or time."
+    },
+    "payment_recorded": {
+      "title": "Payment recorded for lot #{lot}",
+      "body": "Rs {amount} paid by {method} (ref {ref}). Please confirm on the lot page once you have received it."
     }
   },
   "kn": {
@@ -81,6 +97,22 @@
     "transport_requested": {
       "title": "ಲಾಟ್ #{lot}ಗೆ ಸಾರಿಗೆ ವಿನಂತಿ",
       "body": "{farmer} ಅವರು ಲಾಟ್ #{lot} ({tons} ಟನ್) ಅನ್ನು {mandi}ಗೆ ಕಳುಹಿಸಲು ಕೇಳಿದ್ದಾರೆ. FPO ರವಾನೆ ಪುಟದಲ್ಲಿ ಅದನ್ನು ಸಾಗಣೆಗೆ ಸೇರಿಸಿ ಮತ್ತು ವಾಹನವನ್ನು ಕಾಯ್ದಿರಿಸಿ."
+    },
+    "booking_requested": {
+      "title": "ಹೊಸ ಬುಕಿಂಗ್: {mandi}ಗೆ {tons} ಟನ್",
+      "body": "{farmer} ಅವರು {time}ಕ್ಕೆ ಪಿಕಪ್ ಬುಕ್ ಮಾಡಿದ್ದಾರೆ ({mandi}ಗೆ {tons} ಟನ್). ಫ್ಲೀಟ್ ಪುಟದಲ್ಲಿ ವಾಹನ ಮತ್ತು ಚಾಲಕರನ್ನು ನಿಯೋಜಿಸಿ ಅಥವಾ ನಿರಾಕರಿಸಿ."
+    },
+    "booking_confirmed": {
+      "title": "ಲಾಟ್ #{lot}ಗೆ ಸಾರಿಗೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ",
+      "body": "{fleet} ಅವರು {time}ರ ನಿಮ್ಮ ಪಿಕಪ್ ಅನ್ನು ದೃಢೀಕರಿಸಿದ್ದಾರೆ. ವಾಹನ {vehicle} ನಿಯೋಜಿಸಲಾಗಿದೆ; ಹೊರಟ ನಂತರ ಲೈವ್ ಟ್ರ್ಯಾಕ್ ಮಾಡಬಹುದು."
+    },
+    "booking_declined": {
+      "title": "ಲಾಟ್ #{lot}ರ ಬುಕಿಂಗ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+      "body": "{fleet} ಅವರು ನಿಮ್ಮ ಬುಕಿಂಗ್ ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ: {reason}. ಬೇರೆ ಸಾಗಣೆದಾರ ಅಥವಾ ಸಮಯವನ್ನು ಆರಿಸಿ."
+    },
+    "payment_recorded": {
+      "title": "ಲಾಟ್ #{lot}ಗೆ ಪಾವತಿ ದಾಖಲಾಗಿದೆ",
+      "body": "{method} ಮೂಲಕ ರೂ {amount} ಪಾವತಿಸಲಾಗಿದೆ (ಉಲ್ಲೇಖ {ref}). ಹಣ ಬಂದ ನಂತರ ಲಾಟ್ ಪುಟದಲ್ಲಿ ದೃಢೀಕರಿಸಿ."
     }
   },
   "hi": {
@@ -119,6 +151,22 @@
     "transport_requested": {
       "title": "लॉट #{lot} के लिए परिवहन अनुरोध",
       "body": "{farmer} ने लॉट #{lot} ({tons} टन) को {mandi} भेजने का अनुरोध किया है। FPO डिस्पैच पेज पर इसे शिपमेंट में जोड़ें और वाहन बुक करें।"
+    },
+    "booking_requested": {
+      "title": "नई बुकिंग: {mandi} के लिए {tons} टन",
+      "body": "{farmer} ने {time} के लिए पिकअप बुक किया है ({mandi} के लिए {tons} टन)। फ्लीट पेज पर ट्रक और ड्राइवर असाइन करें या अस्वीकार करें।"
+    },
+    "booking_confirmed": {
+      "title": "लॉट #{lot} के लिए परिवहन की पुष्टि",
+      "body": "{fleet} ने {time} के लिए आपके पिकअप की पुष्टि की। ट्रक {vehicle} असाइन है; चलने पर आप इसे लाइव ट्रैक कर सकते हैं।"
+    },
+    "booking_declined": {
+      "title": "लॉट #{lot} की बुकिंग अस्वीकार",
+      "body": "{fleet} आपकी बुकिंग नहीं ले सका: {reason}। कोई दूसरा ट्रांसपोर्टर या समय चुनें।"
+    },
+    "payment_recorded": {
+      "title": "लॉट #{lot} का भुगतान दर्ज",
+      "body": "{method} से रु {amount} का भुगतान (संदर्भ {ref})। पैसा मिलने पर लॉट पेज पर पुष्टि करें।"
     }
   },
   "_review": {
@@ -149,6 +197,18 @@
       },
       "transport_requested": {
         "status": "machine"
+      },
+      "booking_requested": {
+        "status": "machine"
+      },
+      "booking_confirmed": {
+        "status": "machine"
+      },
+      "booking_declined": {
+        "status": "machine"
+      },
+      "payment_recorded": {
+        "status": "machine"
       }
     },
     "hi": {
@@ -177,6 +237,18 @@
         "status": "machine"
       },
       "transport_requested": {
+        "status": "machine"
+      },
+      "booking_requested": {
+        "status": "machine"
+      },
+      "booking_confirmed": {
+        "status": "machine"
+      },
+      "booking_declined": {
+        "status": "machine"
+      },
+      "payment_recorded": {
         "status": "machine"
       }
     }

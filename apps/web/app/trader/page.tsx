@@ -17,6 +17,7 @@ export default function Trader() {
   const [live, setLive] = useState<Record<number, any>>({});
   const [scanFor, setScanFor] = useState<number | null>(null);
   const [weigh, setWeigh] = useState<Record<number, { kg: string; price: string }>>({});
+  const [pay, setPay] = useState<Record<number, { method: string; reference: string }>>({});
   const [ok, setOk] = useState<string | null>(null);
   const act = useAction();
 
@@ -110,12 +111,31 @@ export default function Trader() {
       </Card>
 
       <Card title="Weighed in the last 24 hours">
-        <Table head={["Lot", "Farmer", "Weight", "Price", "Value"]} empty="None yet today.">
+        <Table head={["Lot", "Farmer", "Weight", "Price", "Value", "Payment to farmer"]} empty="None yet today.">
           {b?.delivered_last_24h?.map((l: any) => (
             <tr key={l.lot_id}><Td>#{l.lot_id}</Td><Td>{l.farmer}</Td><Td>{num(l.kg, 0)} kg</Td><Td>{inr(l.price_per_quintal)}/q</Td>
-              <Td>{inr((l.kg / 100) * l.price_per_quintal)}</Td></tr>
+              <Td>{inr((l.kg / 100) * l.price_per_quintal)}</Td>
+              <Td>
+                {l.payout_status === "paid" ? (
+                  <span className="text-sm"><b className="text-good">✓ Paid</b> · {l.payment_method}{l.payment_ref ? ` · ${l.payment_ref}` : ""}</span>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select aria-label="Payment method" className={`${inputCls} w-auto`} value={pay[l.lot_id]?.method ?? "upi"}
+                      onChange={(e) => setPay({ ...pay, [l.lot_id]: { reference: pay[l.lot_id]?.reference ?? "", method: e.target.value } })}>
+                      <option value="upi">UPI</option><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="other">Other</option>
+                    </select>
+                    <input aria-label="Payment reference" placeholder="UTR / ref (optional)" className={`${inputCls} w-40`} value={pay[l.lot_id]?.reference ?? ""}
+                      onChange={(e) => setPay({ ...pay, [l.lot_id]: { method: pay[l.lot_id]?.method ?? "upi", reference: e.target.value } })} />
+                    <Button disabled={act.busy} onClick={() => act.run(async () => {
+                      await api(`/trader/lots/${l.lot_id}/payment`, { method: "POST", body: { method: pay[l.lot_id]?.method ?? "upi", reference: pay[l.lot_id]?.reference ?? "" } });
+                      board.reload();
+                    })}>Record payment</Button>
+                  </div>
+                )}
+              </Td></tr>
           ))}
         </Table>
+        <p className="mt-2 text-xs text-muted">Recording a payment tells the farmer how and when they were paid. The money itself moves outside AgriPulse.</p>
         <p className="mt-2 text-xs text-muted">Weighed tonnage is added to this mandi&apos;s arrivals as <Badge>trader confirmed</Badge>, kept separate from Agmarknet figures.</p>
       </Card>
     </Shell>

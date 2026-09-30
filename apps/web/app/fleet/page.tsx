@@ -8,7 +8,7 @@ import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
 import { Button, Card, ErrorNote, Field, inputCls, SimBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
-import { dateTime, num, time, tons } from "@/lib/format";
+import { dateTime, inr, num, time, tons } from "@/lib/format";
 import { useLiveFeed } from "@/lib/live";
 import { useSession } from "@/lib/session";
 
@@ -62,6 +62,16 @@ export default function Fleet() {
             {ov.data?.bookings_to_assign?.map((b: any) => (
               <div key={b.shipment_id} className="space-y-2 rounded-xl border border-line p-3 text-sm">
                 <div>Shipment #{b.shipment_id} → <b>{b.mandi}</b> · {tons(b.tons)}</div>
+                {b.farmer_booking && (
+                  <div className="rounded-lg bg-page px-3 py-2 text-xs">
+                    <b>Farmer booking</b> · {b.farmer_booking.farmer} · pickup <b>{b.farmer_booking.pickup_local}</b>
+                    {b.farmer_booking.pickup_label ? ` at ${b.farmer_booking.pickup_label}` : ""} · fare (est.) {inr(b.farmer_booking.fare_estimate)}
+                    <button className="ml-2 text-critical underline" disabled={act.busy}
+                      onClick={() => act.run(async () => { await api(`/bookings/${b.farmer_booking.id}/decline`, { method: "POST", body: { reason: "No truck free at that time" } }); ov.reload(); })}>
+                      Decline
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <select aria-label="Vehicle" className={inputCls} value={assign[b.shipment_id]?.vehicle ?? ""}
                     onChange={(e) => setAssign({ ...assign, [b.shipment_id]: { ...(assign[b.shipment_id] ?? { driver: "" }), vehicle: e.target.value } })}>

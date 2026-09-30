@@ -119,6 +119,9 @@ def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver
     db.flush()
     db.add(AuditLog(entity="trip", entity_id=t.id, from_state=None, to_state="assigned", actor_id=user.id,
                     details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source, **audit}))
+    from .bookings import on_trip_assigned  # a farmer's booking is confirmed by assigning its truck
+
+    on_trip_assigned(db, sh, t)
     return t
 
 

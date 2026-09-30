@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # --- jobs ---
     enable_scheduler: bool = False
 
+    # --- public demo only (infra/Dockerfile.demo): enables the SIMULATED "run demo trip" autopilot ---
+    demo_mode: bool = False
+
     @model_validator(mode="after")
     def _auto_secret(self):
         # JWT_SECRET=auto: a random secret per process (public demo on one instance; every restart signs everyone out)

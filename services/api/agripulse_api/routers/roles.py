@@ -89,7 +89,9 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
         "awaiting_weighing": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "declared_tons": lot.quantity_tons,
                                "grade": lot.grade, "shipment_id": lot.shipment_id} for lot in at_gate],
         "delivered_last_24h": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "kg": lot.delivered_weight_kg,
-                                "price_per_quintal": lot.sale_price_per_quintal} for lot in delivered_today],
+                                "price_per_quintal": lot.sale_price_per_quintal, "payout_status": lot.payout_status,
+                                "payment_method": lot.payment_method, "payment_ref": lot.payment_ref}
+                               for lot in delivered_today],
         "date": today,
     }
 
@@ -294,6 +296,14 @@ def read_alert(alert_id: int, db: Session = Depends(get_db), user: User = Depend
 # ------------------------------------------------------------------ fleet owner
 
 
+def _farmer_booking(db: Session, shipment_id: int) -> dict | None:
+    from ..models import TransportBooking
+    from .bookings import booking_out
+
+    b = db.scalar(select(TransportBooking).where(TransportBooking.shipment_id == shipment_id, TransportBooking.status == "requested"))
+    return booking_out(db, b) if b else None
+
+
 @router.get("/fleet/overview")
 def fleet_overview(db: Session = Depends(get_db), user: User = Depends(require("vehicles:manage"))):
     from ..models import Vehicle
@@ -321,7 +331,7 @@ def fleet_overview(db: Session = Depends(get_db), user: User = Depends(require("
     pending = db.scalars(select(Shipment).where(Shipment.fleet_org_id == org, Shipment.status == "booked")).all() if org else []
     return {"vehicles": vehicles,
             "bookings_to_assign": [{"shipment_id": s.id, "mandi": s.mandi.name, "tons": round(sum(lot.quantity_tons for lot in s.lots), 2),
-                                    "booked_at": s.booked_at} for s in pending
+                                    "booked_at": s.booked_at, "farmer_booking": _farmer_booking(db, s.id)} for s in pending
                                    if not db.scalar(select(Trip.id).where(Trip.shipment_id == s.id, Trip.status.not_in(["declined", "cancelled"])))]}
 
 

@@ -35,6 +35,10 @@ SEVERITY = {
     "delivered": "info",
     "incoming_vehicle": "info",
     "transport_requested": "info",
+    "booking_requested": "info",
+    "booking_confirmed": "info",
+    "booking_declined": "warning",
+    "payment_recorded": "info",
 }
 LANGS = ("en", "kn", "hi")
 

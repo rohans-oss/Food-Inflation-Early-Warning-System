@@ -596,6 +596,34 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - `DATABASE_URL=... python scripts/record_demo.py --out demo-videos` with the demo stack running (a fresh demo
   database) writes both MP4s.
 
+## Farmer booking, live tracking and payment (after V3-4)
+
+- **The farmer's path after "Sell here" (lot page → Next steps):**
+  1. Choose a transporter: trucks that fit, estimated fare, open pickup slots.
+  2. Pick a time and **Book**. This creates a shipment booked with that fleet, and the fleet owner gets an alert.
+  3. The fleet owner **confirms** by assigning a truck and driver, or **declines** (the lot goes back to registered).
+     The farmer is alerted either way.
+  4. The driver runs the trip, and the farmer follows it on the **Live vehicle** map.
+  5. At the mandi, the trader scans the delivery QR, weighs the lot and **records the payment** (UPI, bank, cash; a
+     reference is optional). The farmer taps **I received it**.
+- **Payments are recorded, not processed:** no money moves through AgriPulse.
+- **Other routes still work:** the farmer can ask their FPO to arrange the shipment instead, and the FPO flow is
+  unchanged.
+- **Public demo only (`DEMO_MODE=true`):** **Run demo trip (simulated driver)** lets a SIMULATED transporter, driver
+  and trader run the booked trip in about two minutes. The truck, trip and payment are all labelled simulated.
+  Real deployments return 404 for this.
+- **API:**
+  - `GET /lots/{id}/transport-slots`
+  - `POST /lots/{id}/bookings`
+  - `GET /bookings`
+  - `POST /bookings/{id}/cancel`, `POST /bookings/{id}/decline`
+  - `POST /trader/lots/{id}/payment`
+  - `POST /lots/{id}/payment-received`
+  - `POST /lots/{id}/demo-trip`
+- **Migrations:** 0013–0015.
+
+**How to verify:** `pytest tests/test_bookings.py tests/test_preferred_mandi.py`.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

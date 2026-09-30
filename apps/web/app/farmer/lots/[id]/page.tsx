@@ -20,7 +20,7 @@ const STEPS = ["registered", "grouped", "in_transit", "at_mandi", "delivered"];
 export default function LotDetail() {
   const { id } = useParams<{ id: string }>();
   const { t } = useSession();
-  const lot = useApi<any>(`/lots/${id}`, { poll: 15000 });
+  const lot = useApi<any>(`/lots/${id}`, { poll: 5000 });
   const hist = useApi<any[]>(`/lots/${id}/history`, { poll: 30000 });
   const [forecastMandi, setForecastMandi] = useState<number | null>(null);
   const [lenders, setLenders] = useState<{ id: number; name: string }[]>([]);
@@ -100,8 +100,8 @@ export default function LotDetail() {
               )}
             </Card>
           )}
-          {!l.trip && ["registered", "grouped"].includes(l.status) && (
-            <NextSteps key={`${l.preferred_mandi_id ?? 0}-${l.shipment_id ?? 0}`} lotId={l.id} tonsLot={l.quantity_tons} onChanged={lot.reload} />
+          {!(l.payout_status === "paid" && l.payment?.received_at) && (
+            <NextSteps key={`${l.preferred_mandi_id ?? 0}`} lotId={l.id} tonsLot={l.quantity_tons} onChanged={lot.reload} />
           )}
           {forecastMandi && <Card title={t("priceForecast")}><MandiForecast mandiId={forecastMandi} /></Card>}
 

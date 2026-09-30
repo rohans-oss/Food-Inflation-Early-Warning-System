@@ -15,7 +15,7 @@ COPY scripts ./scripts
 RUN pip install --no-cache-dir -e .
 
 # Build machines report many CPUs but have a small quota: LightGBM / joblib oversubscribe and crawl without these.
-ENV PYTHONUNBUFFERED=1 MLFLOW_DISABLE=1 OMP_NUM_THREADS=2 LOKY_MAX_CPU_COUNT=2 \
+ENV PYTHONUNBUFFERED=1 MLFLOW_DISABLE=1 OMP_NUM_THREADS=2 LOKY_MAX_CPU_COUNT=2 DEMO_MODE=true \
     DATABASE_URL=sqlite:////app/demo/agripulse.db \
     MODEL_DIR=/app/demo/models
 # Build the demo database: reference data + 8 demo logins (the admin gets a random throwaway password and is

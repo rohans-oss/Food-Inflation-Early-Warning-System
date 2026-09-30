@@ -55,6 +55,10 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
         "preferred_mandi_id": lot.preferred_mandi_id,
         "preferred_mandi": db.get(Mandi, lot.preferred_mandi_id).name if lot.preferred_mandi_id else None,
         "transport_requested_at": lot.transport_requested_at,
+        "payment": {"method": lot.payment_method, "reference": lot.payment_ref, "paid_at": lot.paid_at,
+                    "received_at": lot.payment_received_at,
+                    "amount": round(lot.delivered_weight_kg / 100 * lot.sale_price_per_quintal)
+                    if lot.delivered_weight_kg and lot.sale_price_per_quintal else None},
         "delivered_weight_kg": lot.delivered_weight_kg,
         "sale_price_per_quintal": lot.sale_price_per_quintal,
         "payout_status": lot.payout_status,
@@ -192,34 +196,38 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
             route = {k: row.get(k) for k in ("road_km", "drive_hours", "route_source", "transport_cost", "spoilage_pct",
                                              "net_value", "price_forecast", "data_provenance", "feasible", "why_not")}
             route["vehicle_assumption"] = rec.get("vehicle_assumption")
-    busy = set(db.scalars(select(Trip.vehicle_id).where(Trip.status.in_(ACTIVE_TRIP))))
+    from .bookings import booking_out, fleet_availability, open_booking
+
     fleets = []
-    for org in db.scalars(select(Organization).where(Organization.kind == "fleet").order_by(Organization.name)):
-        vs = db.scalars(select(Vehicle).where(Vehicle.org_id == org.id)).all()
-        if not vs:
-            continue
-        free = [v for v in vs if v.id not in busy]
-        fits = [v for v in free if v.capacity_tons >= lot.quantity_tons]
-        fleets.append({"org_id": org.id, "name": org.name, "vehicles": len(vs), "free": len(free), "free_that_fit": len(fits),
-                       "capacities_tons": sorted({v.capacity_tons for v in fits}),
-                       "is_simulated": all(v.is_simulated for v in vs)})
+    if mandi and lot.status == "registered":
+        for org in db.scalars(select(Organization).where(Organization.kind == "fleet").order_by(Organization.name)):
+            a = fleet_availability(db, org, lot, mandi)
+            if a["vehicles"]:
+                a["free_slots"] = sum(1 for x in a["slots"] if x["free_trucks"] > 0)
+                fleets.append(a)
     fpo = db.get(Organization, lot.org_id) if lot.org_id else None
     trip = _trip_for_shipment(db, lot.shipment_id)
+    booking = open_booking(db, lot.id)
+    booking = booking if booking and (booking.shipment_id == lot.shipment_id or booking.status in ("declined", "cancelled")) else None
     done = {
         "registered": True,
         "mandi_chosen": mandi is not None,
-        "transport_requested": lot.transport_requested_at is not None or lot.shipment_id is not None,
-        "grouped": lot.shipment_id is not None,
-        "fleet_booked": bool(lot.shipment and lot.shipment.fleet_org_id),
+        "transport_booked": lot.shipment_id is not None,
         "truck_assigned": trip is not None,
         "picked_up": lot.status in ("in_transit", "at_mandi", "delivered"),
-        "delivered": lot.status == "delivered",
+        "at_mandi": lot.status in ("at_mandi", "delivered"),
+        "sold": lot.status == "delivered",
+        "paid": lot.payout_status == "paid",
     }
     return {"lot_id": lot.id, "mandi": {"id": mandi.id, "name": mandi.name} if mandi else None,
             "mandi_is_final": lot.shipment_id is not None, "route": route, "fleets": fleets,
             "fpo": {"id": fpo.id, "name": fpo.name} if fpo else None,
+            "booking": booking_out(db, booking) if booking else None,
+            "via_fpo": lot.shipment_id is not None and (booking is None or booking.shipment_id != lot.shipment_id),
             "transport_requested_at": lot.transport_requested_at, "done": done,
-            "can_request": user.role == "farmer" and lot.status == "registered" and mandi is not None and fpo is not None}
+            "can_book": user.role == "farmer" and lot.status == "registered" and mandi is not None,
+            "can_request": user.role == "farmer" and lot.status == "registered" and mandi is not None and fpo is not None,
+            "demo_mode": get_settings().demo_mode}
 
 
 @router.post("/lots/{lot_id}/request-transport")

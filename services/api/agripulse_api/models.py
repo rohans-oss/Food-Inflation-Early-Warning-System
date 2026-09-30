@@ -353,6 +353,11 @@ class Lot(Base):
     # the farmer's own choice from "Best mandi" (a request to the FPO; the shipment's mandi is what actually happens)
     preferred_mandi_id: Mapped[int | None] = mapped_column(ForeignKey("mandis.id"))
     transport_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # farmer asked the FPO to ship it
+    # payment is RECORDED here (who paid, how, reference); no money moves through AgriPulse
+    payment_method: Mapped[str | None] = mapped_column(String(20))  # upi|cash|bank|other (+ " (simulated)" in the demo)
+    payment_ref: Mapped[str | None] = mapped_column(String(80))
+    paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    payment_received_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # farmer confirmed receipt
     crop: Mapped[str] = mapped_column(String(50), default="Tomato")
     quantity_tons: Mapped[float] = mapped_column(Float)
     grade: Mapped[str] = mapped_column(String(20), default="Local")
@@ -509,3 +514,23 @@ class EvalResult(Base):
     data_provenance: Mapped[str] = mapped_column(String(16))
     metric_name: Mapped[str] = mapped_column(String(40))
     metric_value: Mapped[float | None] = mapped_column(Float)
+
+
+class TransportBooking(Base):
+    """A farmer booking a transporter (fleet) directly for a pickup slot. The fleet owner confirms it by assigning a
+    truck and driver (which creates the trip) or declines it."""
+
+    __tablename__ = "transport_bookings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lot_id: Mapped[int] = mapped_column(ForeignKey("lots.id"), index=True)
+    shipment_id: Mapped[int] = mapped_column(ForeignKey("shipments.id"), index=True)
+    farmer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    fleet_org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"))
+    pickup_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    fare_estimate: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(12), default="requested")  # requested|confirmed|declined|cancelled
+    trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
+    reason: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
