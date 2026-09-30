@@ -14,7 +14,8 @@ COPY config ./config
 COPY scripts ./scripts
 RUN pip install --no-cache-dir -e .
 
-ENV PYTHONUNBUFFERED=1 MLFLOW_DISABLE=1 \
+# Build machines report many CPUs but have a small quota: LightGBM / joblib oversubscribe and crawl without these.
+ENV PYTHONUNBUFFERED=1 MLFLOW_DISABLE=1 OMP_NUM_THREADS=2 LOKY_MAX_CPU_COUNT=2 \
     DATABASE_URL=sqlite:////app/demo/agripulse.db \
     MODEL_DIR=/app/demo/models
 # Build the demo database: reference data + 8 demo logins (the admin gets a random throwaway password and is
@@ -24,7 +25,7 @@ RUN mkdir -p /app/demo \
  && alembic upgrade head \
  && ADMIN_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" python -m agripulse_api.seed --demo \
  && python -m ingest.run synthetic \
- && python -m agripulse_ml.train --synthetic \
+ && python -m agripulse_ml.train --synthetic --folds 3 \
  && python -m agripulse_ml.predict \
  && (python -m agripulse_ml.graph.build || echo "graph build skipped")
 
