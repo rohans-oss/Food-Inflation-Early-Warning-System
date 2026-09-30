@@ -5,7 +5,63 @@ A platform that (1) forecasts tomato prices 1-4 weeks ahead as probabilistic ran
 and (2) tracks vehicles carrying produce from farm to mandi live, so farmers, traders,
 buyers and policymakers can see supply in motion.
 
-## Current version: V2 (Intelligence) is complete (docs/v2-summary.md). V1 is merged on main.
+## Current version: V3 (Decisions and Proof). V1 and V2 are merged on main.
+V2 is complete (docs/v2-summary.md); Pre-V3 hardening B-1..B-3 is done (calibration, driver app, sessions).
+
+## V3 starting conditions (read before building anything)
+- No forecasting model currently beats the naive/"today's price" baseline (see V2 results).
+  The optimizer and simulator in V3 are built on the CALIBRATED BASELINE forecast, not
+  TFT or the GNN. Advanced models stay wired in behind the existing model_name /
+  data_provenance flags and become the default automatically once the readiness monitor
+  and a future re-run show they win on real data — do not hardcode them as default now.
+  (Concretely: the displayed forecast is `[display] model = "lightgbm_quantile"` (V1), at parity with naive in V2-0,
+  with B-1 calibrated ranges. Read forecasts ONLY through the display-model filter.)
+- Forecast intervals are now calibrated (conformal prediction, added pre-V3). Use the
+  calibrated p10/p50/p90 wherever uncertainty is needed.
+- Real price history collection started 2026-09-25 and needs ~13 months for full
+  retraining; by V3 there will be some real data but likely still short of that.
+- Driver app GPS reliability: B-2 chose option (b). A Capacitor Android app (background location via a foreground
+  service) is built in CI but NOT yet field-tested, so its gap reduction is unmeasured; the browser PWA remains the
+  fallback (gaps whenever the screen is off, now labelled "location paused"). The optimizer therefore treats
+  continuous tracking as best-effort and relies on QR pickup/delivery events, which are reliable, for anything
+  decision-critical.
+- Session revocation is implemented.
+
+## V3 scope
+1. OR-Tools optimizer: best-mandi assignment under cost, capacity, perishability
+   constraints, using the calibrated baseline forecast; replaces the V1 rule-based
+   recommender as the default, with the old rule-based version kept as a fallback
+   and for comparison.
+2. Load consolidation and return-load matching.
+3. Scenario simulator: rainfall-failure and export-ban scenarios at minimum, shown as
+   forecast shifts with uncertainty, clearly labelled as counterfactual estimates.
+4. Finished multilingual alerts: Kannada reviewed by a native speaker, Hindi added.
+5. Dashboard polish across all 9 roles; readiness and ablation data made clearly visible
+   to the Policy and Admin roles.
+6. Real backtest on actual historical price spikes using whatever real data exists by
+   this point, reported honestly alongside the synthetic backtest, not blended with it.
+7. Evaluation package: backtest report, 3-minute demo (if not already done),
+   pitch deck, paper-style write-up.
+8. Backlog closure: prioritize map/location verification and tile hosting since they
+   affect the optimizer's real-world validity; document what's closed vs deferred.
+
+## New rules for V3
+21. The optimizer's decision quality is evaluated against the OLD V1 rule-based
+    recommender on the SAME scenarios (not against a forecast-accuracy metric) —
+    report cost saved, spoilage avoided, and constraint violations avoided.
+22. Every scenario-simulator output carries a visible "COUNTERFACTUAL ESTIMATE — not a
+    validated causal model" label, the same visibility as the SYNTHETIC data badge.
+23. If real data has crossed the readiness threshold for some mandis but not others by
+    this point, say so explicitly per module rather than treating the whole system as
+    one binary real/synthetic state.
+24. The final evaluation package must state, in one place, exactly what is proven on
+    real data vs synthetic data vs not yet provable, across the whole project
+    (V1 + V2 + V3), not just V3's own components.
+25. Plan first, wait for approval, one phase at a time.
+
+Phases: V3-0 optimizer + decision-eval harness -> V3-1 consolidation + return loads -> V3-2 scenario simulator
+-> V3-3 multilingual alerts + dashboard polish + backlog closure -> V3-4 real backtest + evaluation package.
+
 
 ## V2 data reality (read this before building anything)
 - Real Agmarknet history is just starting to accumulate (started ~2026-09-25) and needs
