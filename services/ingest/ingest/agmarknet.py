@@ -36,7 +36,8 @@ class AgmarknetError(RuntimeError):
     pass
 
 
-def fetch_state(client: httpx.Client, state: str, commodity: str) -> list[dict]:
+def fetch_state(client: httpx.Client, state: str, commodity: str | None) -> list[dict]:
+    """One state's current-day rows; commodity=None pulls every commodity (one request series instead of one per crop)."""
     s = get_settings()
     if not s.data_gov_api_key:
         raise AgmarknetError("DATA_GOV_API_KEY is not set (get a free key at data.gov.in)")
@@ -50,8 +51,9 @@ def fetch_state(client: httpx.Client, state: str, commodity: str) -> list[dict]:
             "limit": PAGE_SIZE,
             "offset": len(records),
             "filters[state]": state,
-            "filters[commodity]": commodity,
         }
+        if commodity:
+            params["filters[commodity]"] = commodity
         payload = _get_with_retry(client, url, params)
         rows = payload.get("records") or []
         total = int(payload.get("total") or len(rows))
@@ -138,8 +140,61 @@ def _upsert_arrival(db: Session, mandi_id: int, commodity: str, day, tonnes: flo
         a.tonnes = tonnes
 
 
-def run_daily(db: Session, client: httpx.Client | None = None, raw_dir: str | None = "data/raw/agmarknet") -> dict:
-    """Scheduled job: pull today's tomato prices for every configured state."""
+def note_feed_commodities(db: Session, records: list[dict]) -> int:
+    """Remember every commodity name the feed returned (real names for "add a vegetable" and alias checks)."""
+    from agripulse_api.crops import normalize
+    from agripulse_api.models import FeedCommodity
+
+    seen: dict[str, tuple[str, int, object]] = {}
+    for r in records:
+        raw = str(r.get("commodity") or "").strip()
+        if not raw or not r.get("arrival_date"):
+            continue
+        name = normalize(raw)[:80]
+        try:
+            d = parse_date(r["arrival_date"])
+        except ValueError:
+            continue
+        _, n, last = seen.get(name, (raw, 0, d))
+        seen[name] = (raw[:80], n + 1, max(last, d))
+    for name, (raw, n, d) in seen.items():
+        fc = db.get(FeedCommodity, name)
+        if fc is None:
+            db.add(FeedCommodity(name=name, raw_name=raw, first_seen=d, last_seen=d, last_rows=n))
+        else:
+            fc.last_seen, fc.last_rows, fc.raw_name = max(fc.last_seen, d), n, raw
+    db.flush()
+    return len(seen)
+
+
+def tracked_only(db: Session, records: list[dict]) -> list[dict]:
+    from agripulse_api.crops import normalize, tracked_feed_names
+
+    keep = {n.lower() for n in tracked_feed_names(db)}
+    return [r for r in records if normalize(r.get("commodity")).lower() in keep]
+
+
+def fetch_prices_now(commodity_raw: str) -> dict:
+    """Today's rows for ONE commodity in every configured state (a farmer just added this vegetable)."""
+    from agripulse_api.db import SessionLocal
+
+    with httpx.Client() as client, SessionLocal() as db:
+        recs = []
+        for state in get_settings().state_list:
+            try:
+                recs.extend(fetch_state(client, state, commodity_raw))
+            except AgmarknetError:
+                continue
+        note_feed_commodities(db, recs)
+        out = store_records(db, tracked_only(db, recs))
+        db.commit()
+        return out
+
+
+def run_daily(db: Session, client: httpx.Client | None = None, raw_dir: str | None = "data/raw/agmarknet",
+              commodity: str | None = None) -> dict:
+    """Scheduled job: pull today's prices for every configured state. By default every commodity is fetched, the names
+    are noted (feed_commodities) and the rows of every crop farmers can pick (config + custom) are stored."""
     s = get_settings()
     own = client is None
     client = client or httpx.Client()
@@ -148,7 +203,7 @@ def run_daily(db: Session, client: httpx.Client | None = None, raw_dir: str | No
             per_state, all_records, failures = {}, [], {}
             for state in s.state_list:
                 try:
-                    recs = fetch_state(client, state, s.agmarknet_commodity)
+                    recs = fetch_state(client, state, commodity or (None if s.agmarknet_commodity == "all" else s.agmarknet_commodity))
                 except AgmarknetError as exc:
                     failures[state] = str(exc)
                     continue
@@ -158,9 +213,11 @@ def run_daily(db: Session, client: httpx.Client | None = None, raw_dir: str | No
                 raise AgmarknetError("; ".join(f"{k}: {v}" for k, v in failures.items()))
             if raw_dir and all_records:
                 _archive_raw(raw_dir, all_records)
-            counts = store_records(db, all_records)
+            n_names = note_feed_commodities(db, all_records)
+            counts = store_records(db, tracked_only(db, all_records))
             run.rows = counts["stored"] + counts["updated"]
-            run.details = {**counts, "per_state": per_state, "state_failures": failures}
+            run.details = {**counts, "fetched": len(all_records), "feed_commodities": n_names,
+                           "per_state": per_state, "state_failures": failures}
             return run.details
     finally:
         if own:

@@ -1,6 +1,7 @@
 # PUBLIC DEMO image (docs/deployment.md "Public demo"): the API with a SQLite database baked in at build time.
 # Everything in it is SYNTHETIC or simulated and labelled so; it resets whenever the container restarts.
-# Not for real data: use docker-compose.prod.yml (Postgres, worker, backups) for that.
+# LIVE mode: set DATABASE_URL (Postgres, e.g. Neon) + DATA_GOV_API_KEY at run time and the same image serves REAL
+# prices from that database instead (scripts/demo_start.py, docs/deployment.md "LIVE mode"); the baked SQLite is unused.
 FROM python:3.11-slim
 
 # libgomp1 is LightGBM's OpenMP runtime.

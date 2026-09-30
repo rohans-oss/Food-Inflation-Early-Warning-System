@@ -15,17 +15,25 @@ from .mandis import mandi_out
 router = APIRouter(tags=["prices & forecasts"])
 
 
+def _feed(db: Session, commodity: str) -> str:
+    """Accept a crop name (config / farmer-added) or a raw Agmarknet name; return the stored commodity, lower-cased."""
+    from ..crops import feed_name
+
+    return (feed_name(db, commodity) or commodity).strip().lower()
+
+
 def _latest_price_rows(db: Session, commodity: str):
     """Latest non-outlier day per mandi; one modal per mandi-day (median across varieties)."""
+    commodity = _feed(db, commodity)
     last_day = (
         select(Price.mandi_id, func.max(Price.date).label("d"))
-        .where(Price.commodity == commodity, Price.is_outlier.is_(False))
+        .where(func.lower(Price.commodity) == commodity, Price.is_outlier.is_(False))
         .group_by(Price.mandi_id)
         .subquery()
     )
     rows = db.execute(
         select(Price).join(last_day, (Price.mandi_id == last_day.c.mandi_id) & (Price.date == last_day.c.d))
-        .where(Price.commodity == commodity, Price.is_outlier.is_(False))
+        .where(func.lower(Price.commodity) == commodity, Price.is_outlier.is_(False))
     ).scalars().all()
     by_mandi: dict[int, list[Price]] = {}
     for p in rows:
@@ -91,7 +99,8 @@ def price_history(
     rows = db.execute(
         select(Price.date, func.avg(Price.modal_price), func.min(Price.min_price), func.max(Price.max_price),
                func.max(Price.source))
-        .where(Price.mandi_id == mandi_id, Price.commodity == commodity, Price.date >= since, Price.is_outlier.is_(False))
+        .where(Price.mandi_id == mandi_id, func.lower(Price.commodity) == _feed(db, commodity), Price.date >= since,
+               Price.is_outlier.is_(False))
         .group_by(Price.date)
         .order_by(Price.date)
     ).all()

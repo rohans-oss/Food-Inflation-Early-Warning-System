@@ -42,6 +42,27 @@ per-request limit, and the daily quota. Run `python -m ingest.run agmarknet` onc
 - a CSV report download. Known header spellings are mapped in `CSV_ALIASES`; an unknown layout
   fails with the headers it saw, so you add the mapping after looking at a real file.
 
+### Every vegetable, and farmer-added ones (after V3-4)
+
+- The daily job now calls the current-day resource **without** `filters[commodity]` (one request series per state) and
+  stores the rows of every crop a farmer can pick: config/crops.toml (Agmarknet name in `agmarknet` where it differs,
+  e.g. Okra = `Bhindi(Ladies Finger)`, still to confirm against a stored payload) plus farmer-added vegetables
+  (`custom_crops`). Every commodity name the feed returns is kept in `feed_commodities` (real names for "Add another
+  vegetable"); other commodities' prices are not stored.
+- Commodity names are stored normalised (`Green chilli`); queries match case-insensitively through `crops.feed_name`.
+
+### History resource (probe first)
+
+`35985678-0d79-46b4-9ed6-6f13308a1d24` ("Variety-wise Daily Market Prices Data of Commodity",
+https://www.data.gov.in/resource/variety-wise-daily-market-prices-data-commodity). **Not verified by us yet**: a
+third-party client uses capitalised keys (`State, District, Market, Commodity, Variety, Grade, Arrival_Date, Min_Price,
+Max_Price, Modal_Price`) and `filters[State] / filters[Commodity] / filters[Arrival_Date]`. This workspace cannot reach
+data.gov.in, so `python -m ingest.history probe` runs on the server (LIVE mode does it at start) and stores what the
+real API does in `data_source_runs` (`agmarknet_history_probe`) and the log: filter spellings, date format, page cap,
+totals, whether old days are served. `backfill` uses only what the probe found, and is resumable. Findings go here:
+
+- _pending the first live probe_
+
 ## Cleaning rules (`services/ingest/ingest/cleaning.py`)
 
 | Flag | Rule | Outlier? |

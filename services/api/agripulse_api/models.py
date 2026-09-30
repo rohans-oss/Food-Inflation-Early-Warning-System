@@ -537,3 +537,27 @@ class TransportBooking(Base):
     reason: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class CustomCrop(Base):
+    """A vegetable a farmer added that is not in config/crops.toml. `feed_name` is the matching Agmarknet commodity
+    (as stored in prices.commodity) when there is one, else None: the lot still works, with no price."""
+
+    __tablename__ = "custom_crops"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    feed_name: Mapped[str | None] = mapped_column(String(80))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class FeedCommodity(Base):
+    """Every commodity name the live Agmarknet feed returned (whether or not we store its prices): the real names
+    farmers can pick from when adding a vegetable, and the check for config/crops.toml aliases."""
+
+    __tablename__ = "feed_commodities"
+    name: Mapped[str] = mapped_column(String(80), primary_key=True)  # normalised as stored in prices.commodity
+    raw_name: Mapped[str] = mapped_column(String(80))
+    first_seen: Mapped[date] = mapped_column(Date)
+    last_seen: Mapped[date] = mapped_column(Date)
+    last_rows: Mapped[int] = mapped_column(Integer, default=0)

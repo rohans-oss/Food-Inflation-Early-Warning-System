@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { api } from "@/lib/api";
-import { ago, dateTime, inr, num, tons } from "@/lib/format";
+import { ago, dateTime, day, inr, num, tons } from "@/lib/format";
 
 import { Button, Card, ErrorNote, ProvenanceBadge, SimBadge, useAction, useApi } from "./ui";
 
@@ -62,7 +62,10 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
               : <Info label="Transport (est.)" value={r ? inr(r.transport_cost) : "–"} sub="hired truck, before you pick a transporter" />}
             {r?.net_value
               ? <Info label="Net value p50" value={inr(r.net_value.p50)} sub={`${inr(r.net_value.p10)}–${inr(r.net_value.p90)}`} />
-              : <Info label="Net value" value="–" sub="no price forecast for this vegetable" />}
+              : r?.value_at_today_price != null
+                ? <Info label="Value at latest price" value={inr(r.value_at_today_price)}
+                    sub={`${inr(r.price_today.modal)}/q on ${day(r.price_today.date)} (Agmarknet) · not a forecast`} />
+                : <Info label="Net value" value="–" sub="no price reported for this vegetable here" />}
           </div>
 
           {/* 1. choose a transporter and a pickup time */}

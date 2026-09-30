@@ -85,8 +85,19 @@ JOBS = [
 ]
 
 
+def job_live_retrain(db):
+    from .live import retrain_if_ready
+
+    return retrain_if_ready(db)
+
+
+LIVE_JOBS = [("live_retrain_daily", job_live_retrain, CronTrigger(hour=20, minute=50, timezone=TZ))]
+
+
 def _add_jobs(sched):
-    for name, fn, trigger in JOBS:
+    from agripulse_api.config import get_settings
+
+    for name, fn, trigger in JOBS + (LIVE_JOBS if get_settings().live_catch_up else []):
         sched.add_job(_safe(name, fn), trigger, id=name, max_instances=1, coalesce=True, misfire_grace_time=3600)
     return sched
 

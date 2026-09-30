@@ -288,4 +288,11 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - Receipts: `routers.receipts.issue(db, lot)` at weighing gives `receipt_no` + unguessable `receipt_token`; public
   `GET /public/receipts/{token}` / web `/receipt/[token]` (printable proof: QR scans, GPS count, payment). Payment is
   recorded, never processed. Crops: `agripulse_api.crops` (config/crops.toml), validate with `crops.canonical`.
+- LIVE mode (after V3-4, user request): `DATABASE_URL=postgres…` (Neon) at run time switches the demo image to real data
+  (`scripts/demo_start.py` → `ingest/live.py` catch-up + scheduler). Daily Agmarknet pull fetches ALL commodities, stores
+  the pickable crops (`crops.tracked_feed_names`), notes names in `feed_commodities`. History ONLY via
+  `ingest.history` (probe first; backfill uses the probe's findings). Tomato forecasts in LIVE mode come only from
+  `live.retrain_if_ready` (real rows, readiness-gated); without them `supply.forecast_available` is false and every crop
+  gets `options_without_forecast` (latest real price, value at that price: never called a forecast). Farmers add
+  vegetables via `POST /crops` → `crops.resolve` (custom_crops).
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

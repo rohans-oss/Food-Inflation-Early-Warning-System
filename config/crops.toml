@@ -2,6 +2,10 @@
 # Price FORECASTS exist only where forecast = true: tomato is the only crop with a model (V1-V3 scope). Other crops
 # get mandi options ranked by transport cost and spoilage, with no price, and the UI says so.
 # Spoilage sensitivity per crop lives in config/recommender.toml [spoilage.crop_sensitivity] (assumptions).
+# `agmarknet` = the commodity name in the Agmarknet feed when it differs from `name` (matched case-insensitively).
+# Names marked "to confirm" come from Agmarknet's commodity list, not yet from a payload we stored; the live feed's
+# names are recorded in feed_commodities (Admin) and the startup log, so check them there.
+# Farmers can also add a vegetable that is not listed here (custom_crops table).
 # Override the file location with CROPS_CONFIG=/path/file.toml
 
 [[crop]]
@@ -66,6 +70,7 @@ forecast = false
 
 [[crop]]
 name = "Okra"
+agmarknet = "Bhindi(Ladies Finger)"   # to confirm
 kn = "ಬೆಂಡೆಕಾಯಿ"
 hi = "भिंडी"
 forecast = false

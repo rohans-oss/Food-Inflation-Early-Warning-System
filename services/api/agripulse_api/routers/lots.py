@@ -6,12 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..crops import has_forecast
 from ..db import get_db
 from ..lifecycle import history, move
 from ..models import AuditLog, Lot, Mandi, Organization, Shipment, Trip, User, Vehicle
 from ..rbac import forbid, get_current_user, require
 from ..scoping import lot_filter, scoped_lots
+from ..supply import forecast_available
 
 router = APIRouter(tags=["lots & shipments"])
 
@@ -44,7 +44,7 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
     out = {
         "id": lot.id,
         "crop": lot.crop,
-        "crop_has_forecast": has_forecast(lot.crop),
+        "crop_has_forecast": forecast_available(db, lot.crop),
         "quantity_tons": lot.quantity_tons,
         "grade": lot.grade,
         "pickup_label": lot.pickup_label,
@@ -94,20 +94,57 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
 
 
 @router.get("/crops")
-def list_crops():
-    """Vegetables a farmer can sell (public). `forecast` = a price model exists (tomato only today)."""
-    from ..crops import crops
+def list_crops(db: Session = Depends(get_db)):
+    """Vegetables a farmer can sell (public): config/crops.toml + ones farmers added. `forecast` = a price forecast is
+    available now; `model` = AgriPulse has a model for it (tomato only); `feed_name` = its Agmarknet commodity."""
+    from ..crops import all_crops, has_forecast
 
-    return crops()
+    return [{**c, "model": has_forecast(c["name"]), "forecast": forecast_available(db, c["name"])} for c in all_crops(db)]
+
+
+@router.get("/crops/suggestions")
+def crop_suggestions(db: Session = Depends(get_db)):
+    """Commodity names the live Agmarknet feed actually reported (most rows first), minus crops already listed."""
+    from ..crops import all_crops
+    from ..models import FeedCommodity
+
+    have = {c["name"].lower() for c in all_crops(db)} | {(c["feed_name"] or "").lower() for c in all_crops(db)}
+    rows = db.scalars(select(FeedCommodity).order_by(FeedCommodity.last_rows.desc(), FeedCommodity.name))
+    return [{"name": f.name, "last_seen": f.last_seen} for f in rows if f.name.lower() not in have]
+
+
+class CropIn(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+
+
+@router.post("/crops", status_code=201)
+def add_crop(body: CropIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
+    """A farmer adds a vegetable that is not listed. Matched to the live Agmarknet feed when it has that name (then
+    real prices are fetched and kept from now on); otherwise the lot still works, with no price."""
+    from ..crops import all_crops, resolve
+
+    name, created = resolve(db, body.name, user_id=user.id, create=True)
+    if name is None:
+        raise HTTPException(400, "Use letters for the vegetable name (e.g. Drumstick)")
+    db.commit()
+    crop = next(c for c in all_crops(db) if c["name"] == name)
+    if created and crop["feed_name"] and get_settings().data_gov_api_key:
+        import threading
+
+        from ingest.agmarknet import fetch_prices_now
+
+        threading.Thread(target=fetch_prices_now, args=(crop["feed_name"],), daemon=True).start()
+    return {**crop, "created": created, "prices": "fetching" if created and crop["feed_name"] else
+            ("tracked" if crop["feed_name"] else "not in the Agmarknet feed: no price")}
 
 
 @router.post("/lots", status_code=201)
 def create_lot(body: LotIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
-    from ..crops import canonical, names
+    from ..crops import resolve
 
-    crop = canonical(body.crop)
+    crop, _ = resolve(db, body.crop, user_id=user.id, create=True)
     if crop is None:
-        raise HTTPException(400, f"Unknown crop; choose one of {sorted(names())}")
+        raise HTTPException(400, "Choose a vegetable, or type its name (letters only)")
     for org_id, kind in ((body.fpo_org_id, "fpo"), (body.lender_org_id, "lender")):
         if org_id is not None:
             org = db.get(Organization, org_id)
@@ -206,12 +243,13 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
     if mandi:
         from ..supply import options_without_forecast
 
-        rec = (recommend_single(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, weeks=1) if has_forecast(lot.crop)
+        rec = (recommend_single(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, weeks=1) if forecast_available(db, lot.crop)
                else options_without_forecast(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, lot.crop))
         row = next((r for r in rec.get("ranked", []) if r["mandi_id"] == mandi.id), None)
         if row:
             route = {k: row.get(k) for k in ("road_km", "drive_hours", "route_source", "transport_cost", "spoilage_pct",
-                                             "net_value", "price_forecast", "data_provenance", "feasible", "why_not")}
+                                             "net_value", "price_forecast", "data_provenance", "feasible", "why_not",
+                                             "price_today", "value_at_today_price")}
             route["vehicle_assumption"] = rec.get("vehicle_assumption")
     from .bookings import booking_out, fleet_availability, open_booking
 

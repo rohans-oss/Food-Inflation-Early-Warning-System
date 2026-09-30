@@ -190,9 +190,52 @@ def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tom
     }
 
 
+PRICE_FRESH_DAYS = 14  # a mandi's latest real price older than this is not shown as "today's price"
+
+
+def latest_crop_prices(db: Session, crop: str, fresh_days: int = PRICE_FRESH_DAYS) -> dict[int, dict]:
+    """{mandi_id: latest price} for any crop (config or farmer-added) from stored Agmarknet rows: median modal across
+    varieties on the mandi's latest non-outlier day within `fresh_days`. Rs per quintal."""
+    from .crops import feed_name
+
+    fn = feed_name(db, crop)
+    if not fn:
+        return {}
+    since = date.today() - timedelta(days=fresh_days)
+    cond = [func.lower(Price.commodity) == fn.lower(), Price.is_outlier.is_(False), Price.date >= since]
+    last = select(Price.mandi_id, func.max(Price.date).label("d")).where(*cond).group_by(Price.mandi_id).subquery()
+    rows = db.scalars(select(Price).join(last, (Price.mandi_id == last.c.mandi_id) & (Price.date == last.c.d))
+                      .where(*cond)).all()
+    out: dict[int, dict] = {}
+    for p in rows:
+        out.setdefault(p.mandi_id, {"rows": []})["rows"].append(p)
+    for mid, v in out.items():
+        rs = v.pop("rows")
+        synthetic = any(r.source == "synthetic" for r in rs)
+        v.update({"modal": round(median(r.modal_price for r in rs)), "date": rs[0].date,
+                  "min": min((r.min_price for r in rs if r.min_price is not None), default=None),
+                  "max": max((r.max_price for r in rs if r.max_price is not None), default=None),
+                  "data_provenance": "synthetic" if synthetic else "real", "source": "Agmarknet" if not synthetic else "synthetic"})
+    return out
+
+
+def forecast_available(db: Session, crop: str) -> bool:
+    """A crop gets the forecast-based recommender only when it has a model AND recent display-model forecasts exist
+    (in LIVE mode tomato has none until real history passes the readiness threshold)."""
+    from .crops import has_forecast
+
+    if not has_forecast(crop):
+        return False
+    return db.scalar(select(func.count()).select_from(Forecast).where(
+        Forecast.model_name == display_model(), Forecast.commodity == crop,
+        Forecast.issue_date >= date.today() - timedelta(days=7))) > 0
+
+
 def options_without_forecast(db: Session, lat: float, lon: float, tons: float, crop: str) -> dict:
-    """Mandi options for a crop with NO price model (everything except tomato): nearest mandis with road distance, a
-    hired-truck transport cost and crop-specific spoilage. No price, no net value: the UI says there is no forecast."""
+    """Mandi options when there is NO price forecast for the crop (every crop but tomato, and tomato in LIVE mode until
+    real history is long enough): nearest mandis with road distance, a hired-truck transport cost, crop-specific
+    spoilage and the latest REAL Agmarknet price where the mandi reported one. Value at today's price is not a
+    forecast; mandis with a price rank by it, the rest by transport cost."""
     cfg = cost_config()
     t = cfg["transport"]["vehicle"]
     sizes = sorted(t.get("sizes_tons", [2.5, 5, 9, 10, 16]))
@@ -202,19 +245,35 @@ def options_without_forecast(db: Session, lat: float, lon: float, tons: float, c
     radius = cfg["search"]["radius_km"]
     cands = sorted(((haversine_km(lat, lon, m.lat, m.lon), m) for m in db.scalars(select(Mandi).where(Mandi.lat.is_not(None)))),
                    key=lambda x: x[0])
+    prices = latest_crop_prices(db, crop)
     rows = []
     for _, m in [c for c in cands if c[0] <= radius][: cfg["search"]["max_candidates"]]:
         km, minutes, src = road_km(lat, lon, m.lat, m.lon)
         temp, temp_src = _temp_c(db, m.id)
+        sp = spoilage_pct(minutes / 60, temp, crop)
+        cost = round(km * legs * rate)
+        pr = prices.get(m.id)
+        value = round(pr["modal"] * tons * 10 * (1 - sp / 100) - cost) if pr else None  # 10 quintal per tonne
         rows.append({"mandi_id": m.id, "mandi": m.name, "district": m.district, "state": m.state,
                      "coords_verified": m.coords_verified, "road_km": km, "drive_hours": round(minutes / 60, 1),
                      "route_source": src, "price_forecast": None, "net_value": None, "spike_prob_14d": None,
-                     "transport_cost": round(km * legs * rate), "spoilage_pct": round(spoilage_pct(minutes / 60, temp, crop), 2),
-                     "temp_c": temp, "temp_source": temp_src, "data_provenance": None, "feasible": True})
-    rows.sort(key=lambda r: r["transport_cost"])
+                     "price_today": ({"modal": pr["modal"], "min": pr["min"], "max": pr["max"], "date": pr["date"],
+                                      "source": pr["source"]} if pr else None),
+                     "value_at_today_price": value,
+                     "transport_cost": cost, "spoilage_pct": round(sp, 2),
+                     "temp_c": temp, "temp_source": temp_src, "data_provenance": pr["data_provenance"] if pr else None,
+                     "feasible": True})
+    rows.sort(key=lambda r: (r["value_at_today_price"] is None, -(r["value_at_today_price"] or 0), r["transport_cost"]))
     for i, r in enumerate(rows):
         r["rank"] = i + 1
-    return {"crop": crop, "no_price_forecast": True, "recommender": "distance",
-            "formula": f"No price model for {crop} yet: mandis ranked by transport cost (hired {cap:g} t truck, "
-                       f"Rs {rate:.0f}/km{', both ways' if legs == 2 else ''}) and spoilage",
+    from .crops import has_forecast
+
+    why = (f"{crop} forecasts need at least a year of real price history, which is still being collected"
+           if has_forecast(crop) else f"AgriPulse has no price model for {crop}")
+    priced = sum(1 for r in rows if r["price_today"])
+    return {"crop": crop, "no_price_forecast": True, "recommender": "today_price" if priced else "distance",
+            "why_no_forecast": why, "priced_mandis": priced,
+            "formula": (f"No forecast ({why}). Mandis with a recent real Agmarknet price rank by value at that price "
+                        f"(price x quantity - spoilage - transport); the rest by transport cost (hired {cap:g} t truck, "
+                        f"Rs {rate:.0f}/km{', both ways' if legs == 2 else ''}). Today's price is not a prediction"),
             "ranked": rows, "no_forecast": [], "inputs": {"config_file": Path(cfg["_path"]).name}}

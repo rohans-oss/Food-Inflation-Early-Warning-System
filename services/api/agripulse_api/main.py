@@ -25,6 +25,10 @@ async def lifespan(app: FastAPI):
         from ingest.scheduler import start_scheduler
 
         scheduler = start_scheduler()
+    if settings.live_catch_up:  # LIVE mode on free hosting: do whatever the sleeping scheduler missed
+        from ingest.live import start_catch_up
+
+        start_catch_up()
     yield
     if scheduler:
         scheduler.shutdown(wait=False)

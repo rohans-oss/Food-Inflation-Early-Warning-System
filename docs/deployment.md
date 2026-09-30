@@ -52,6 +52,23 @@ DOMAIN=agripulse.example.org docker compose -f docker-compose.yml -f docker-comp
   production traffic. For a pilot, run your own tile server or use a provider, and change `STYLE` in
   `apps/web/components/MapView.tsx`.
 
+## LIVE mode on the same free services (real prices, persistent)
+
+Same image (`infra/Dockerfile.demo`); the mode is picked at run time by `DATABASE_URL`:
+
+1. Create a free Postgres at neon.tech (region Singapore). Copy its connection string.
+2. Render → agripulse-api → Environment: `DATABASE_URL` = that string, `DATA_GOV_API_KEY` = your data.gov.in key
+   (optionally `ADMIN_PASSWORD`). Deploy.
+3. On every start `scripts/demo_start.py` migrates + seeds (idempotent), then runs the API with the scheduler and a
+   background catch-up (`ingest/live.py`): weather, today's Agmarknet pull for every vegetable, the history probe +
+   backfill (`HISTORY_DAYS`, default 800, for tomato; `HISTORY_VEG_DAYS`, default 120, for the rest), and a tomato
+   retrain on REAL rows only once a mandi passes config/readiness.toml. Until then there is no forecast: farmers see
+   the latest real price per mandi and the value at that price.
+4. `.github/workflows/wake-live.yml` wakes the sleeping API after Agmarknet's midday and evening updates.
+
+Still simulated in LIVE mode: demo logins and the demo trucks / trips (labelled "Simulated"). Unset `DATABASE_URL` to go
+back to the synthetic demo.
+
 ## Public demo (Render, $0)
 
 A shareable demo with **SYNTHETIC** data only. It is not the real system: nothing is collected, and it resets on every

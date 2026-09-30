@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { inr, num } from "@/lib/format";
+import { day, inr, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 import { ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstProvenance } from "./ui";
@@ -38,13 +38,14 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
       </div>
       <ErrorNote error={r.error} />
       {noPrice && (
-        <Note>There is no price forecast for {r.data.crop} yet (AgriPulse models tomato prices only), so mandis are ranked by
-          transport cost; check today&apos;s rate with the mandi before you sell.</Note>
+        <Note>No price forecast for {r.data.crop}: {r.data.why_no_forecast}. {r.data.priced_mandis > 0
+          ? "Mandis are ranked by what your lot would fetch at their latest real Agmarknet price, after transport and spoilage. That is today's price, not a prediction."
+          : "No nearby mandi reported a price for it in the last two weeks, so mandis are ranked by transport cost."}</Note>
       )}
       <Table head={noPrice
-        ? ["#", t("mandi"), "Road", t("transport"), t("spoilage"), ...(onChoose ? ["Your choice"] : [])]
+        ? ["#", t("mandi"), "Road", "Latest price (Agmarknet)", t("transport"), t("spoilage"), "Value at that price", ...(onChoose ? ["Your choice"] : [])]
         : ["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk"), ...(onChoose ? ["Your choice"] : [])]}
-        empty={r.loading ? t("loading") : "No mandis with a forecast nearby."}>
+        empty={r.loading ? t("loading") : "No mandis nearby."}>
         {ranked.map((m) => (
           <tr key={m.mandi_id} className={m.mandi_id === chosenId ? "bg-brand/10" : m.feasible === false ? "opacity-60" : m.rank === 1 ? "bg-page" : ""}>
             <Td>{m.rank}</Td>
@@ -56,9 +57,13 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
             </Td>
             <Td>{num(m.road_km, 0)} km<div className="text-xs text-muted">{num(m.drive_hours, 1)} h{m.route_source !== "osrm" && " · approx."}</div></Td>
             {!noPrice && <Td>{inr(m.price_forecast?.p50)}<div className="text-xs text-muted">{inr(m.price_forecast?.p10)}–{inr(m.price_forecast?.p90)}/q</div></Td>}
+            {noPrice && <Td>{m.price_today ? <>{inr(m.price_today.modal)}<span className="text-muted">/q</span>
+              <div className="text-xs text-muted">{day(m.price_today.date)}{m.data_provenance === "synthetic" ? " · SYNTHETIC" : ""}</div></>
+              : <span className="text-xs text-muted">not reported</span>}</Td>}
             <Td>−{inr(m.transport_cost)}</Td>
             <Td>−{num(m.spoilage_pct, 1)}%<div className="text-xs text-muted">{num(m.temp_c, 0)}°C{m.temp_source === "default" && " (assumed)"}</div></Td>
             {!noPrice && <Td><b>{inr(m.net_value?.p50)}</b><div className="text-xs text-muted">{inr(m.net_value?.p10)}–{inr(m.net_value?.p90)}</div></Td>}
+            {noPrice && <Td>{m.value_at_today_price != null ? <b>{inr(m.value_at_today_price)}</b> : "–"}</Td>}
             {!noPrice && <Td><SpikeBadge p={m.spike_prob_14d} /></Td>}
             {onChoose && (
               <Td>

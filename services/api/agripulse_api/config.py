@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     agmarknet_resource_id: str = "9ef84268-d588-465a-a308-a864a43d0070"
     agmarknet_base_url: str = "https://api.data.gov.in/resource"
     agmarknet_states: str = "Karnataka,Tamil Nadu,Andhra Pradesh,Telangana,Maharashtra,Kerala"
-    agmarknet_commodity: str = "Tomato"
+    agmarknet_commodity: str = "all"  # "all" = every commodity (crops farmers can pick are stored)
+    agmarknet_history_resource_id: str = "35985678-0d79-46b4-9ed6-6f13308a1d24"  # probe before trusting (docs)
     open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
     nasa_power_url: str = "https://power.larc.nasa.gov/api/temporal/daily/point"
 
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
 
     # --- jobs ---
     enable_scheduler: bool = False
+    live_catch_up: bool = False  # LIVE mode: run overdue ingest / backfill / retrain in the background at start
 
     # --- public demo only (infra/Dockerfile.demo): enables the SIMULATED "run demo trip" autopilot ---
     demo_mode: bool = False
@@ -71,6 +73,10 @@ class Settings(BaseSettings):
         # JWT_SECRET=auto: a random secret per process (public demo on one instance; every restart signs everyone out)
         if self.jwt_secret == "auto":
             self.jwt_secret = secrets.token_urlsafe(48)
+        # Hosted Postgres (Neon, Render) hands out postgres:// or postgresql:// URLs; our driver is psycopg 3.
+        for prefix in ("postgres://", "postgresql://"):
+            if self.database_url.startswith(prefix):
+                self.database_url = "postgresql+psycopg://" + self.database_url[len(prefix):]
         return self
 
     @property

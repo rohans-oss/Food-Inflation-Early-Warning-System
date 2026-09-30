@@ -114,7 +114,12 @@ def test_any_vegetable_can_be_registered_and_non_tomato_gets_mandis_without_a_pr
     assert {"Tomato", "Onion", "Potato"} <= {c["name"] for c in crops}
     assert [c["name"] for c in crops if c["forecast"]] == ["Tomato"]
     F = as_role("farmer")
-    assert client.post("/lots", headers=F, json={"crop": "Dragonfruit", "quantity_tons": 1, "pickup_lat": FARM[0],
+    # a vegetable that is not listed can be added (user request): it works, with no price
+    custom = client.post("/lots", headers=F, json={"crop": "drumstick", "quantity_tons": 1, "pickup_lat": FARM[0],
+                                                   "pickup_lon": FARM[1]})
+    assert custom.status_code == 201 and custom.json()["crop"] == "Drumstick"
+    assert "Drumstick" in {c["name"] for c in client.get("/crops").json() if c["custom"]}
+    assert client.post("/lots", headers=F, json={"crop": "<b>", "quantity_tons": 1, "pickup_lat": FARM[0],
                                                  "pickup_lon": FARM[1]}).status_code == 400
     lot = client.post("/lots", headers=F, json={"crop": "onion", "quantity_tons": 3, "pickup_lat": FARM[0],
                                                 "pickup_lon": FARM[1]}).json()

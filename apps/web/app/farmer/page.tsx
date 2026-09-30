@@ -17,8 +17,13 @@ const DEFAULT_FARM: [number, number] = [13.2, 78.02]; // Kolar belt, until the f
 export default function Farmer() {
   const { t, lang } = useSession();
   const router = useRouter();
-  const crops = useApi<{ name: string; kn: string; hi: string; forecast: boolean }[]>("/crops");
-  const cropLabel = (c: { name: string; kn: string; hi: string }) => (lang === "kn" ? `${c.kn} · ${c.name}` : lang === "hi" ? `${c.hi} · ${c.name}` : c.name);
+  const crops = useApi<{ name: string; kn: string | null; hi: string | null; forecast: boolean; custom: boolean; feed_name: string | null }[]>("/crops");
+  const suggestions = useApi<{ name: string }[]>("/crops/suggestions");
+  const cropLabel = (c: { name: string; kn: string | null; hi: string | null }) =>
+    lang === "kn" && c.kn ? `${c.kn} · ${c.name}` : lang === "hi" && c.hi ? `${c.hi} · ${c.name}` : c.name;
+  const [adding, setAdding] = useState(false);
+  const [newCrop, setNewCrop] = useState("");
+  const [addNote, setAddNote] = useState<string | null>(null);
   const lots = useApi<any[]>("/lots", { poll: 30000 });
   const [point, setPoint] = useState<[number, number] | null>(null);
   const [f, setF] = useState({ crop: "Tomato", quantity_tons: "2", grade: "Local", pickup_label: "", fpo_org_id: "", lender_org_id: "" });
@@ -34,7 +39,20 @@ export default function Farmer() {
   // prices near the chosen point, else near the latest lot, else the default
   const last = lots.data?.[0];
   const here: [number, number] = point ?? (last ? [last.pickup_lat, last.pickup_lon] : DEFAULT_FARM);
-  const prices = useApi<any[]>("/prices/latest", { query: { near_lat: here[0], near_lon: here[1], radius_km: 150 } });
+  const prices = useApi<any[]>("/prices/latest", { query: { commodity: f.crop, near_lat: here[0], near_lon: here[1], radius_km: 150 } });
+  const chosenCrop = crops.data?.find((c) => c.name === f.crop);
+
+  const addCrop = () => run(async () => {
+    const c = await api("/crops", { method: "POST", body: { name: newCrop } });
+    await crops.reload();
+    suggestions.reload();
+    setF((x) => ({ ...x, crop: c.name }));
+    setAdding(false);
+    setNewCrop("");
+    setAddNote(c.feed_name
+      ? `${c.name} added. Real mandi prices for it come from Agmarknet${c.created ? " (fetching today's now)" : ""}.`
+      : `${c.name} added. Agmarknet does not report this name, so there is no price for it; booking, tracking and the receipt still work.`);
+  });
   useEffect(() => { if (!mandi && prices.data?.length) setMandi(prices.data[0].mandi); }, [prices.data, mandi]);
 
   const locate = () =>
@@ -81,15 +99,28 @@ export default function Farmer() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={t("newLot")}>
           <form onSubmit={create} className="space-y-3">
-            <Field label="Vegetable" hint={crops.data?.find((c) => c.name === f.crop)?.forecast === false
-              ? "No price forecast for this vegetable yet: you still get mandis by transport cost, booking, live tracking and a delivery receipt."
-              : undefined}>
-              <select className={inputCls} value={f.crop} onChange={(e) => setF({ ...f, crop: e.target.value })}>
-                {(crops.data ?? [{ name: "Tomato", kn: "ಟೊಮ್ಯಾಟೊ", hi: "टमाटर", forecast: true }]).map((c) => (
-                  <option key={c.name} value={c.name}>{cropLabel(c)}{c.forecast ? " · price forecast" : ""}</option>
+            <Field label="Vegetable" hint={addNote ?? (chosenCrop && !chosenCrop.forecast
+              ? "No price forecast for this vegetable: mandis are ranked by today's real price (where reported) and transport cost."
+              : undefined)}>
+              <select className={inputCls} value={adding ? "__add" : f.crop}
+                onChange={(e) => { setAddNote(null); if (e.target.value === "__add") setAdding(true); else { setAdding(false); setF({ ...f, crop: e.target.value }); } }}>
+                {(crops.data ?? [{ name: "Tomato", kn: "ಟೊಮ್ಯಾಟೊ", hi: "टमाटर", forecast: false, custom: false, feed_name: "Tomato" }]).map((c) => (
+                  <option key={c.name} value={c.name}>{cropLabel(c)}{c.forecast ? " · price forecast" : ""}{c.custom ? " · added" : ""}</option>
                 ))}
+                <option value="__add">+ Add another vegetable…</option>
               </select>
             </Field>
+            {adding && (
+              <div className="flex gap-2">
+                <input className={inputCls} list="crop-suggestions" placeholder="e.g. Drumstick, Bitter gourd" value={newCrop}
+                  onChange={(e) => setNewCrop(e.target.value)} autoFocus />
+                <datalist id="crop-suggestions">
+                  {suggestions.data?.map((s) => <option key={s.name} value={s.name} />)}
+                </datalist>
+                <Button type="button" onClick={addCrop} disabled={busy || newCrop.trim().length < 2}>Add</Button>
+                <Button type="button" variant="secondary" onClick={() => { setAdding(false); setNewCrop(""); }}>Cancel</Button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("quantityTons")}>
                 <input className={inputCls} type="number" min="0.1" max="60" step="0.1" required value={f.quantity_tons}
@@ -133,9 +164,9 @@ export default function Farmer() {
           </form>
         </Card>
 
-        <Card title={t("pricesNearby")} action={<ProvenanceBadge p={worstProvenance((prices.data ?? []).map((p) => p.data_provenance))} />}>
+        <Card title={`${t("pricesNearby")} · ${f.crop}`} action={<ProvenanceBadge p={worstProvenance((prices.data ?? []).map((p) => p.data_provenance))} />}>
           <ErrorNote error={prices.error} />
-          <Table head={[t("mandi"), t("modalPrice"), t("range")]} empty="No mandi prices within 150 km yet.">
+          <Table head={[t("mandi"), t("modalPrice"), t("range")]} empty={`No ${f.crop} prices reported by mandis within 150 km yet.`}>
             {prices.data?.slice(0, 10).map((p) => (
               <tr key={p.mandi.id} onClick={() => setMandi(p.mandi)}
                 className={`cursor-pointer hover:bg-page ${mandi?.id === p.mandi.id ? "bg-page" : ""}`}>
@@ -146,11 +177,12 @@ export default function Farmer() {
               </tr>
             ))}
           </Table>
-          <p className="mt-2 text-xs text-muted">Rs per quintal (100 kg). Tap a mandi to see its forecast.</p>
+          <p className="mt-2 text-xs text-muted">Rs per quintal (100 kg), as reported by each mandi to Agmarknet (date shown).
+            {chosenCrop?.forecast ? " Tap a mandi to see its forecast." : ""}</p>
         </Card>
       </div>
 
-      {mandi && (
+      {mandi && chosenCrop?.forecast && (
         <Card title={`${t("priceForecast")} · ${mandi.name}`}>
           <MandiForecast mandiId={mandi.id} />
         </Card>

@@ -40,11 +40,10 @@ def best_mandi(
         lat, lon, tons, crop = lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, lot.crop
     if lat is None or lon is None or not tons:
         raise HTTPException(400, "Give lot_id, or lat + lon + tons")
-    from ..crops import has_forecast
     from ..decisions.service import recommend_single  # V3-0: rule or optimizer, per config/recommender.toml
-    from ..supply import options_without_forecast
+    from ..supply import forecast_available, options_without_forecast
 
-    if not has_forecast(crop):
+    if not forecast_available(db, crop):
         return options_without_forecast(db, lat, lon, tons, crop)
     return recommend_single(db, lat, lon, tons, weeks=weeks)
 

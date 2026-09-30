@@ -707,3 +707,19 @@ legs → Open delivery receipt → Print.
 - **Map tiles** come from the public OSM server (demo use only); see deployment notes.
 - **Not built (V2/V3 by design):** TFT, mandi GNN / Neo4j, Sentinel-2, in-transit supply as a model feature, OR-Tools,
   scenario simulator, Hindi.
+
+## Real prices for every vegetable (LIVE mode)
+
+- **Real mandi prices:** the daily Agmarknet job pulls every commodity for Karnataka and neighbouring states and keeps
+  every vegetable a farmer can pick. The farmer page shows nearby mandi prices for the chosen vegetable (with the
+  date each mandi reported), and "Best mandi" ranks by the value of the lot at the latest real price, after transport
+  and spoilage. That is today's price, not a forecast, and the page says so.
+- **Add a vegetable:** "+ Add another vegetable…" in the Vegetable list; names the live feed reports are suggested. A
+  matched name gets real prices from then on; an unmatched one still works for booking, tracking, receipt and payment.
+- **Tomato forecast on real data:** trained only on real rows, and only after the readiness monitor finds a mandi with
+  a year of real history (history backfill from data.gov.in, probed first). Until then there is no forecast.
+- **Still simulated:** demo accounts and demo trucks.
+- Setup: docs/deployment.md "LIVE mode". Tests: tests/test_live_prices.py.
+
+How to verify: set `DATABASE_URL` + `DATA_GOV_API_KEY`, deploy, then check the API log for `[live] agmarknet` and
+`history probe findings`; farmer login → pick Onion → nearby prices show today's Agmarknet rows.
