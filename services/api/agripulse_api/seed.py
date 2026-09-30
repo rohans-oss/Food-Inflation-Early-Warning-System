@@ -38,10 +38,10 @@ def _org(db: Session, name: str, kind: str) -> Organization:
     return org
 
 
-def _user(db: Session, email: str, name: str, role: str, password: str, **kw) -> User:
+def _user(db: Session, email: str, name: str, role: str, password: str, *, password_hash: str | None = None, **kw) -> User:
     u = db.scalar(select(User).where(User.email == email))
     if u is None:
-        u = User(email=email, full_name=name, role=role, password_hash=hash_password(password), **kw)
+        u = User(email=email, full_name=name, role=role, password_hash=password_hash or hash_password(password), **kw)
         db.add(u)
         db.flush()
     return u
@@ -90,7 +90,49 @@ def seed_demo(db: Session) -> dict[str, User]:
     fleet_org = users["fleet_owner"].org_id
     if db.scalar(select(Vehicle).where(Vehicle.registration == "KA-01-XX-1234")) is None:
         db.add(Vehicle(org_id=fleet_org, registration="KA-01-XX-1234", capacity_tons=5.0))
+    seed_demo_fleets(db, password)
     return users
+
+
+# DEMO transporters around the Karnataka tomato belt: invented company and driver names, trucks with clearly fake
+# "DEMO" registrations, bases at approximate town centres. (name, base label, lat, lon, [(truck t, driver)])
+DEMO_FLEETS = [
+    ("Hebbal Haulage (demo)", "Hebbal, Bengaluru", 13.0358, 77.5970,
+     [(2.5, "Imran (driver)"), (9.0, "Venkatesh (driver)")]),
+    ("Kolar Krishi Transport (demo)", "Kolar", 13.1367, 78.1292,
+     [(2.5, "Manjunath (driver)"), (5.0, "Suresh (driver)"), (9.0, "Anil (driver)")]),
+    ("Chintamani Goods Carriers (demo)", "Chintamani", 13.4000, 78.0570,
+     [(5.0, "Nagaraj (driver)"), (10.0, "Srinivas (driver)")]),
+    ("Mulbagal Fresh Movers (demo)", "Mulbagal", 13.1636, 78.3930,
+     [(2.5, "Raghu (driver)"), (5.0, "Prakash (driver)")]),
+    ("Chikkaballapur Roadlines (demo)", "Chikkaballapur", 13.4355, 77.7315,
+     [(9.0, "Mahesh (driver)"), (16.0, "Ramesh (driver)")]),
+    ("Hosakote Cold Chain (demo)", "Hosakote", 13.0707, 77.7982,
+     [(5.0, "Shivakumar (driver)"), (9.0, "Kiran (driver)")]),
+    ("Tumakuru Tempo Service (demo)", "Tumakuru", 13.3392, 77.1017,
+     [(2.5, "Basavaraj (driver)"), (5.0, "Gopal (driver)")]),
+    ("Mysuru Agri Logistics (demo)", "Mysuru", 12.2958, 76.6394,
+     [(5.0, "Chandru (driver)"), (9.0, "Harish (driver)"), (16.0, "Lokesh (driver)")]),
+]
+
+
+def seed_demo_fleets(db: Session, password: str) -> None:
+    """Idempotent: each demo fleet gets its base, an owner login, one driver per truck, and its trucks."""
+    h = hash_password(password)  # one hash for every demo fleet login (password hashing is deliberately slow)
+    for i, (name, label, lat, lon, trucks) in enumerate(DEMO_FLEETS):
+        org = _org(db, name, "fleet")
+        if org.base_lat is None:
+            org.base_label, org.base_lat, org.base_lon = label, lat, lon
+        slug = "fleet" if i == 0 else f"fleet{i + 1}"
+        if i:
+            _user(db, f"{slug}@demo.agripulse", f"{name.replace(' (demo)', '')} owner", "fleet_owner", password,
+                  password_hash=h, org_id=org.id)
+        for j, (tons, driver) in enumerate(trucks):
+            _user(db, f"{slug}-driver{j + 1}@demo.agripulse", driver, "driver", password, password_hash=h, org_id=org.id)
+            reg = f"KA-DEMO-{i + 1:02d}{j + 1:02d}"
+            if db.scalar(select(Vehicle).where(Vehicle.registration == reg)) is None:
+                db.add(Vehicle(org_id=org.id, registration=reg, capacity_tons=tons, is_simulated=True))
+    db.flush()
 
 
 def main() -> None:

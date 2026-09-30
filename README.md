@@ -725,3 +725,11 @@ legs → Open delivery receipt → Print.
 
 How to verify: set `DATABASE_URL` + `DATA_GOV_API_KEY`, deploy, then check the API log for `[live] agmarknet` and
 `history probe findings`; farmer login → pick Onion → nearby prices show today's Agmarknet rows.
+
+## More transporters (demo)
+
+Eight demo transport companies based in Hebbal, Kolar, Chintamani, Mulbagal, Chikkaballapur, Hosakote, Tumakuru and
+Mysuru, each with its own drivers and trucks (2.5-16 t, `KA-DEMO-…`, simulated). The farmer sees those within 120 km of
+the farm, cheapest first; the fare counts the whole truck day (base -> farm -> mandi -> base). "Run demo trip" uses the
+chosen company's own truck and driver, starting from its base. Seeded by `seed.seed_demo_fleets`; base columns in
+migration 0018.

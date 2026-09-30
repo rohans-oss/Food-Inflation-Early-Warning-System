@@ -62,6 +62,10 @@ class Organization(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(32))  # fpo|fleet|trader|buyer|lender|government|platform
+    # fleets: where the trucks start from (the empty run to the farm is part of the fare)
+    base_label: Mapped[str | None] = mapped_column(String(120))
+    base_lat: Mapped[float | None] = mapped_column(Float)
+    base_lon: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 

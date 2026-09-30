@@ -40,13 +40,19 @@ OPEN = ("requested", "confirmed")
 ACTIVE_TRIP = ("assigned", "accepted", "in_progress")
 
 
-def _fare(db: Session, lot: Lot, mandi: Mandi, capacity_tons: float) -> tuple[float, float, str]:
-    """(fare estimate Rs, road km, route source): road km x rate for that truck size, both ways if configured."""
+def _fare(db: Session, lot: Lot, mandi: Mandi, capacity_tons: float, org: Organization | None = None) -> tuple[float, float, str]:
+    """(fare estimate Rs, road km farm->mandi, route source). A fleet with a base pays for the whole truck day:
+    base -> farm (empty) -> mandi (loaded) -> base; without a base, farm <-> mandi both ways if configured.
+    Rate per km depends on the truck size (config/recommender.toml)."""
     from tracking.routing import road_km
 
     km, _, source = road_km(lot.pickup_lat, lot.pickup_lon, mandi.lat, mandi.lon)
     t = cost_config()["transport"]["vehicle"]
     rate = t["base_rate_per_km"] + t["rate_per_km_per_capacity_ton"] * capacity_tons
+    if org is not None and org.base_lat is not None:
+        to_farm = road_km(org.base_lat, org.base_lon, lot.pickup_lat, lot.pickup_lon)[0]
+        back = road_km(mandi.lat, mandi.lon, org.base_lat, org.base_lon)[0]
+        return round((to_farm + km + back) * rate), km, source
     legs = 2 if t.get("count_return_leg", True) else 1
     return round(km * legs * rate), km, source
 
@@ -77,8 +83,15 @@ def fleet_availability(db: Session, org: Organization, lot: Lot, mandi: Mandi, n
         free = len(fits) - taken - on_road
         slots.append({"pickup_at": s, "label": s.astimezone(IST).strftime("%a %d %b, %I:%M %p"), "free_trucks": max(free, 0)})
     cap = min((v.capacity_tons for v in fits), default=None)
-    fare, km, source = _fare(db, lot, mandi, cap) if cap else (None, None, None)
+    fare, km, source = _fare(db, lot, mandi, cap, org) if cap else (None, None, None)
+    from tracking.geo import haversine_km
+
+    drivers = db.scalars(select(User.full_name).where(User.role == "driver", User.org_id == org.id,
+                                                      User.is_active.is_(True)).order_by(User.id)).all()
+    base_km = (round(haversine_km(org.base_lat, org.base_lon, lot.pickup_lat, lot.pickup_lon) * 1.3)
+               if org.base_lat is not None else None)  # road ~ 1.3 x straight line, for display only
     return {"org_id": org.id, "name": org.name, "vehicles": len(vs), "fit": len(fits),
+            "base": org.base_label, "base_km_from_farm": base_km, "drivers": [d.replace(" (driver)", "") for d in drivers],
             "capacities_tons": sorted({v.capacity_tons for v in fits}), "is_simulated": bool(vs) and all(v.is_simulated for v in vs),
             "fare_estimate": fare, "road_km": km, "route_source": source, "truck_tons": cap, "slots": slots}
 
@@ -324,13 +337,22 @@ def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple
     trip = db.scalar(select(Trip).where(Trip.shipment_id == b.shipment_id, Trip.status.not_in(["declined", "cancelled"])))
     if trip is None:  # the SIMULATED transporter confirms with a SIMULATED truck
         owner = db.scalar(select(User).where(User.role == "fleet_owner", User.org_id == b.fleet_org_id))
-        driver = db.scalar(select(User).where(User.role == "driver", User.org_id == b.fleet_org_id, User.is_active.is_(True)))
+        busy = set(db.scalars(select(Trip.driver_id).where(Trip.status.in_(ACTIVE_TRIP))))
+        busy_v = set(db.scalars(select(Trip.vehicle_id).where(Trip.status.in_(ACTIVE_TRIP))))
+        drivers = db.scalars(select(User).where(User.role == "driver", User.org_id == b.fleet_org_id,
+                                                User.is_active.is_(True)).order_by(User.id)).all()
+        driver = next((d for d in drivers if d.id not in busy), drivers[0] if drivers else None)
         if owner is None or driver is None:
             raise RuntimeError("demo fleet needs an owner and a driver")
-        reg = f"SIM-KA-{secrets.randbelow(90) + 10}-{secrets.randbelow(9000) + 1000}"
-        v = Vehicle(org_id=b.fleet_org_id, registration=reg, capacity_tons=max(5.0, lot.quantity_tons), is_simulated=True)
-        db.add(v)
-        db.flush()
+        # the fleet's own SIMULATED truck that fits (smallest first), else a new simulated one
+        v = db.scalar(select(Vehicle).where(Vehicle.org_id == b.fleet_org_id, Vehicle.is_simulated.is_(True),
+                                            Vehicle.capacity_tons >= lot.quantity_tons, Vehicle.id.not_in(busy_v or {-1}))
+                      .order_by(Vehicle.capacity_tons))
+        if v is None:
+            reg = f"SIM-KA-{secrets.randbelow(90) + 10}-{secrets.randbelow(9000) + 1000}"
+            v = Vehicle(org_id=b.fleet_org_id, registration=reg, capacity_tons=max(5.0, lot.quantity_tons), is_simulated=True)
+            db.add(v)
+            db.flush()
         db.get(Shipment, b.shipment_id).is_simulated = True
         trip = make_trip(db, owner, b.shipment_id, v.id, driver.id, via="demo_autopilot")
     trip.is_simulated = True
@@ -345,9 +367,13 @@ def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple
         if trip.shipment and trip.shipment.status == "booked":
             move(db, trip.shipment, "in_transit", trip.driver_id, trip_id=trip.id, via="demo_autopilot")
     m = trip.mandi
-    dlat, dlon = trip.origin_lat - m.lat, trip.origin_lon - m.lon
-    norm = max((dlat ** 2 + dlon ** 2) ** 0.5, 1e-6)
-    depot = (trip.origin_lat + 0.08 * dlat / norm, trip.origin_lon + 0.08 * dlon / norm)
+    org = db.get(Organization, b.fleet_org_id)
+    if org.base_lat is not None:  # the truck comes from the transporter's own base
+        depot = (org.base_lat, org.base_lon)
+    else:
+        dlat, dlon = trip.origin_lat - m.lat, trip.origin_lon - m.lon
+        norm = max((dlat ** 2 + dlon ** 2) ** 0.5, 1e-6)
+        depot = (trip.origin_lat + 0.08 * dlat / norm, trip.origin_lon + 0.08 * dlon / norm)
     db.commit()
     return trip.id, depot
 

@@ -12,8 +12,10 @@ from ..models import AuditLog, Lot, Mandi, Organization, Shipment, Trip, User, V
 from ..rbac import forbid, get_current_user, require
 from ..scoping import lot_filter, scoped_lots
 from ..supply import forecast_available
+from tracking.geo import haversine_km
 
 router = APIRouter(tags=["lots & shipments"])
+FLEET_RADIUS_KM = 120  # transporters whose base is farther than this (straight line) from the farm are not offered
 
 # Any vegetable in config/crops.toml can be registered, transported, tracked and paid; price forecasts are tomato only.
 
@@ -256,10 +258,14 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
     fleets = []
     if mandi and lot.status == "registered":
         for org in db.scalars(select(Organization).where(Organization.kind == "fleet").order_by(Organization.name)):
+            if org.base_lat is not None and haversine_km(org.base_lat, org.base_lon, lot.pickup_lat, lot.pickup_lon) > FLEET_RADIUS_KM:
+                continue  # too far away to come to this farm
             a = fleet_availability(db, org, lot, mandi)
             if a["vehicles"]:
                 a["free_slots"] = sum(1 for x in a["slots"] if x["free_trucks"] > 0)
                 fleets.append(a)
+        # trucks that fit first, then the cheapest fare (it includes the empty run from the fleet's base)
+        fleets.sort(key=lambda f: (f["fit"] == 0, f["fare_estimate"] is None, f["fare_estimate"] or 0))
     fpo = db.get(Organization, lot.org_id) if lot.org_id else None
     trip = _trip_for_shipment(db, lot.shipment_id)
     booking = open_booking(db, lot.id)

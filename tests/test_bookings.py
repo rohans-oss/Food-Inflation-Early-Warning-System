@@ -104,7 +104,7 @@ def test_demo_autopilot_runs_a_simulated_trip_end_to_end(client, as_role, db, mo
     steps = {s["step"]: s for s in rc["timeline"]}
     assert all(steps[k]["verified"] for k in ("Truck reached the farm", "Picked up", "Reached the mandi",
                                               "Delivered at the gate", "Weighed and priced"))
-    assert rc["gps_points"] >= 15 and rc["vehicle"].startswith("SIM-")
+    assert rc["gps_points"] >= 15 and rc["vehicle"].startswith(("SIM-", "KA-DEMO-"))
     assert client.get("/public/receipts/not-a-real-receipt-token").status_code == 404
 
 
@@ -159,3 +159,28 @@ def test_weighing_issues_a_receipt(client, as_role, db, journey):
     assert rc["amount"] == 27790 and rc["buyer"] and not rc["simulated"] and rc["payment"]["status"] == "pending"
     steps = {s["step"]: s["verified"] for s in rc["timeline"]}
     assert steps["Picked up"] and steps["Reached the mandi"] and steps["Delivered at the gate"] and steps["Weighed and priced"]
+
+
+def test_several_transporters_near_the_farm_cheapest_first_and_the_demo_truck_comes_from_its_base(client, as_role, db):
+    from agripulse_api.models import Organization
+
+    lot, _ = _chosen_lot(client, as_role, db)
+    F = as_role("farmer")
+    fleets = client.get(f"/lots/{lot['id']}/next-steps", headers=F).json()["fleets"]
+    names = [f["name"] for f in fleets]
+    assert len(fleets) >= 4 and "Kolar Krishi Transport (demo)" in names
+    assert "Mysuru Agri Logistics (demo)" not in names  # base too far from a Kolar-belt farm
+    fares = [f["fare_estimate"] for f in fleets if f["fit"]]
+    assert fares == sorted(fares)
+    kolar = next(f for f in fleets if f["name"] == "Kolar Krishi Transport (demo)")
+    assert kolar["base"] == "Kolar" and kolar["drivers"] and kolar["base_km_from_farm"] < 40
+    slot = next(s for s in kolar["slots"] if s["free_trucks"] > 0)
+    b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": kolar["org_id"], "pickup_at": slot["pickup_at"]}).json()
+    from agripulse_api.routers import bookings as bk
+
+    trip_id, depot = bk._demo_prepare(db, lot["id"], b["id"])
+    t = db.get(Trip, trip_id)
+    org = db.scalar(select(Organization).where(Organization.name == "Kolar Krishi Transport (demo)"))
+    assert t.fleet_org_id == org.id and t.vehicle.registration.startswith("KA-DEMO-") and t.vehicle.capacity_tons >= 2
+    assert db.get(User, t.driver_id).org_id == org.id
+    assert depot == (org.base_lat, org.base_lon)  # the truck comes from the transporter's own base

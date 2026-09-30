@@ -73,7 +73,8 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
             <div>
               {b && <p className="mb-3 rounded-lg border border-critical/40 px-3 py-2 text-sm text-critical">
                 Your booking with {b.fleet} was {b.status}{b.reason ? `: ${b.reason}` : ""}. Choose another transporter or time.</p>}
-              <h3 className="mb-2 font-semibold">Choose a transporter</h3>
+              <h3 className="mb-1 font-semibold">Choose a transporter</h3>
+              {d.fleets.length > 1 && <p className="mb-2 text-xs text-muted">{d.fleets.length} transporters near your farm, cheapest first. The fare includes the truck&apos;s drive from its base to your farm and back.</p>}
               <div className="space-y-3">
                 {d.fleets.length === 0 && <p className="text-sm text-muted">No transporters have registered trucks yet.</p>}
                 {d.fleets.map((f: any) => (
@@ -82,8 +83,11 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
                       <div className="min-w-48 flex-1">
                         <p className="font-semibold">{f.name} <SimBadge on={f.is_simulated} /></p>
                         <p className="text-xs text-ink2">{f.fit} truck{f.fit === 1 ? "" : "s"} that fit {tons(tonsLot)} · {f.capacities_tons.map((c: number) => `${num(c, 1)} t`).join(", ") || "none"}</p>
+                        {f.base && <p className="text-xs text-muted">Based in {f.base}{f.base_km_from_farm != null ? ` · about ${num(f.base_km_from_farm, 0)} km from your farm` : ""}</p>}
+                        {f.drivers?.length > 0 && <p className="text-xs text-muted">Drivers: {f.drivers.join(", ")}</p>}
                       </div>
-                      <div><p className="text-xs text-muted">Fare (est.)</p><p className="font-semibold">{inr(f.fare_estimate)}</p></div>
+                      <div><p className="text-xs text-muted">Fare (est.)</p><p className="font-semibold">{inr(f.fare_estimate)}</p>
+                        {f.base && <p className="text-[11px] text-muted">incl. trip from {f.base}</p>}</div>
                       <div><p className="text-xs text-muted">Open slots</p><p className="font-semibold">{f.free_slots}</p></div>
                       <Button variant={open === f.org_id ? "secondary" : "primary"} disabled={!f.free_slots}
                         onClick={() => { setOpen(open === f.org_id ? null : f.org_id); setSlot(null); }}>
