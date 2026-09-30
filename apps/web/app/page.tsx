@@ -17,7 +17,8 @@ export default function Home() {
   useEffect(() => {
     if (ready && user) router.replace(ROLE_HOME[user.role]);
   }, [ready, user, router]);
-  if (!ready || user) return <div className="p-8 text-sm text-muted">Loading…</div>;
+  // the landing renders straight away (and server-side); only a signed-in visitor is sent on to their screen
+  if (ready && user) return <div className="p-8 text-sm text-muted">Loading…</div>;
   return <Landing />;
 }
 
