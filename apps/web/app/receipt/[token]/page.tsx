@@ -69,7 +69,8 @@ export default function Receipt() {
               <td className="py-2">{r.crop} · grade {r.grade} · lot #{r.lot_id}</td>
               <td className="py-2">{num(r.declared_tons, 2)} t</td>
               <td className="py-2">{num(r.weight_kg, 0)} kg</td>
-              <td className="py-2">{inr(r.price_per_quintal)} / quintal</td>
+              <td className="py-2">{inr(r.price_per_quintal)} / quintal
+                {r.price_source && <div className="text-xs text-[#666]">rate: {r.price_source}</div>}</td>
               <td className="py-2 text-right text-base font-semibold">{inr(r.amount)}</td>
             </tr></tbody>
           </table>

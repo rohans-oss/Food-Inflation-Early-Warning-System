@@ -3,6 +3,7 @@ import "./globals.css";
 
 import type { Metadata, Viewport } from "next";
 
+import { DataBanner } from "@/components/DataBanner";
 import { SessionProvider } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -18,9 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="font-sans antialiased">
-        {DEMO_NOTICE && (
-          <div role="note" className="no-print bg-ink px-4 py-1.5 text-center text-xs text-page">{DEMO_NOTICE}</div>
-        )}
+        <DataBanner fallback={DEMO_NOTICE} />
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

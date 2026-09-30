@@ -143,3 +143,28 @@ def test_hosted_postgres_urls_use_the_psycopg3_driver():
     for url in ("postgres://u:p@h/db?sslmode=require", "postgresql://u:p@h/db"):
         assert Settings(database_url=url).database_url.startswith("postgresql+psycopg://u:p@h/db")
     assert Settings(database_url="sqlite://").database_url == "sqlite://"
+
+
+def test_simulated_weighing_uses_this_crops_real_price_and_says_where_it_came_from(db):
+    from agripulse_api.routers.bookings import DEMO_ASSUMED_PRICE, _demo_price
+
+    kolar = db.scalar(select(Mandi).where(Mandi.name == "Kolar APMC"))
+    assert _demo_price(db, kolar.id, "Onion") == (DEMO_ASSUMED_PRICE, "assumed demo price (no price reported)")
+    agmarknet.store_records(db, [_rec("Onion", modal=2600)])
+    price, src = _demo_price(db, kolar.id, "Onion")
+    assert price == 2600 and src.startswith("agmarknet ")
+    seed_forecasts(db)  # a TOMATO forecast must never price an onion lot
+    assert _demo_price(db, kolar.id, "Onion")[0] == 2600
+    assert _demo_price(db, kolar.id, "Tomato")[1].startswith("forecast p50")
+
+
+def test_data_status_says_which_data_the_site_shows(client, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "live_catch_up", True)
+    monkeypatch.setattr(s, "data_gov_api_key", "")
+    assert client.get("/data-status").json()["price_feed"] == "no_key"
+    monkeypatch.setattr(s, "data_gov_api_key", "k")
+    st = client.get("/data-status").json()
+    assert st["mode"] == "live" and st["price_feed"] == "not_yet"
+    monkeypatch.setattr(s, "live_catch_up", False)
+    assert client.get("/data-status").json()["mode"] == "demo"

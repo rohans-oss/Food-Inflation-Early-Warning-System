@@ -718,7 +718,9 @@ legs → Open delivery receipt → Print.
   matched name gets real prices from then on; an unmatched one still works for booking, tracking, receipt and payment.
 - **Tomato forecast on real data:** trained only on real rows, and only after the readiness monitor finds a mandi with
   a year of real history (history backfill from data.gov.in, probed first). Until then there is no forecast.
-- **Still simulated:** demo accounts and demo trucks.
+- **Still simulated:** demo accounts and demo trucks. A simulated weighing prices the lot at that vegetable's latest
+  real price at that mandi (else the tomato forecast, else a stated assumption); the receipt shows which (`rate:`).
+- **The banner reads `/data-status`**, so it always says whether prices are real, missing (no key) or synthetic.
 - Setup: docs/deployment.md "LIVE mode". Tests: tests/test_live_prices.py.
 
 How to verify: set `DATABASE_URL` + `DATA_GOV_API_KEY`, deploy, then check the API log for `[live] agmarknet` and

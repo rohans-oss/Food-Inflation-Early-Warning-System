@@ -80,6 +80,8 @@ def build(db: Session, lot: Lot) -> dict:
         "gps_points": n_points, "route_source": trip.route_source if trip else None,
         "timeline": timeline,
         "weight_kg": lot.delivered_weight_kg, "price_per_quintal": lot.sale_price_per_quintal, "amount": amount,
+        # where the SIMULATED weighing took its rate from (real Agmarknet / forecast / assumed); None = a person entered it
+        "price_source": (weigh.details or {}).get("price_source") if weigh else None,
         "payment": {"status": lot.payout_status, "method": lot.payment_method, "reference": lot.payment_ref,
                     "paid_at": lot.paid_at, "paid_local": _local(lot.paid_at),
                     "received_local": _local(lot.payment_received_at)},

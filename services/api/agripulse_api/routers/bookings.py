@@ -399,6 +399,25 @@ def _demo_step(db: Session, trip_id: int, frac: float) -> None:
     db.commit()
 
 
+DEMO_ASSUMED_PRICE = 2000  # Rs/quintal, ONLY when neither a real price nor a forecast exists; recorded as "assumed"
+
+
+def _demo_price(db: Session, mandi_id: int, crop: str) -> tuple[float, str]:
+    """Price the SIMULATED weighing uses: this crop's latest real Agmarknet price at this mandi, else the display
+    model's 1-week p50 for this crop, else a stated assumption. The source is written to the audit log."""
+    from ..supply import latest_crop_prices
+
+    real = latest_crop_prices(db, crop).get(mandi_id)
+    if real:
+        return real["modal"], f"agmarknet {real['date']}" if real["data_provenance"] == "real" else "synthetic price"
+    f = db.scalar(select(Forecast).where(Forecast.mandi_id == mandi_id, Forecast.model_name == display_model(),
+                                         Forecast.commodity == crop, Forecast.horizon_weeks == 1)
+                  .order_by(Forecast.issue_date.desc()).limit(1))
+    if f:
+        return round(f.p50), f"forecast p50 ({f.data_provenance})"
+    return DEMO_ASSUMED_PRICE, "assumed demo price (no price reported)"
+
+
 def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
     """The SIMULATED trader scans the delivery QR, weighs at the forecast p50 price, and records a simulated payment."""
     from tracking.engine import add_event
@@ -412,11 +431,10 @@ def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
         if x.status == "in_transit":
             move(db, x, "at_mandi", None, trip_id=t.id, via="demo_autopilot")
         if x.status == "at_mandi":
-            f = db.scalar(select(Forecast).where(Forecast.mandi_id == t.mandi_id, Forecast.model_name == display_model(),
-                                                 Forecast.horizon_weeks == 1).order_by(Forecast.issue_date.desc()).limit(1))
-            price = round(f.p50) if f else 2000
+            price, price_source = _demo_price(db, t.mandi_id, x.crop)
             x.delivered_weight_kg, x.sale_price_per_quintal, x.delivered_at = round(x.quantity_tons * 985), price, now
-            move(db, x, "delivered", None, weight_kg=x.delivered_weight_kg, price_per_quintal=price, via="demo_autopilot")
+            move(db, x, "delivered", None, weight_kg=x.delivered_weight_kg, price_per_quintal=price, via="demo_autopilot",
+                 price_source=price_source)
             from .receipts import issue
 
             issue(db, x)
