@@ -102,6 +102,26 @@ listed in /docs/backlog.md instead of doing them here).
 16. Any V1 issue you notice but that isn't V2's job goes into /docs/backlog.md, not into
     the current phase's code.
 
+## Pre-V3 hardening (do this before any V3 phase)
+
+Context: V2 found that no model currently beats the naive/"today's price" baseline.
+The forecast's 80% interval only contains the true price 59-73% of the time (should be
+~80%) — it is overconfident. The driver app stops sending GPS when the phone screen
+locks. Individual user logins cannot currently be revoked.
+
+Rules for this work:
+17. Do not touch V1 or V2 model logic beyond what's specified below. This is hardening,
+    not new modelling. All existing tests must keep passing.
+18. Any calibration fix must be validated on the SAME 8 synthetic datasets V2-0 used,
+    not a new cherry-picked one. Report coverage before and after, per dataset.
+19. The currently-best-performing model for any user-facing forecast is the naive/V1
+    baseline (see V2 results). Nothing here should make TFT/GNN the default; that only
+    changes when real data says so via the readiness monitor.
+20. Plan first, wait for approval, then build one phase at a time.
+
+Phases: B-1 forecast calibration fix -> B-2 driver app (investigate and report, then the user picks the fix)
+-> B-3 login/session revocation. Then V3 (optimizer + scenario simulator) against the currently-best model.
+
 ## Core tables
 users, organizations, roles, lots, shipments, trips, vehicles, gps_points,
 geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_source_runs
