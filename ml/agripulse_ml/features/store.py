@@ -15,7 +15,7 @@ Time rules (V2 rule 12). A row is an ISSUE DATE t, the day a forecast would be m
 
 Groups: prices (past-only: price history + arrivals), weather (past-only observations + known-future
 forecasts), calendar (known-future, always on), graph (V2-3, past-only: neighbour signals, see graph/features.py).
-satellite (V2-4, past-only: district cropland NDVI, see satellite/features.py). transit arrives in V2-5.
+satellite (V2-4, past-only: district cropland NDVI, see satellite/features.py). transit (V2-5, past-only: tonnes on the road, see transit/features.py).
 """
 import json
 from dataclasses import dataclass, field
@@ -40,11 +40,13 @@ WEATHER_PAST = ["wx_rain_7", "wx_rain_30", "wx_rain_30_anom", "wx_tmax_7", "wx_t
 WEATHER_FUTURE = ["wf_rain_next7", "wf_rain_next14", "wf_tmax_next7", "wf_age_days", "wf_available"]  # windows fixed at 7/14
 from ..graph.features import GRAPH  # noqa: E402
 from ..satellite.features import SATELLITE  # noqa: E402
+from ..transit.features import TRANSIT  # noqa: E402
 
 GROUP_COLUMNS = {"prices": {"past_only": PRICES},
                  "weather": {"past_only": WEATHER_PAST, "known_future": WEATHER_FUTURE},
                  "graph": {"past_only": GRAPH},
-                 "satellite": {"past_only": SATELLITE}}
+                 "satellite": {"past_only": SATELLITE},
+                 "transit": {"past_only": TRANSIT}}
 
 
 @dataclass
@@ -278,6 +280,15 @@ def build_table(inputs: Inputs, feature_set="prices+weather", spike_threshold_pc
         for c in SATELLITE:
             if c not in df:
                 df[c] = np.nan
+    if "transit" in groups and len(df):
+        from ..transit.features import transit_features
+
+        tf = transit_features(df, inputs.transit_trips, inputs.transit_gps, inputs.mandis, cfg["transit"])
+        df = df.merge(tf, on=["mandi_id", "date"], how="left")
+        for c in TRANSIT:
+            if c not in df:
+                df[c] = np.nan
+        df["tr_tracked"] = df["tr_tracked"].fillna(0.0)  # no trip had started yet: untracked, NOT zero supply
     graphs = []
     if "graph" in groups and len(df):
         from ..graph.features import graph_features
@@ -294,6 +305,8 @@ def build_table(inputs: Inputs, feature_set="prices+weather", spike_threshold_pc
         group_prov["weather"] = worst(inputs.weather_provenance, inputs.forecast_provenance)
     if "satellite" in groups:  # Sentinel-2 + WorldCover are real data regardless of the price source
         group_prov["satellite"] = REAL
+    if "transit" in groups:  # real trips are real_partial until the readiness threshold; simulated -> synthetic
+        group_prov["transit"] = inputs.transit_provenance
     if "graph" in groups:  # distance edges are real; correlation / flow edges inherit the price provenance
         group_prov["graph"] = group_prov["prices"]
     mandi_prov = {int(m): worst(inputs.price_provenance.get(int(m), REAL),

@@ -29,6 +29,7 @@ export default function Admin() {
   const ready = useApi<any>("/admin/data-readiness", { poll: 300000 });
   const runs = useApi<any[]>("/admin/eval-runs", { query: { limit: 10 } });
   const mandiList = useApi<any[]>("/mandis");
+  const v2 = useApi<any[]>("/admin/v2-results");
   const [simCfg, setSimCfg] = useState({ trips: "8", speedup: "10" });
   const act = useAction();
 
@@ -153,6 +154,20 @@ export default function Admin() {
               <Td>{r.purpose || "–"}{r.purpose?.includes("planted") && <div className="mt-1"><Badge kind="sim">PLANTED SIGNAL · positive control</Badge></div>}</Td><Td className="font-mono text-xs">{r.feature_set}</Td>
               <Td>{r.models.join(", ")}</Td><Td>{day(r.data_start)} → {day(r.data_end)}<div className="text-xs text-muted">{r.n_mandis} mandis</div></Td>
               <Td>{r.folds}</Td><Td><ProvenanceBadge p={r.data_provenance} compact /></Td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
+
+      <Card title={t("v2Results")} action={<span className="text-xs text-muted">details and numbers in each linked doc</span>}>
+        <Table head={["Phase", "Study", "Result", "Outcome", "Data"]} empty="No V2 results listed.">
+          {v2.data?.map((r) => (
+            <tr key={`${r.phase}-${r.title}`}>
+              <Td>{r.phase}</Td>
+              <Td>{r.title}<div className="font-mono text-xs text-muted">{r.doc}</div></Td>
+              <Td className="max-w-md">{r.headline}</Td>
+              <Td><Badge kind={r.outcome === "negative" ? "critical" : r.outcome === "not enough real data" ? "warn" : "neutral"}>{r.outcome}</Badge></Td>
+              <Td><ProvenanceBadge p={r.data_provenance} compact /></Td>
             </tr>
           ))}
         </Table>

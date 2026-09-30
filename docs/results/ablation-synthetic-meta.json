@@ -1,0 +1,80 @@
+[
+  {
+    "seed": 7,
+    "group_provenance": {
+      "prices": "synthetic",
+      "calendar": "real",
+      "weather": "synthetic",
+      "satellite": "real",
+      "transit": "synthetic",
+      "graph": "synthetic"
+    },
+    "satellite_mandis": [
+      2,
+      3,
+      4,
+      5,
+      9
+    ],
+    "satellite_districts": [
+      "Chikkaballapur",
+      "Kolar"
+    ],
+    "notes": {
+      "lgbm_satellite": "REAL NDVI x SYNTHETIC prices: plumbing check only; NDVI only for mandis in the pilot districts",
+      "lgbm_transit": "SIMULATED trips built from synthetic arrivals: the signal is built in by construction"
+    }
+  },
+  {
+    "seed": 1,
+    "group_provenance": {
+      "prices": "synthetic",
+      "calendar": "real",
+      "weather": "synthetic",
+      "satellite": "real",
+      "transit": "synthetic",
+      "graph": "synthetic"
+    },
+    "satellite_mandis": [
+      2,
+      3,
+      4,
+      5,
+      9
+    ],
+    "satellite_districts": [
+      "Chikkaballapur",
+      "Kolar"
+    ],
+    "notes": {
+      "lgbm_satellite": "REAL NDVI x SYNTHETIC prices: plumbing check only; NDVI only for mandis in the pilot districts",
+      "lgbm_transit": "SIMULATED trips built from synthetic arrivals: the signal is built in by construction"
+    }
+  },
+  {
+    "seed": 2,
+    "group_provenance": {
+      "prices": "synthetic",
+      "calendar": "real",
+      "weather": "synthetic",
+      "satellite": "real",
+      "transit": "synthetic",
+      "graph": "synthetic"
+    },
+    "satellite_mandis": [
+      2,
+      3,
+      4,
+      5,
+      9
+    ],
+    "satellite_districts": [
+      "Chikkaballapur",
+      "Kolar"
+    ],
+    "notes": {
+      "lgbm_satellite": "REAL NDVI x SYNTHETIC prices: plumbing check only; NDVI only for mandis in the pilot districts",
+      "lgbm_transit": "SIMULATED trips built from synthetic arrivals: the signal is built in by construction"
+    }
+  }
+]

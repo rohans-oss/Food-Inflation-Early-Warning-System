@@ -7,7 +7,7 @@ from pathlib import Path
 _DEFAULT = Path(__file__).resolve().parents[3] / "config" / "features.toml"
 
 # Groups that exist in the registry but are built in later phases.
-PENDING = {"transit": "V2-5 (in-transit tonnage)"}
+PENDING: dict[str, str] = {}  # every V2 group is built (V2-5 added transit)
 
 
 class FeatureGroupNotBuilt(NotImplementedError):

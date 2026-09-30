@@ -5,7 +5,7 @@ A platform that (1) forecasts tomato prices 1-4 weeks ahead as probabilistic ran
 and (2) tracks vehicles carrying produce from farm to mandi live, so farmers, traders,
 buyers and policymakers can see supply in motion.
 
-## Current version: V2 (Intelligence). V1 is merged on main.
+## Current version: V2 (Intelligence) is complete (docs/v2-summary.md). V1 is merged on main.
 
 ## V2 data reality (read this before building anything)
 - Real Agmarknet history is just starting to accumulate (started ~2026-09-25) and needs
@@ -151,5 +151,10 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   raw pixels). NDVI outside [-1, 1] is refused, never stored. Observations live in `satellite_obs`; the `satellite` feature group uses lag
   `sentinel2` from config/features.toml. Ground truth goes through an adapter into validate.py's normalised schema,
   written only after inspecting the real file. The ICRISAT apportioned DLD (1966-2011, no tomato) cannot validate it.
+- Transit (V2-5): `transit/features.py`. Snapshot = 00:00 IST of the issue date; ETA from the last GPS fix before it
+  or the plan, NEVER from trip.ended_at (it is the future at the snapshot). `tr_tracked = 0` means untracked, not zero
+  supply. Synthetic transit is simulated from synthetic arrivals: its gain is built in, never report it as evidence.
+- Ablation: `python -m agripulse_ml.ablation` (synthetic) / `--provenance real`; variants differ only in columns.
+- V2 findings for the Admin card live in `services/api/agripulse_api/v2_results.py`; update it when a study re-runs.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

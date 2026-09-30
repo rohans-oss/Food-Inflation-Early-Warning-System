@@ -59,7 +59,7 @@ def main(argv=None) -> int:
             return 2
     try:
         table = build_table(inputs, args.feature_set)
-    except FeatureGroupNotBuilt as exc:
+    except (FeatureGroupNotBuilt, ValueError) as exc:  # e.g. 'satellite' with no Sentinel-2 observations loaded
         print(f"Cannot build '{args.feature_set}': {exc}")
         return 2
     name = f"{feature_set_name(args.feature_set)}__{args.provenance}"

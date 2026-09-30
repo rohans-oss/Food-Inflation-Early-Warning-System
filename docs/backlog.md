@@ -19,6 +19,9 @@ Each item says where it came from and why it's deferred.
 | 10 | Spike alert threshold (0.5) fires almost never | Spike recall ≈ 0 for every model on synthetic data | Choose the threshold from precision/recall on **real** data |
 | 11 | `ingest.run synthetic` generates up to *today* | Every day's demo database is a different random draw, so demo backtests change daily | Pin the end date like `eval/baseline.py` does, or label the draw date |
 | 12 | V1 LightGBM intervals under-cover | p10–p90 holds the price 59–73% of the time on the V2 folds (target 80%); the 120-day conformal window often doesn't resemble the next 28 days (docs/tft-results.md) | Revisit the calibration window on **real** data; the displayed band may be too narrow until then |
+| 13 | Weather features may hurt the display model | V2-5 ablation (synthetic): LightGBM on prices alone beat prices + weather in 2 of 3 draws (+1.6% to +6.4% mean, noisy) | Re-run `python -m agripulse_ml.ablation --provenance real` once real history is ready; decide the display feature set on REAL data, not synthetic |
+| 14 | Calendar features carry one annual harmonic only | V2-5: real NDVI helped synthetic prices only by supplying seasonal shape the single sin/cos pair misses | Add a second harmonic (sin/cos of 2·doy) to `features/store.py _calendar` and to V1 `features/legacy.py`; re-run the ablation |
+| 15 | Satellite district = 30 km circle, 2 districts only | V2-4 pilot approximation; tomato is ~8% of that cropland | Real district polygons, more districts, and a tomato-specific mask (field boundaries or crop classification) before expecting a tomato signal |
 
 ## V3 (by design)
 

@@ -23,7 +23,7 @@ date range, per-column missingness, provenance per group, lags). The synthetic t
 | static | always | `mandi_id`, `st_district`, `st_state`, `st_lat`, `st_lon` | static covariates |
 | `satellite` | built (V2-4), needs `satellite_obs` rows | `sat_ndvi_30`, `sat_obs_30`, `sat_ndvi_chg_30`, `sat_ndvi_anom`, `sat_age_days` (REAL; lag 2 days) | past-only |
 | `graph` | built (V2-3) | `gr_dist_chg_{7,14}`, `gr_dist_spread`, `gr_dist_risen`, `gr_corr_chg_7`, `gr_flow_up_chg_7` (flow = ESTIMATE), `gr_n_corr` | past-only |
-| `transit` | refuses until V2-5 | | |
+| `transit` | built (V2-5) | `tr_tons_now`, `tr_tons_eta_24`, `tr_tons_eta_72`, `tr_trips_now`, `tr_tons_recent_7`, `tr_tracked` (snapshot 00:00 IST; ETA never from the actual arrival) | past-only |
 
 **Graph group time rule.** The graph is rebuilt every 28 days (`config/graph.toml`), each snapshot only from prices and
 arrivals published by its date; a row at t uses the latest snapshot on or before t, and its neighbours' own past-only

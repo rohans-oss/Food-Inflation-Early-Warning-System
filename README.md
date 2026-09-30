@@ -268,6 +268,40 @@ Details are in docs/data-sources.md.
   docs/satellite-results.md from the committed pilot file.
 - `python -m agripulse_ml.satellite.load data/satellite/observations.csv` loads it into `satellite_obs` (idempotent).
 
+## V2-5: in-transit feature, ablation, V2 wrap-up
+
+- **`transit` feature group:** tonnes on the road towards each mandi, as known at 00:00 IST of the issue date.
+  - Only trips already started count.
+  - ETA comes from the last GPS fix before that time (or the plan), never from the actual arrival.
+  - Real trips are labelled REAL — LIMITED HISTORY until the readiness threshold; simulated trips are SYNTHETIC.
+- **Ablation** ([docs/ablation-results.md](docs/ablation-results.md)): LightGBM with each group added to prices +
+  weather, same folds, 3 synthetic draws.
+  - Graph +1–3% on every draw.
+  - Transit +1–3%, but that gain is built in by simulation.
+  - Satellite +0.3–0.7%; this is seasonality, since real NDVI can't explain synthetic prices.
+  - Removing weather helped in 2 of 3 draws.
+  - **Nothing reliably beats naive.**
+  - Real-so-far: **not enough real data yet** (the same command re-runs it when prices mature).
+- **Wrap-up:**
+  - [docs/v2-summary.md](docs/v2-summary.md) collects every V2 result.
+  - Admin → "V2 results" card lists each study with its data label.
+  - Backlog items 13–15 record what to re-check on real data.
+
+**How to verify**
+- `pytest tests/test_transit.py tests/test_ablation.py`: 11 tests.
+  - snapshot at midnight IST
+  - ETA never uses the actual arrival (checked against a planted leak)
+  - GPS after the snapshot ignored
+  - truncation
+  - untracked ≠ zero supply
+  - real vs simulated trips never mix
+  - each ablation variant sees only its groups
+  - real-data "not enough" paths
+  - the admin card
+- `python -m agripulse_ml.ablation` (~8 min) reproduces docs/ablation-results.md.
+  `python -m agripulse_ml.ablation --provenance real` prints the readiness-based "not enough real data" report.
+- Admin page → "V2 results": six studies, each with a SYNTHETIC or REAL badge.
+
 ## V1 status
 
 | Done-criterion | Status |

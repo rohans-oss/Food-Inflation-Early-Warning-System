@@ -14,7 +14,7 @@ from agripulse_api.config import get_settings
 from agripulse_api.models import Mandi, Price, WeatherForecast
 from agripulse_ml.eval import run
 from agripulse_ml.features.build import main as build_cli
-from agripulse_ml.features.config import FeatureGroupNotBuilt, feature_set_name, parse_feature_set
+from agripulse_ml.features.config import feature_set_name, parse_feature_set
 from agripulse_ml.features.inputs import Inputs
 from agripulse_ml.features.store import CALENDAR, PRICES, WEATHER_FUTURE, WEATHER_PAST, build_table
 from agripulse_ml.models import NaiveForecaster
@@ -63,10 +63,13 @@ def test_feature_set_naming():
         parse_feature_set("prices+vibes")
 
 
-def test_pending_groups_refuse_and_prices_required(inputs):
-    for fs in ("prices+transit",):
-        with pytest.raises(FeatureGroupNotBuilt):
-            build_table(inputs, fs)
+def test_all_groups_built_and_prices_required(inputs):
+    from agripulse_ml.features.config import PENDING, check_built
+
+    assert PENDING == {}  # V2-5: every registered group is built
+    check_built(["prices", "weather", "satellite", "graph", "transit"])
+    with pytest.raises(ValueError, match="Sentinel-2"):  # built, but refuses without data rather than inventing it
+        build_table(inputs, "prices+satellite")
     with pytest.raises(ValueError):
         build_table(inputs, "weather")
 
@@ -233,7 +236,7 @@ def test_build_cli(tmp_path, capsys):
     assert card["label_lag_days"] == 1 and card["rows"] == len(pd.read_parquet(pq))
     out = capsys.readouterr().out
     assert "SYNTHETIC — METHODOLOGY DEMO" in out and "missing" in out
-    assert build_cli(["--feature-set", "prices+transit", "--provenance", "synthetic", "--out", str(tmp_path)]) == 2
+    assert build_cli(["--feature-set", "prices+satellite", "--provenance", "synthetic", "--out", str(tmp_path)]) == 2
 
 
 def test_open_meteo_forecasts_are_archived_as_issued(db):

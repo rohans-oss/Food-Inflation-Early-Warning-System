@@ -83,7 +83,8 @@
     "realPartialNote": "REAL — LIMITED HISTORY: built from real prices, but this mandi has less history than the readiness threshold. Treat the range as indicative.",
     "readiness": "Real-data readiness",
     "evalRuns": "Evaluation runs (shared harness)",
-    "connectedMandis": "Connected mandis"
+    "connectedMandis": "Connected mandis",
+    "v2Results": "V2 results (what the studies found)"
   },
   "kn": {
     "app": "ಅಗ್ರಿಪಲ್ಸ್",

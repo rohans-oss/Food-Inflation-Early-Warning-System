@@ -1,0 +1,41 @@
+{
+  "status": "not_enough_real_data",
+  "reason": "no real price rows yet",
+  "real_price_rows": 0,
+  "mandis_with_real_prices": 0,
+  "max_real_price_days": 0,
+  "readiness_summary": {
+    "prices": {
+      "ready": 0,
+      "total": 18,
+      "latest_projected_ready_date": null,
+      "no_data": 18
+    },
+    "weather": {
+      "ready": 0,
+      "total": 18,
+      "latest_projected_ready_date": null,
+      "no_data": 18
+    },
+    "weather_forecasts": {
+      "ready": 0,
+      "total": 18,
+      "latest_projected_ready_date": null,
+      "no_data": 18
+    },
+    "arrivals": {
+      "ready": 0,
+      "total": 18,
+      "latest_projected_ready_date": null,
+      "no_data": 18
+    },
+    "transit": {
+      "ready": 0,
+      "total": 18,
+      "latest_projected_ready_date": null,
+      "no_data": 18
+    }
+  },
+  "satellite_rows": 2610,
+  "real_trips": 0
+}

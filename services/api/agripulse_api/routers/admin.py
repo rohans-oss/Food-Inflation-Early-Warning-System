@@ -28,6 +28,14 @@ EXPECTED_EVERY = {
 }
 
 
+@router.get("/v2-results")
+def v2_results_list(_=Depends(admin_only)):
+    """V2 findings with their data provenance (agripulse_api/v2_results.py)."""
+    from ..v2_results import v2_results
+
+    return v2_results()
+
+
 @router.get("/freshness")
 def freshness(db: Session = Depends(get_db), _=Depends(admin_only)):
     now = datetime.now(timezone.utc)

@@ -16,7 +16,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from agripulse_api.provenance import REAL, SYNTHETIC
+from agripulse_api.provenance import REAL, REAL_PARTIAL, SYNTHETIC
 
 from .config import features_config
 
@@ -35,6 +35,11 @@ class Inputs:
     notes: list[str] = field(default_factory=list)
     # V2-4: Sentinel-2 cropland NDVI per (scene, district): district, date, ndvi_median, clear_px. Always REAL data.
     satellite: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=["district", "date", "ndvi_median", "clear_px"]))
+    # V2-5: trips towards mandis (transit/features.py TRIP_COLUMNS, UTC times) + their GPS fixes (trip_id, recorded_at,
+    # lat, lon). Synthetic runs simulate trip batches from the synthetic arrivals (a plumbing check, labelled).
+    transit_trips: pd.DataFrame = field(default_factory=pd.DataFrame)
+    transit_gps: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=["trip_id", "recorded_at", "lat", "lon"]))
+    transit_provenance: str = REAL
 
     @classmethod
     def from_synthetic(cls, seed: int = 7, start: date = date(2022, 1, 1), end: date = date(2026, 9, 25),
@@ -51,8 +56,13 @@ class Inputs:
         weather = w.assign(source="synthetic")[["mandi_id", "date", "source", "precip_mm", "tmax_c"]]
         mandis = pd.DataFrame([{"mandi_id": ids[m[0]], "district": m[1], "state": "Karnataka", "lat": m[2], "lon": m[3]}
                                for m in SYNTH_MANDIS])
+        from ..transit.features import simulate_trips
+
+        arrivals = a[["mandi_id", "date", "tonnes"]]
+        trips = simulate_trips(arrivals, mandis, features_config()["transit"], seed)
         return cls(
-            prices=p[["mandi_id", "date", "price"]], arrivals=a[["mandi_id", "date", "tonnes"]], weather=weather,
+            transit_trips=trips, transit_provenance=SYNTHETIC,
+            prices=p[["mandi_id", "date", "price"]], arrivals=arrivals, weather=weather,
             forecasts=simulate_forecasts(weather, seed), mandis=mandis,
             price_provenance={int(i): SYNTHETIC for i in mandis["mandi_id"]},
             weather_provenance=SYNTHETIC, forecast_provenance=SYNTHETIC,
@@ -102,9 +112,39 @@ class Inputs:
                                              SatelliteObs.clear_px, SatelliteObs.in_scene_px)).all(),
                            columns=["district", "date", "ndvi_median", "clear_px", "in_scene_px"])
         sat["date"] = pd.to_datetime(sat["date"])
+        trips, gps, tprov = _transit_from_db(db, synthetic)
         return cls(prices=prices, arrivals=arrivals, weather=weather, forecasts=forecasts, mandis=mandis,
                    price_provenance=price_prov, weather_provenance=prov, forecast_provenance=prov, notes=notes,
-                   satellite=sat)
+                   satellite=sat, transit_trips=trips, transit_gps=gps, transit_provenance=tprov)
+
+
+def _transit_from_db(db, synthetic: bool):
+    """Trips that actually started, never mixing simulated and real (rule 1). Real transit is real_partial until
+    the readiness monitor's transit threshold (config/readiness.toml) is met for every mandi with trips."""
+    from sqlalchemy import select
+
+    from agripulse_api.models import GpsPoint, Trip
+    from agripulse_api.readiness import compute
+
+    from ..transit.features import TRIP_COLUMNS
+
+    q = select(Trip.id, Trip.mandi_id, Trip.load_tons, Trip.started_at, Trip.ended_at, Trip.origin_lat, Trip.origin_lon,
+               Trip.planned_duration_min, Trip.is_simulated).where(Trip.started_at.is_not(None),
+                                                                   Trip.is_simulated.is_(bool(synthetic)))
+    trips = pd.DataFrame(db.execute(q).all(), columns=TRIP_COLUMNS)
+    for c in ("started_at", "ended_at"):
+        trips[c] = pd.to_datetime(trips[c], utc=True)
+    gps = pd.DataFrame(columns=["trip_id", "recorded_at", "lat", "lon"])
+    if len(trips):
+        gq = select(GpsPoint.trip_id, GpsPoint.recorded_at, GpsPoint.lat, GpsPoint.lon).where(
+            GpsPoint.trip_id.in_(trips["trip_id"].tolist()))
+        gps = pd.DataFrame(db.execute(gq).all(), columns=["trip_id", "recorded_at", "lat", "lon"])
+        gps["recorded_at"] = pd.to_datetime(gps["recorded_at"], utc=True)
+    if synthetic:
+        return trips, gps, SYNTHETIC
+    ready = {m["mandi_id"]: m["transit"]["ready"] for m in compute(db)["mandis"]}
+    used = set(trips["mandi_id"]) if len(trips) else set()
+    return trips, gps, REAL if used and all(ready.get(m, False) for m in used) else REAL_PARTIAL
 
 
 def simulate_forecasts(weather: pd.DataFrame, seed: int) -> pd.DataFrame:

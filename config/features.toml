@@ -31,3 +31,21 @@ rain_additive_sd_per_day = 0.4
 tmax_sd_base = 0.8
 tmax_sd_per_day = 0.15
 seed_offset = 1000
+
+# V2-5 `transit` group: produce on the road towards each mandi, as known at 00:00 IST of the issue date.
+[transit]
+speed_kmph = 35             # ETA from the last GPS fix: remaining road km / this speed (road km = straight x road_factor)
+road_factor = 1.3
+eta_windows_h = [24, 72]    # tonnes expected to arrive within the next 24 h / 72 h
+recent_days = 7             # tonnes delivered in the last 7 days (known: the trip ended before the snapshot)
+
+# SYNTHETIC runs only: trips are simulated from the synthetic arrivals (each day's tonnage leaves 4-30 h before it
+# arrives). This builds tomorrow's arrivals into today's transit by construction: a PLUMBING check, not evidence.
+[transit.synthetic]
+batches_per_day = 3
+min_lead_h = 4
+max_lead_h = 30
+plan_error = [0.8, 1.25]    # planned duration = actual x U(0.8, 1.25): plans are imperfect. (Synthetic trips all
+                            # arrive within the issue day, so ETA leaks are caught by the dedicated unit tests in
+                            # tests/test_transit.py, not by the truncation test.)
+seed_offset = 2000
