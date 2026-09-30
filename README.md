@@ -392,6 +392,54 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - **Real phone** (field test): lock the screen for 10 min and use Maps for 10 min mid-route. Fixes keep arriving,
   and the notification is visible the whole time.
 
+## Security
+
+- **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).
+  `JWT_SECRET` and `ADMIN_PASSWORD` live only in `.env`.
+- **Tokens:**
+  - Access tokens are JWTs that last 30 minutes (`JWT_EXPIRE_MINUTES`). Refresh tokens last 14 days
+    (`JWT_REFRESH_DAYS`).
+  - Both carry a **session id**: each sign-in is one row in `user_sessions` (Pre-V3 B-3, migration 0010).
+- **Every request checks the session** (HTTP and WebSocket). A revoked session fails on its **next request**, not
+  when its access token runs out.
+  - The driver's GPS socket checks on every message.
+  - Live map and alert sockets re-check every 60 s and close with code 4401.
+- **Refresh tokens rotate:** each refresh retires the old one.
+  - A retired refresh token presented again is treated as theft: the session is revoked and the event audited
+    (`via: reuse_detection`).
+  - The one exception is the same token within 30 s, so two open tabs refreshing together don't sign the user out.
+- **Revocation:**
+  - **Admin → Users → Sessions → "Revoke all"** (`POST /admin/users/{id}/revoke-sessions`, optional reason). Signs
+    the user out everywhere now. They can sign in again unless you also untick **Active** (disable). History is at
+    `GET /admin/users/{id}/session-audit`.
+  - **"Sign out everywhere"** (web header) or **"All devices"** (driver app) → `POST /auth/logout-all`. For a lost
+    phone or a password someone else may know.
+  - **"Sign out" / "Log out"** → `POST /auth/logout` ends this device's session on the server, so a copied token
+    stops working too.
+  - Every revocation writes `audit_log` (entity `user`, field `sessions`) with who (`actor_id`; empty = automatic
+    reuse detection), when, why, how many sessions, and `via` (admin / self_service / logout / reuse_detection).
+- **Upgrading to B-3:** tokens issued before migration 0010 carry no session id and are refused, so **everyone
+  signs in once**. Upgrade when no trip is in progress: a driver mid-trip would have to sign in again.
+- **Tenancy:** cross-tenant reads return 404, not 403 (`agripulse_api.scoping`). Public tracking links are
+  expiring, unguessable tokens exposing only position, ETA and lot status (rule 4).
+
+**How to verify (B-3)**
+- `pytest tests/test_sessions.py`: 9 tests.
+  - An admin revoke fails both of the user's devices on the next request and on refresh.
+  - Other users are unaffected.
+  - The audit row is correct (actor, reason, count, time).
+  - A non-admin gets 403.
+  - Self-service "all devices" works, and single-device logout leaves the other device signed in.
+  - Refresh rotation works, the 30-second grace works, and reuse revokes the session.
+  - Tokens from before sessions are refused, and disabled users stay blocked.
+  - A revoked driver's GPS socket closes (4401) and HTTP points get 401.
+  - Live viewers are disconnected.
+- `pytest tests/test_driver_app.py -k log_out`: the driver app's "Log out" ends the session on the server.
+- By hand:
+  1. Sign in as a farmer in one browser.
+  2. In another, as admin, go to Users → Tejas → "Revoke all", give a reason and confirm.
+  3. The farmer's next page load goes to the sign-in page. The Sessions column drops to 0.
+
 ## V1 status
 
 | Done-criterion | Status |

@@ -189,5 +189,9 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   tracking goes through `stopTracking()`. A 409 from the server stops GPS (`trackingRefused`). Pause state lives on
   `trips.tracking_paused_at` and is cleared by the next fix recorded after it, by end, or by withdrawn consent. The
   APK builds in CI (.github/workflows/driver-android.yml); this workspace can't reach the Android SDK.
+- Sessions (B-3): every sign-in = one `user_sessions` row; tokens carry `sid`. Mint tokens ONLY via
+  `agripulse_api.sessions` (`start`, `rotate`, `issue`), never `security.create_*_token` directly. Auth checks go
+  through `rbac.get_current_user` (HTTP) and `sessions.user_from_access_token` (WebSockets); long-lived sockets
+  re-check (`SESSION_RECHECK_S`). Revoke ONLY via `sessions.revoke(...)`, which writes the audit_log row.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

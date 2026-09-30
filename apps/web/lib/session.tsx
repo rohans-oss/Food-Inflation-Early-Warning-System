@@ -16,7 +16,8 @@ interface Ctx {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: string) => string;
-  logout: () => void;
+  logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   reloadUser: () => Promise<void>;
 }
 
@@ -57,10 +58,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (getSession()) api("/auth/me", { method: "PATCH", body: { preferred_lang: l } }).then(reloadUser).catch(() => {});
   }, [reloadUser]);
 
-  const logout = useCallback(() => setSession(null), []);
+  // B-3: end the session on the server too, so a copied token stops working. Best effort: offline still signs out here.
+  const logout = useCallback(async () => {
+    await api("/auth/logout", { method: "POST" }).catch(() => {});
+    setSession(null);
+  }, []);
+  const logoutAll = useCallback(async () => {
+    await api("/auth/logout-all", { method: "POST", body: {} }).catch(() => {});
+    setSession(null);
+  }, []);
 
   return (
-    <SessionCtx.Provider value={{ session, ready, user: session?.user ?? null, lang, setLang, t, logout, reloadUser }}>
+    <SessionCtx.Provider value={{ session, ready, user: session?.user ?? null, lang, setLang, t, logout, logoutAll, reloadUser }}>
       {children}
     </SessionCtx.Provider>
   );

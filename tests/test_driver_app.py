@@ -186,3 +186,14 @@ def test_android_app_stops_gps_when_the_server_refuses_points(browser, server):
     page.wait_for_function("window.__native.removed.length === 1")
     assert page.locator("#trackingBar").is_hidden() and len(queued(page)) == 0
     assert "stopped" in page.locator("#notice").inner_text()
+
+
+def test_log_out_ends_the_session_on_the_server(browser, server):
+    """Pre-V3 B-3: 'Log out' revokes this phone's session server-side, so a copied token stops working."""
+    page, calls = open_app(browser, server)
+    page.click("#logout")
+    page.wait_for_timeout(200)
+    out = [c for c in calls if c["path"] == "/auth/logout"]
+    assert len(out) == 1 and out[0]["method"] == "POST" and out[0]["auth"] == "Bearer tok"
+    assert page.evaluate("localStorage.getItem('ap_driver_token')") is None and page.locator("#loginView").is_visible()
+    assert page.locator("#logoutAll").is_hidden()

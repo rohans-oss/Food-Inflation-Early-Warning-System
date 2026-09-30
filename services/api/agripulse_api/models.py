@@ -83,6 +83,23 @@ class User(Base):
     org: Mapped[Organization | None] = relationship()
 
 
+class UserSession(Base):
+    """Pre-V3 B-3: one row per sign-in (device). Access and refresh tokens carry its id (`sid`); every request checks
+    it, so revoking a session cuts the device off at its next request, not when the access token expires."""
+
+    __tablename__ = "user_sessions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # random, = the tokens' sid claim
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    user_agent: Mapped[str] = mapped_column(String(200), default="")
+    refresh_jti: Mapped[str] = mapped_column(String(32))  # the ONE refresh token currently valid for this session
+    prev_refresh_jti: Mapped[str | None] = mapped_column(String(32))  # accepted for a short grace after rotation
+    rotated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, index=True)
+    revoked_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # None = system (refresh-token reuse)
+    revoke_reason: Mapped[str | None] = mapped_column(String(200))
+
+
 # ---------------------------------------------------------------- markets & data
 
 

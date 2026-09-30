@@ -84,7 +84,9 @@
     "readiness": "Real-data readiness",
     "evalRuns": "Evaluation runs (shared harness)",
     "connectedMandis": "Connected mandis",
-    "v2Results": "V2 results (what the studies found)"
+    "v2Results": "V2 results (what the studies found)",
+    "signOutAll": "Sign out everywhere",
+    "signOutAllConfirm": "Tap again: sign out on ALL devices"
   },
   "kn": {
     "app": "ಅಗ್ರಿಪಲ್ಸ್",
@@ -134,6 +136,8 @@
     "incoming": "ಬರುತ್ತಿರುವ ವಾಹನಗಳು",
     "expectedToday": "ಇಂದು ನಿರೀಕ್ಷಿತ",
     "typicalDay": "ಸಾಮಾನ್ಯ ದಿನ",
-    "inTransit": "ಸಾಗಣೆಯಲ್ಲಿ"
+    "inTransit": "ಸಾಗಣೆಯಲ್ಲಿ",
+    "signOutAll": "ಎಲ್ಲಾ ಸಾಧನಗಳಿಂದ ಸೈನ್ ಔಟ್",
+    "signOutAllConfirm": "ಮತ್ತೊಮ್ಮೆ ಒತ್ತಿ: ಎಲ್ಲಾ ಸಾಧನಗಳಿಂದ ಸೈನ್ ಔಟ್"
   }
 }

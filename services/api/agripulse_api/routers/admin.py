@@ -3,14 +3,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
 from .. import readiness
-from ..models import DataSourceRun, EvalResult, Mandi, ModelRun, Organization, Price, User
+from ..models import AuditLog, DataSourceRun, EvalResult, Mandi, ModelRun, Organization, Price, User
 from ..provenance import LABEL
 from ..rbac import ROLES, require
 from .auth import user_out
@@ -158,7 +158,36 @@ def eval_runs(limit: int = 20, db: Session = Depends(get_db), _=Depends(admin_on
 
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), _=Depends(admin_only)):
-    return [user_out(u) for u in db.scalars(select(User).order_by(User.id))]
+    from ..sessions import active_counts
+
+    n = active_counts(db)
+    return [{**user_out(u).model_dump(), "active_sessions": n.get(u.id, 0)} for u in db.scalars(select(User).order_by(User.id))]
+
+
+class RevokeIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/users/{user_id}/revoke-sessions")
+def revoke_sessions(user_id: int, body: RevokeIn | None = None, db: Session = Depends(get_db), admin=Depends(admin_only)):
+    """Pre-V3 B-3: sign this user out everywhere, now. Their next request fails; they can sign in again unless the
+    account is also disabled. Audited (who, when, why, how many)."""
+    from ..sessions import revoke
+
+    u = db.get(User, user_id)
+    if u is None:
+        raise HTTPException(404, "User not found")
+    n = revoke(db, u.id, actor_id=admin.id, reason=body.reason if body else None, via="admin")
+    db.commit()
+    return {"user_id": u.id, "sessions_revoked": n}
+
+
+@router.get("/users/{user_id}/session-audit")
+def session_audit(user_id: int, db: Session = Depends(get_db), _=Depends(admin_only)):
+    """Revocation history for one user (newest first)."""
+    rows = db.scalars(select(AuditLog).where(AuditLog.entity == "user", AuditLog.entity_id == user_id,
+                                             AuditLog.field == "sessions").order_by(AuditLog.at.desc()).limit(50))
+    return [{"at": r.at, "actor_id": r.actor_id, **(r.details or {})} for r in rows]
 
 
 class UserPatch(BaseModel):

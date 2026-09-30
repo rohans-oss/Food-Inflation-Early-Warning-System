@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Mandi, Organization, User
-from ..rbac import ROLE_ORG_KIND, ROLES, get_current_user
-from ..security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from .. import sessions
+from ..rbac import ROLE_ORG_KIND, ROLES, current_session_id, get_current_user
+from ..security import decode_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -49,9 +50,11 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
-def tokens_for(u: User) -> TokenOut:
-    return TokenOut(access_token=create_access_token(u.id, u.role, u.org_id), refresh_token=create_refresh_token(u.id),
-                    user=user_out(u))
+def tokens_for(db: Session, u: User, request: Request | None = None) -> TokenOut:
+    """A new sign-in: a new server-side session (B-3), so it can be revoked later."""
+    access, refresh_ = sessions.start(db, u, request.headers.get("user-agent", "") if request else "")
+    db.commit()
+    return TokenOut(access_token=access, refresh_token=refresh_, user=user_out(u))
 
 
 def user_out(u: User) -> UserOut:
@@ -71,7 +74,7 @@ def user_out(u: User) -> UserOut:
 
 
 @router.post("/register", response_model=TokenOut, status_code=201)
-def register(body: RegisterIn, db: Session = Depends(get_db)):
+def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
     if body.role not in ROLES:
         raise HTTPException(400, f"Unknown role. Choose one of {sorted(ROLES)}")
     if body.role == "admin":
@@ -118,17 +121,17 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     db.refresh(user)
     if not user.is_active:
         raise HTTPException(202, "Registered. Your fleet owner must approve you before you can log in.")
-    return tokens_for(user)
+    return tokens_for(db, user, request)
 
 
 @router.post("/login", response_model=TokenOut)
-def login(body: LoginIn, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong email or password")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account disabled")
-    return tokens_for(user)
+    return tokens_for(db, user, request)
 
 
 class RefreshIn(BaseModel):
@@ -137,7 +140,8 @@ class RefreshIn(BaseModel):
 
 @router.post("/refresh", response_model=TokenOut)
 def refresh(body: RefreshIn, db: Session = Depends(get_db)):
-    """Swap a refresh token for a new pair. Disabled users and role changes take effect here."""
+    """Swap a refresh token for a new pair (the old refresh token is retired). Disabled users, role changes and
+    revoked sessions take effect here. A retired refresh token presented again revokes its session (theft)."""
     try:
         payload = decode_token(body.refresh_token, typ="refresh")
     except Exception:
@@ -145,7 +149,36 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
     user = db.get(User, int(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or disabled")
-    return tokens_for(user)
+    try:
+        sess = sessions.rotate(db, payload)
+    except sessions.SessionInvalid as exc:
+        db.commit()  # keep the reuse-detection revocation + audit row
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
+    access, refresh_ = sessions.issue(user, sess)
+    db.commit()
+    return TokenOut(access_token=access, refresh_token=refresh_, user=user_out(user))
+
+
+@router.post("/logout")
+def logout(user: User = Depends(get_current_user), sid: str | None = Depends(current_session_id),
+           db: Session = Depends(get_db)):
+    """End THIS device's session on the server, so a copied token stops working too."""
+    n = sessions.revoke(db, user.id, actor_id=user.id, reason="signed out", via="logout", only=sid) if sid else 0
+    db.commit()
+    return {"sessions_revoked": n}
+
+
+class LogoutAllIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/logout-all")
+def logout_all(body: LogoutAllIn | None = None, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Self-service "log out of all devices" (e.g. the account may be compromised). Includes this device."""
+    n = sessions.revoke(db, user.id, actor_id=user.id, reason=(body.reason if body else None) or "log out of all devices",
+                        via="self_service")
+    db.commit()
+    return {"sessions_revoked": n}
 
 
 @router.get("/me", response_model=UserOut)

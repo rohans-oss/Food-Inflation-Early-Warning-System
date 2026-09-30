@@ -29,19 +29,20 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(got, expected)
 
 
-def _encode(user_id: int, typ: str, ttl: timedelta, **claims) -> str:
+def _encode(user_id: int, typ: str, ttl: timedelta, jti: str | None = None, **claims) -> str:
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "typ": typ, "iat": now, "exp": now + ttl, "jti": secrets.token_hex(8), **claims}
+    payload = {"sub": str(user_id), "typ": typ, "iat": now, "exp": now + ttl, "jti": jti or secrets.token_hex(8), **claims}
     return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm)
 
 
-def create_access_token(user_id: int, role: str, org_id: int | None) -> str:
-    return _encode(user_id, "access", timedelta(minutes=get_settings().jwt_expire_minutes), role=role, org=org_id)
+# Both tokens carry the session id (sid): agripulse_api.sessions checks it on every request and refresh (B-3).
+def create_access_token(user_id: int, role: str, org_id: int | None, sid: str) -> str:
+    return _encode(user_id, "access", timedelta(minutes=get_settings().jwt_expire_minutes), role=role, org=org_id, sid=sid)
 
 
-def create_refresh_token(user_id: int) -> str:
-    return _encode(user_id, "refresh", timedelta(days=get_settings().jwt_refresh_days))
+def create_refresh_token(user_id: int, sid: str, jti: str) -> str:
+    return _encode(user_id, "refresh", timedelta(days=get_settings().jwt_refresh_days), jti=jti, sid=sid)
 
 
 def decode_token(token: str, typ: str = "access") -> dict:

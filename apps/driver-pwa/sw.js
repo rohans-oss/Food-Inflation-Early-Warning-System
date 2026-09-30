@@ -1,5 +1,5 @@
 // App-shell cache so the driver app opens with no signal. API calls are never cached.
-const CACHE = "agripulse-driver-v4";
+const CACHE = "agripulse-driver-v5";
 const SHELL = ["./", "index.html", "config.js", "app.js", "app.css", "manifest.webmanifest", "icon.svg",
   "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"];
 

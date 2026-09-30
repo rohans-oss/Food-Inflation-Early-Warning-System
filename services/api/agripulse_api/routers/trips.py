@@ -338,13 +338,20 @@ def public_track(share_token: str, db: Session = Depends(get_db)):
 
 
 def _ws_user(db: Session, token: str | None) -> User | None:
-    if not token:
-        return None
-    try:
-        u = db.get(User, int(decode_token(token)["sub"]))
-    except Exception:
-        return None
-    return u if u and u.is_active else None
+    """User behind an access token, only if its session is still active (B-3)."""
+    from ..sessions import user_from_access_token
+
+    return user_from_access_token(db, token) if token else None
+
+
+def _ws_session_ok(token: str) -> bool:
+    from ..sessions import session_is_active
+
+    with dbmod.SessionLocal() as db:
+        return session_is_active(db, token)
+
+
+SESSION_RECHECK_S = 60  # live viewers: a revoked session is disconnected within this many seconds
 
 
 @router.websocket("/ws/driver/{trip_id}")
@@ -361,6 +368,9 @@ async def ws_driver(ws: WebSocket, trip_id: int, token: str = Query(...)):
         while True:
             msg = await ws.receive_json()
             pts = msg.get("points") or [msg]
+            if not await asyncio.to_thread(_ws_session_ok, token):  # B-3: revoked -> stop taking this phone's GPS
+                await ws.close(code=4401)
+                return
 
             def work():
                 with dbmod.SessionLocal() as db:
@@ -377,21 +387,33 @@ async def ws_driver(ws: WebSocket, trip_id: int, token: str = Query(...)):
         return
 
 
-async def _pump(ws: WebSocket, channels: list[str], initial: list[dict]):
+async def _pump(ws: WebSocket, channels: list[str], initial: list[dict], token: str | None = None,
+                recheck_s: float | None = None):
+    """Forward hub messages. With a token, the session is re-checked every `recheck_s` seconds (B-3)."""
     q = hub.subscribe(*channels)
+    loop = asyncio.get_running_loop()
+    recheck_s = SESSION_RECHECK_S if recheck_s is None else recheck_s
+    next_check = loop.time() + recheck_s
     try:
         for m in initial:
             await ws.send_json(_jsonable(m))
         while True:
             getter = asyncio.create_task(q.get())
             recv = asyncio.create_task(ws.receive_text())
-            done, pending = await asyncio.wait({getter, recv}, return_when=asyncio.FIRST_COMPLETED)
+            timeout = max(0.0, next_check - loop.time()) if token else None
+            done, pending = await asyncio.wait({getter, recv}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             for p in pending:
                 p.cancel()
+            if token and loop.time() >= next_check:
+                if not await asyncio.to_thread(_ws_session_ok, token):
+                    await ws.close(code=4401)
+                    return
+                next_check = loop.time() + recheck_s
             if recv in done:
                 recv.result()  # raises WebSocketDisconnect when the client leaves
                 continue
-            await ws.send_json(getter.result())
+            if getter in done:
+                await ws.send_json(getter.result())
     except WebSocketDisconnect:
         pass
     finally:
@@ -420,7 +442,7 @@ async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: 
     if public:
         await _pump_public(ws, trip_id, initial)
     else:
-        await _pump(ws, [f"trip:{trip_id}"], initial)
+        await _pump(ws, [f"trip:{trip_id}"], initial, token=token)
 
 
 @router.websocket("/ws/public/{share_token}")
@@ -492,7 +514,7 @@ async def ws_live(ws: WebSocket, token: str = Query(...)):
                 select(Trip.id).where(trip_filter(user), Trip.status == "in_progress"))]
         if user.role in ("admin", "policy", "buyer"):
             channels += [f"mandi:{mid}" for mid in db.scalars(select(Mandi.id))]
-    await _pump(ws, channels, [{"type": "hello", "channels": len(channels)}])
+    await _pump(ws, channels, [{"type": "hello", "channels": len(channels)}], token=token)
 
 
 def _jsonable(d):

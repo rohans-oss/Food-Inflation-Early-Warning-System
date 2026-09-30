@@ -191,7 +191,7 @@ export default function Admin() {
       </Card>
 
       <Card title={t("users")}>
-        <Table head={["Name", "Email", "Role", "Organization", "Active"]}>
+        <Table head={["Name", "Email", "Role", "Organization", "Active", "Sessions"]}>
           {users.data?.map((u) => (
             <tr key={u.id}>
               <Td>{u.full_name}</Td><Td>{u.email}</Td>
@@ -199,10 +199,40 @@ export default function Admin() {
                 onChange={(e) => patchUser(u.id, { role: e.target.value })}>{ROLES.map((r) => <option key={r}>{r}</option>)}</select></Td>
               <Td>{u.org_name ?? "–"}</Td>
               <Td><input type="checkbox" aria-label={`Active: ${u.full_name}`} checked={u.is_active ?? true} onChange={(e) => patchUser(u.id, { is_active: e.target.checked })} /></Td>
+              <Td><RevokeSessions user={u} onDone={users.reload} /></Td>
             </tr>
           ))}
         </Table>
       </Card>
     </Shell>
+  );
+}
+
+/** Pre-V3 B-3: sign a user out on every device now (audited: who, when, optional reason). Not the same as disabling. */
+function RevokeSessions({ user, onDone }: { user: any; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const act = useAction();
+  const n = user.active_sessions ?? 0;
+  if (!open) {
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-ink2">{n} active</span>
+        <button className="text-sm text-critical underline disabled:no-underline disabled:opacity-50" disabled={n === 0}
+          onClick={() => setOpen(true)}>Revoke all</button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="w-48"><input className={inputCls} placeholder="Reason (optional)" value={reason} maxLength={200}
+        aria-label={`Reason for revoking ${user.full_name}'s sessions`} onChange={(e) => setReason(e.target.value)} /></div>
+      <Button onClick={() => act.run(async () => {
+        await api(`/admin/users/${user.id}/revoke-sessions`, { method: "POST", body: { reason: reason || null } });
+        setOpen(false); setReason(""); onDone();
+      })} disabled={act.busy}>Revoke {n}</Button>
+      <button className="text-sm text-ink2" onClick={() => setOpen(false)}>Cancel</button>
+      <ErrorNote error={act.error} />
+    </div>
   );
 }

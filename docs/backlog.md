@@ -25,6 +25,10 @@ Each item says where it came from and why it's deferred.
 | 16 | Calibration is global per horizon, not conditional | B-1: mean coverage on target, but 15 of 32 dataset-horizons still outside ±5; pinball 0.6–2.9% worse | Conditional calibration (by mandi, season or recent volatility) is new modelling; decide on REAL data. Also run `apply_to_predictions` on the ablation variants and TFT, and choose `track_record` vs `aci` on real data |
 | 17 | Delay alerts during a paused / silent phone | B-2: the monitor pushes the ETA forward while no fixes arrive, so a paused browser phone can still trigger a delay alert from a stale position | Mark such delay alerts as "estimated from last known position", or hold them while `tracking_paused_at` is set; decide after the field test |
 | 18 | New Kannada alert copy (`tracking_paused`) is machine-drafted | Same as the other Kannada strings | Include in the native-speaker review |
+| 19 | Sessions: no "where am I signed in" list | B-3 stores device (user agent) per session but only shows counts | `GET /auth/sessions` + sign out one chosen device |
+| 20 | No password change / reset | A compromised password can be cut off (revoke + disable) but not changed by the user | Password change (revoking other sessions) + admin reset; email reset needs SMTP |
+| 21 | `user_sessions` grows forever | Revoked / expired rows are never deleted | Weekly job: delete rows revoked or idle for longer than the refresh lifetime (keep audit_log) |
+| 22 | Refresh-reuse grace (30 s) is a window | A thief using a stolen refresh token within 30 s of the owner's refresh also gets tokens | Acceptable for now; tighten to a per-device binding if needed |
 
 ## V3 (by design)
 

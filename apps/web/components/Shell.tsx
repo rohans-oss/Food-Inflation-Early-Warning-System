@@ -20,7 +20,8 @@ interface Alert {
 
 /** Page frame for signed-in role screens. Redirects to /login (or the user's own home) if the role doesn't match. */
 export function Shell({ roles, title, children, wide = false }: { roles: Role[]; title: string; children: ReactNode; wide?: boolean }) {
-  const { user, ready, t, lang, setLang, logout, session } = useSession();
+  const { user, ready, t, lang, setLang, logout, logoutAll, session } = useSession();
+  const [confirmAll, setConfirmAll] = useState(false);
   const router = useRouter();
   const allowed = !!user && roles.includes(user.role);
 
@@ -54,8 +55,16 @@ export function Shell({ roles, title, children, wide = false }: { roles: Role[];
               <option value="kn">ಕನ್ನಡ</option>
             </select>
             <AlertsBell token={session!.access_token} />
-            <button onClick={() => { logout(); router.replace("/login"); }} className="text-sm text-ink2 hover:text-ink">
+            <button onClick={async () => { await logout(); router.replace("/login"); }} className="text-sm text-ink2 hover:text-ink">
               {t("signOut")}
+            </button>
+            {/* B-3: self-service, for a lost phone or a password someone else may know. Second click confirms. */}
+            <button
+              onClick={async () => { if (!confirmAll) { setConfirmAll(true); setTimeout(() => setConfirmAll(false), 5000); return; }
+                await logoutAll(); router.replace("/login"); }}
+              className={`text-sm ${confirmAll ? "font-semibold text-critical" : "text-ink2 hover:text-ink"}`}
+            >
+              {confirmAll ? t("signOutAllConfirm") : t("signOutAll")}
             </button>
           </div>
         </div>

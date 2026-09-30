@@ -81,16 +81,27 @@ async function api(path, opts = {}, retried = false) {
 // ------------------------------------------------------------ views
 function show(view) {
   for (const v of ["loginView", "listView", "tripView"]) $(v).hidden = v !== view;
-  $("logout").hidden = view === "loginView";
+  $("logout").hidden = $("logoutAll").hidden = view === "loginView";
 }
-function logout() {
+// B-3: "Log out" also ends this phone's session on the server (a copied token stops working); "All devices" ends
+// every session of this account. Raw fetch, not api(): api() calls logout() on a 401, which would loop.
+function endSession(path) {
+  if (!token) return;
+  fetch(API + path, { method: "POST", keepalive: true, body: "{}",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token } }).catch(() => {});
+}
+function logout(serverPath = null) {
   stopTracking();
+  if (serverPath) endSession(serverPath);
   token = null; refreshToken = null;
   localStorage.removeItem("ap_driver_token");
   localStorage.removeItem("ap_driver_refresh");
   show("loginView");
 }
-$("logout").onclick = logout;
+$("logout").onclick = () => logout("/auth/logout");
+$("logoutAll").onclick = () => {
+  if (confirm("Sign out on every phone and computer that uses this account?")) logout("/auth/logout-all");
+};
 
 $("loginForm").onsubmit = async (e) => {
   e.preventDefault();

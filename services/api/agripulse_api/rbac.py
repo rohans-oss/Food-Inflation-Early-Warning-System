@@ -57,6 +57,14 @@ P = {
 _bearer = HTTPBearer(auto_error=False)
 
 
+def current_session_id(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str | None:
+    """The sid of the request's access token (already validated by get_current_user)."""
+    try:
+        return decode_token(creds.credentials).get("sid") if creds else None
+    except Exception:
+        return None
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
@@ -67,6 +75,12 @@ def get_current_user(
         payload = decode_token(creds.credentials)
     except Exception:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+    from .sessions import SessionInvalid, active_session
+
+    try:
+        active_session(db, payload)  # B-3: a revoked session fails on its very next request
+    except SessionInvalid as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
     user = db.get(User, int(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or disabled")
