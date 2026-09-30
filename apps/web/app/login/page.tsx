@@ -12,7 +12,7 @@ import { useSession } from "@/lib/session";
 
 // Created by `python -m agripulse_api.seed --demo`. Password: DEMO_PASSWORD (default agripulse-demo).
 const DEMO = [
-  ["Farmer (Tejas)", "tejas@demo.agripulse"],
+  ["Farmer", "farmer@demo.agripulse"],
   ["FPO / aggregator", "fpo@demo.agripulse"],
   ["Driver", "driver@demo.agripulse"],
   ["Fleet owner", "fleet@demo.agripulse"],

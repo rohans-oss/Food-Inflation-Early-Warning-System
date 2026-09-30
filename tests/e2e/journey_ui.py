@@ -73,12 +73,12 @@ with sync_playwright() as p:
 
     # 1. farmer registers a lot
     fctx = mk(); fp = fctx.new_page(); watch(fp, "farmer")
-    login(fp, "tejas@demo.agripulse")
+    login(fp, "farmer@demo.agripulse")
     expect(fp.get_by_role("heading", name="My lots")).to_be_visible()
     fp.get_by_role("button", name="Use my location").click()
     fp.get_by_text("Pickup point: 13.2").wait_for()
     fp.get_by_label("Quantity (tonnes)").fill("2")
-    fp.get_by_label("Pickup place name").fill("Tejas farm, Vemagal")
+    fp.get_by_label("Pickup place name").fill("Main farm, Vemagal")
     fp.get_by_label("FPO").select_option(label="Kolar Tomato Growers FPO (demo)")
     fp.get_by_label("Lender (optional)").select_option(label="Grama Credit Co-op (demo)")
     fp.get_by_role("button", name="Register lot").click()
@@ -127,7 +127,7 @@ with sync_playwright() as p:
     step("driver accepted, consented, started; TRACKING ON visible")
 
     # pickup QR: farmer's screen shows the token; driver submits it (manual entry = same endpoint as camera)
-    ftok = tok("tejas@demo.agripulse")
+    ftok = tok("farmer@demo.agripulse")
     token = api(f"/lots/{lot_id}", ftok)["trip"]["pickup_qr_token"]
     dp.get_by_placeholder("…or type the code").fill(token)
     dp.get_by_role("button", name="Submit").click()
@@ -200,7 +200,7 @@ with sync_playwright() as p:
 
     # mobile width check on the farmer page
     m = b.new_context(viewport={"width": 390, "height": 844}).new_page(); watch(m, "mobile")
-    login(m, "tejas@demo.agripulse")
+    login(m, "farmer@demo.agripulse")
     wide = m.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
     shot(m, "14-farmer-mobile")
     step(f"mobile horizontal overflow: {wide}")

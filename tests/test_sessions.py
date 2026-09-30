@@ -11,7 +11,7 @@ from agripulse_api.models import AuditLog, Trip, User, UserSession
 from tests.conftest import PASSWORD, login
 from tests.test_tracking import journey, seed_forecasts  # noqa: F401 (fixture)
 
-FARMER, DRIVER = "tejas@demo.agripulse", "driver@demo.agripulse"
+FARMER, DRIVER = "farmer@demo.agripulse", "driver@demo.agripulse"
 
 
 def sign_in(client, email, password=PASSWORD, agent="pytest"):

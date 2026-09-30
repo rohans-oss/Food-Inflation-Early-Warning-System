@@ -41,7 +41,7 @@ def journey(client, as_role, db):
     kolar = db.scalar(select(Mandi).where(Mandi.name == "Kolar APMC"))
 
     lot = client.post("/lots", headers=as_role("farmer"), json={
-        "quantity_tons": 2, "grade": "Local", "pickup_label": "Tejas farm, Vemagal",
+        "quantity_tons": 2, "grade": "Local", "pickup_label": "Main farm, Vemagal",
         "pickup_lat": FARM[0], "pickup_lon": FARM[1], "fpo_org_id": fpo_org, "lender_org_id": lender_org}).json()
 
     rec = client.get("/recommend/best-mandi", params={"lot_id": lot["id"]}, headers=as_role("farmer")).json()

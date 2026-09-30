@@ -90,7 +90,7 @@ export default function Farmer() {
               </Field>
             </div>
             <Field label={t("pickupLabel")}>
-              <input className={inputCls} placeholder="e.g. Tejas farm, Vemagal" value={f.pickup_label} onChange={(e) => setF({ ...f, pickup_label: e.target.value })} />
+              <input className={inputCls} placeholder="e.g. Main farm, Vemagal" value={f.pickup_label} onChange={(e) => setF({ ...f, pickup_label: e.target.value })} />
             </Field>
             <div>
               <div className="mb-1 flex items-center justify-between text-sm">

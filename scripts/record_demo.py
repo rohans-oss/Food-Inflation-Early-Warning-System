@@ -26,7 +26,7 @@ import httpx
 from playwright.sync_api import sync_playwright
 
 DEMO_PW, ADMIN = "agripulse-demo", ("admin@agripulse.local", "agripulse-admin")
-USERS = {r: f"{e}@demo.agripulse" for r, e in [("farmer", "tejas"), ("fpo", "fpo"), ("driver", "driver"),
+USERS = {r: f"{e}@demo.agripulse" for r, e in [("farmer", "farmer"), ("fpo", "fpo"), ("driver", "driver"),
                                                ("fleet_owner", "fleet"), ("trader", "trader"), ("lender", "lender"),
                                                ("policy", "policy")]}
 FARM = (13.20, 78.02)
@@ -105,7 +105,7 @@ class Demo:
     def org(self, kind, contains):
         return next(o["id"] for o in self.call("farmer", "GET", "/orgs/directory", params={"kind": kind}) if contains in o["name"])
 
-    def make_lot(self, lat=FARM[0], lon=FARM[1], qty=2, label="Tejas farm, Vemagal"):
+    def make_lot(self, lat=FARM[0], lon=FARM[1], qty=2, label="Main farm, Vemagal"):
         return self.call("farmer", "POST", "/lots", json={
             "quantity_tons": qty, "grade": "Local", "pickup_label": label, "pickup_lat": lat, "pickup_lon": lon,
             "fpo_org_id": self.org("fpo", "FPO"), "lender_org_id": self.org("lender", "")})
@@ -133,7 +133,7 @@ def tejas(d: Demo, browser) -> Path:
         (6, "…and watches supply physically moving toward mandis. Every number here is labelled: this demo runs on SYNTHETIC prices.")],
         clips=clips)
     d.scene(browser, "farmer", f"/farmer/lots/{lot['id']}", [
-        (6, "Tejas, a farmer near Kolar, registers 2 tonnes and drops a pin at his farm."),
+        (6, "A farmer near Kolar registers 2 tonnes and drops a pin at the farm."),
         (8, "Best mandi: net value after transport and spoilage, as a p10–p90 range. The OR-Tools optimizer ranks them.")],
         act={"Best mandi: net value after transport and spoilage, as a p10–p90 range. The OR-Tools optimizer ranks them.":
              lambda p: p.mouse.wheel(0, 500)}, clips=clips)
@@ -156,7 +156,7 @@ def tejas(d: Demo, browser) -> Path:
             f"localStorage.setItem('ap_driver_refresh', {json.dumps(drv_s['refresh_token'])});")
     c_open, c_consent, c_scan = ("Driver app (this recording's truck is SIMULATED): the trip appears; the driver accepts it.",
                                  "Tracking needs explicit consent, only for this trip. Then: TRACKING ON, visible the whole time.",
-                                 "At the farm the driver scans Tejas's QR (typed here): the lot is now in transit.")
+                                 "At the farm the driver scans the farmer's QR (typed here): the lot is now in transit.")
 
     def open_accept(p):
         p.locator("#trips button").first.click()
@@ -169,7 +169,7 @@ def tejas(d: Demo, browser) -> Path:
         p.get_by_role("button", name="Start trip").click()
 
     def scan(p):
-        tok = d.call("farmer", "GET", f"/lots/{lot['id']}")["trip"]["pickup_qr_token"]  # on Tejas's screen once started
+        tok = d.call("farmer", "GET", f"/lots/{lot['id']}")["trip"]["pickup_qr_token"]  # on the farmer's screen once started
         p.locator("#scanBox").scroll_into_view_if_needed()
         p.locator("#manualToken").fill(tok)
         p.wait_for_timeout(800)
@@ -197,9 +197,9 @@ def tejas(d: Demo, browser) -> Path:
     th = threading.Thread(target=drive, args=(55,))
     th.start()
     d.scene(browser, "farmer", f"/farmer/lots/{lot['id']}", [
-        (8, "Tejas watches the truck live: distance left and ETA, updating as positions arrive."),
+        (8, "The farmer watches the truck live: distance left and ETA, updating as positions arrive."),
         (8, "He can share a public link: expiring, unguessable, and it shows only position, ETA and lot status.")],
-        act={"Tejas watches the truck live: distance left and ETA, updating as positions arrive.": lambda p: p.mouse.wheel(0, 350)},
+        act={"The farmer watches the truck live: distance left and ETA, updating as positions arrive.": lambda p: p.mouse.wheel(0, 350)},
         clips=clips)
     th.join()
     share = d.call("farmer", "GET", f"/trips/{trip['id']}")["share_url"]
@@ -213,7 +213,7 @@ def tejas(d: Demo, browser) -> Path:
     d.call("trader", "POST", f"/trader/lots/{lot['id']}/weigh", json={"weight_kg": 1985, "price_per_quintal": 1400})
     d.call("driver", "POST", f"/trips/{trip['id']}/end")
     d.scene(browser, "farmer", f"/farmer/lots/{lot['id']}", [
-        (7, "Delivery scanned and weighed: 1,985 kg. Tejas gets the confirmation.")], clips=clips)
+        (7, "Delivery scanned and weighed: 1,985 kg. The farmer gets the confirmation.")], clips=clips)
     d.scene(browser, "lender", "/lender", [(6, "His lender sees the verified chain: pickup QR, tracked trip, delivery QR, weight.")],
             clips=clips)
     d.scene(browser, "admin", "/admin", [
@@ -233,7 +233,7 @@ def decisions(d: Demo, browser) -> Path:
     clips = []
     for i, (la, lo) in enumerate([(13.18, 78.05), (13.22, 78.00), (13.15, 78.10), (13.25, 78.07)]):
         d.make_lot(la, lo, qty=1 + (i % 2), label=f"Neighbour farm {i + 1}")
-    lot = d.make_lot(13.21, 78.03, qty=3, label="Tejas farm, second picking")
+    lot = d.make_lot(13.21, 78.03, qty=3, label="Main farm, second picking")
 
     d.scene(browser, "farmer", f"/farmer/lots/{lot['id']}", [
         (7, "Best mandi, now from an OR-Tools CP-SAT optimizer: net value = price − transport − spoilage, with ranges."),

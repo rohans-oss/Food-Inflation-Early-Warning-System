@@ -34,6 +34,7 @@ SEVERITY = {
     "vehicle_arrived": "info",
     "delivered": "info",
     "incoming_vehicle": "info",
+    "transport_requested": "info",
 }
 LANGS = ("en", "kn", "hi")
 

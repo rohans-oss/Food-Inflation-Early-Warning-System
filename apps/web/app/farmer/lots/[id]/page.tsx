@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { BestMandi } from "@/components/BestMandi";
 import { MandiForecast } from "@/components/MandiForecast";
+import { NextSteps } from "@/components/NextSteps";
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
@@ -98,6 +99,9 @@ export default function LotDetail() {
                 <p className="mt-2 text-xs text-muted">Your FPO groups lots into a shipment and books the vehicle. This lot isn't linked to an FPO.</p>
               )}
             </Card>
+          )}
+          {!l.trip && ["registered", "grouped"].includes(l.status) && (
+            <NextSteps key={`${l.preferred_mandi_id ?? 0}-${l.shipment_id ?? 0}`} lotId={l.id} tonsLot={l.quantity_tons} onChanged={lot.reload} />
           )}
           {forecastMandi && <Card title={t("priceForecast")}><MandiForecast mandiId={forecastMandi} /></Card>}
 

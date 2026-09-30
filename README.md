@@ -55,7 +55,7 @@ pytest                                                                    # 47 t
 
 Docker: `docker compose up -d --build`. Production with HTTPS: see [docs/deployment.md](docs/deployment.md).
 
-Demo logins (after `--demo`): `tejas@`, `fpo@`, `driver@`, `fleet@`, `trader@`, `buyer@`, `policy@`, `lender@` `demo.agripulse`;
+Demo logins (after `--demo`): `farmer@`, `fpo@`, `driver@`, `fleet@`, `trader@`, `buyer@`, `policy@`, `lender@` `demo.agripulse`;
 admin `admin@agripulse.local` / `agripulse-admin` (SQLite dev only).
 
 ---
@@ -641,7 +641,7 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - `pytest tests/test_driver_app.py -k log_out`: the driver app's "Log out" ends the session on the server.
 - By hand:
   1. Sign in as a farmer in one browser.
-  2. In another, as admin, go to Users → Tejas → "Revoke all", give a reason and confirm.
+  2. In another, as admin, go to Users → Farmer → "Revoke all", give a reason and confirm.
   3. The farmer's next page load goes to the sign-in page. The Sessions column drops to 0.
 
 ## V1 status

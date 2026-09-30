@@ -62,7 +62,7 @@ def seed_admin(db: Session) -> User:
 
 DEMO_USERS = [
     # email, name, role, org (name, kind) or None, extra
-    ("tejas@demo.agripulse", "Tejas (farmer)", "farmer", None),
+    ("farmer@demo.agripulse", "Farmer", "farmer", None),
     ("fpo@demo.agripulse", "Kolar Tomato FPO desk", "fpo", ("Kolar Tomato Growers FPO (demo)", "fpo")),
     ("driver@demo.agripulse", "Ravi (driver)", "driver", ("Hebbal Haulage (demo)", "fleet")),
     ("fleet@demo.agripulse", "Hebbal Haulage owner", "fleet_owner", ("Hebbal Haulage (demo)", "fleet")),

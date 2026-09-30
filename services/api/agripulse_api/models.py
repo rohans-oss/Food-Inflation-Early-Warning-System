@@ -352,6 +352,7 @@ class Lot(Base):
     shipment_id: Mapped[int | None] = mapped_column(ForeignKey("shipments.id"), index=True)
     # the farmer's own choice from "Best mandi" (a request to the FPO; the shipment's mandi is what actually happens)
     preferred_mandi_id: Mapped[int | None] = mapped_column(ForeignKey("mandis.id"))
+    transport_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # farmer asked the FPO to ship it
     crop: Mapped[str] = mapped_column(String(50), default="Tomato")
     quantity_tons: Mapped[float] = mapped_column(Float)
     grade: Mapped[str] = mapped_column(String(20), default="Local")

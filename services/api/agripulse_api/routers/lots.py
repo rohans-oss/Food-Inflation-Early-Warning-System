@@ -54,6 +54,7 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
         "mandi_id": lot.shipment.mandi_id if lot.shipment else None,
         "preferred_mandi_id": lot.preferred_mandi_id,
         "preferred_mandi": db.get(Mandi, lot.preferred_mandi_id).name if lot.preferred_mandi_id else None,
+        "transport_requested_at": lot.transport_requested_at,
         "delivered_weight_kg": lot.delivered_weight_kg,
         "sale_price_per_quintal": lot.sale_price_per_quintal,
         "payout_status": lot.payout_status,
@@ -161,10 +162,85 @@ def choose_mandi(lot_id: int, body: PreferIn, db: Session = Depends(get_db), use
         raise HTTPException(400, "Unknown mandi")
     before = lot.preferred_mandi_id
     lot.preferred_mandi_id = body.mandi_id
+    if before != body.mandi_id:
+        lot.transport_requested_at = None  # a new choice needs a new request to the FPO
     name = lambda mid: db.get(Mandi, mid).name[:24] if mid else "none"  # noqa: E731
     db.add(AuditLog(entity="lot", entity_id=lot.id, field="preferred_mandi", from_state=name(before) if before else None,
                     to_state=name(body.mandi_id), actor_id=user.id,
                     details={"preferred_mandi_id": body.mandi_id, "was": before}))
+    db.commit()
+    return lot_out(db, lot, user)
+
+
+ACTIVE_TRIP = ("assigned", "accepted", "in_progress")
+
+
+@router.get("/lots/{lot_id}/next-steps")
+def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:read"))):
+    """After choosing a mandi: the route and cost to it, which fleets have a free truck big enough, and what
+    happens next. Truck counts are live from the vehicles / trips tables (simulated vehicles are flagged)."""
+    from ..decisions.service import recommend_single
+
+    lot = get_scoped_lot(db, user, lot_id)
+    mandi_id = lot.shipment.mandi_id if lot.shipment else lot.preferred_mandi_id
+    mandi = db.get(Mandi, mandi_id) if mandi_id else None
+    route = None
+    if mandi:
+        rec = recommend_single(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, weeks=1)
+        row = next((r for r in rec.get("ranked", []) if r["mandi_id"] == mandi.id), None)
+        if row:
+            route = {k: row.get(k) for k in ("road_km", "drive_hours", "route_source", "transport_cost", "spoilage_pct",
+                                             "net_value", "price_forecast", "data_provenance", "feasible", "why_not")}
+            route["vehicle_assumption"] = rec.get("vehicle_assumption")
+    busy = set(db.scalars(select(Trip.vehicle_id).where(Trip.status.in_(ACTIVE_TRIP))))
+    fleets = []
+    for org in db.scalars(select(Organization).where(Organization.kind == "fleet").order_by(Organization.name)):
+        vs = db.scalars(select(Vehicle).where(Vehicle.org_id == org.id)).all()
+        if not vs:
+            continue
+        free = [v for v in vs if v.id not in busy]
+        fits = [v for v in free if v.capacity_tons >= lot.quantity_tons]
+        fleets.append({"org_id": org.id, "name": org.name, "vehicles": len(vs), "free": len(free), "free_that_fit": len(fits),
+                       "capacities_tons": sorted({v.capacity_tons for v in fits}),
+                       "is_simulated": all(v.is_simulated for v in vs)})
+    fpo = db.get(Organization, lot.org_id) if lot.org_id else None
+    trip = _trip_for_shipment(db, lot.shipment_id)
+    done = {
+        "registered": True,
+        "mandi_chosen": mandi is not None,
+        "transport_requested": lot.transport_requested_at is not None or lot.shipment_id is not None,
+        "grouped": lot.shipment_id is not None,
+        "fleet_booked": bool(lot.shipment and lot.shipment.fleet_org_id),
+        "truck_assigned": trip is not None,
+        "picked_up": lot.status in ("in_transit", "at_mandi", "delivered"),
+        "delivered": lot.status == "delivered",
+    }
+    return {"lot_id": lot.id, "mandi": {"id": mandi.id, "name": mandi.name} if mandi else None,
+            "mandi_is_final": lot.shipment_id is not None, "route": route, "fleets": fleets,
+            "fpo": {"id": fpo.id, "name": fpo.name} if fpo else None,
+            "transport_requested_at": lot.transport_requested_at, "done": done,
+            "can_request": user.role == "farmer" and lot.status == "registered" and mandi is not None and fpo is not None}
+
+
+@router.post("/lots/{lot_id}/request-transport")
+def request_transport(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
+    """The farmer asks their FPO to ship the lot to the chosen mandi; every FPO desk user gets an alert."""
+    from ..alerts import notify
+
+    lot = get_scoped_lot(db, user, lot_id)
+    if lot.status != "registered":
+        raise HTTPException(409, "This lot is already grouped into a shipment")
+    if not lot.preferred_mandi_id:
+        raise HTTPException(409, "Choose a mandi first (Sell here)")
+    if not lot.org_id:
+        raise HTTPException(409, "This lot has no FPO to arrange transport")
+    lot.transport_requested_at = datetime.now(timezone.utc)
+    mandi = db.get(Mandi, lot.preferred_mandi_id)
+    for desk in db.scalars(select(User).where(User.role == "fpo", User.org_id == lot.org_id, User.is_active.is_(True))):
+        notify(db, desk, "transport_requested", f"transport:{lot.id}:{lot.preferred_mandi_id}", lot=lot.id,
+               farmer=user.full_name, tons=f"{lot.quantity_tons:g}", mandi=mandi.name)
+    db.add(AuditLog(entity="lot", entity_id=lot.id, field="transport", from_state=None, to_state="requested",
+                    actor_id=user.id, details={"mandi_id": lot.preferred_mandi_id}))
     db.commit()
     return lot_out(db, lot, user)
 

@@ -67,7 +67,7 @@ def login(client, email, password=PASSWORD) -> dict:
 def as_role(client):
     cache: dict[str, dict] = {}
     emails = {
-        "farmer": "tejas@demo.agripulse",
+        "farmer": "farmer@demo.agripulse",
         "fpo": "fpo@demo.agripulse",
         "driver": "driver@demo.agripulse",
         "fleet_owner": "fleet@demo.agripulse",

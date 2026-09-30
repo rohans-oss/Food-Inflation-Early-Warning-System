@@ -9,7 +9,7 @@ import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
 import { Button, Card, ErrorNote, Field, inputCls, SimBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
-import { dateTime, inr, num, time, tons } from "@/lib/format";
+import { ago, dateTime, inr, num, time, tons } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 export default function Fpo() {
@@ -61,7 +61,10 @@ export default function Fpo() {
               <Td>{tons(l.quantity_tons)}</Td>
               <Td>{l.grade}</Td>
               <Td className="text-ink2">{l.pickup_label || `${num(l.pickup_lat, 3)}, ${num(l.pickup_lon, 3)}`}</Td>
-              <Td>{l.preferred_mandi ?? <span className="text-muted">–</span>}</Td>
+              <Td>
+                {l.preferred_mandi ?? <span className="text-muted">–</span>}
+                {l.transport_requested_at && <div className="text-xs font-medium text-brand">Transport requested {ago(l.transport_requested_at)}</div>}
+              </Td>
             </tr>
           ))}
         </Table>

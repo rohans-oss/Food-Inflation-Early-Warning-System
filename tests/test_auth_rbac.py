@@ -14,7 +14,7 @@ def test_every_role_can_log_in(client, as_role):
 
 
 def test_bad_password_and_missing_token(client):
-    assert client.post("/auth/login", json={"email": "tejas@demo.agripulse", "password": "nope"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "farmer@demo.agripulse", "password": "nope"}).status_code == 401
     assert client.get("/auth/me").status_code == 401
     assert client.get("/auth/me", headers={"Authorization": "Bearer junk"}).status_code == 401
 

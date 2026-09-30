@@ -39,6 +39,10 @@
     "tracking_paused": {
       "title": "Tracking paused: {vehicle}",
       "body": "The driver's phone for {vehicle} stopped sharing location {minutes} min ago (app not on screen). The vehicle may still be moving; call the driver."
+    },
+    "transport_requested": {
+      "title": "Transport requested for lot #{lot}",
+      "body": "{farmer} asks to ship lot #{lot} ({tons} t) to {mandi}. Group it into a shipment and book a fleet on the FPO dispatch page."
     }
   },
   "kn": {
@@ -73,6 +77,10 @@
     "tracking_paused": {
       "title": "ಟ್ರ್ಯಾಕಿಂಗ್ ನಿಂತಿದೆ: {vehicle}",
       "body": "{vehicle} ವಾಹನದ ಚಾಲಕರ ಫೋನ್ {minutes} ನಿಮಿಷಗಳ ಹಿಂದೆ ಸ್ಥಳ ಹಂಚಿಕೆಯನ್ನು ನಿಲ್ಲಿಸಿದೆ (ಆ್ಯಪ್ ಪರದೆಯ ಮೇಲೆ ಇಲ್ಲ). ವಾಹನ ಇನ್ನೂ ಚಲಿಸುತ್ತಿರಬಹುದು; ಚಾಲಕರಿಗೆ ಕರೆ ಮಾಡಿ."
+    },
+    "transport_requested": {
+      "title": "ಲಾಟ್ #{lot}ಗೆ ಸಾರಿಗೆ ವಿನಂತಿ",
+      "body": "{farmer} ಅವರು ಲಾಟ್ #{lot} ({tons} ಟನ್) ಅನ್ನು {mandi}ಗೆ ಕಳುಹಿಸಲು ಕೇಳಿದ್ದಾರೆ. FPO ರವಾನೆ ಪುಟದಲ್ಲಿ ಅದನ್ನು ಸಾಗಣೆಗೆ ಸೇರಿಸಿ ಮತ್ತು ವಾಹನವನ್ನು ಕಾಯ್ದಿರಿಸಿ."
     }
   },
   "hi": {
@@ -107,6 +115,10 @@
     "tracking_paused": {
       "title": "ट्रैकिंग रुकी: {vehicle}",
       "body": "{vehicle} के ड्राइवर के फ़ोन ने {minutes} मिनट पहले लोकेशन भेजना बंद किया (ऐप स्क्रीन पर नहीं)। वाहन शायद अभी भी चल रहा है; ड्राइवर को फ़ोन करें।"
+    },
+    "transport_requested": {
+      "title": "लॉट #{lot} के लिए परिवहन अनुरोध",
+      "body": "{farmer} ने लॉट #{lot} ({tons} टन) को {mandi} भेजने का अनुरोध किया है। FPO डिस्पैच पेज पर इसे शिपमेंट में जोड़ें और वाहन बुक करें।"
     }
   },
   "_review": {
@@ -134,6 +146,9 @@
       },
       "tracking_paused": {
         "status": "machine"
+      },
+      "transport_requested": {
+        "status": "machine"
       }
     },
     "hi": {
@@ -159,6 +174,9 @@
         "status": "machine"
       },
       "tracking_paused": {
+        "status": "machine"
+      },
+      "transport_requested": {
         "status": "machine"
       }
     }

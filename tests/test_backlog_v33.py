@@ -79,9 +79,9 @@ def test_synthetic_demo_history_is_the_same_draw_whatever_the_end_date(db):
 
 # ---- #19 / #21
 def test_device_list_and_signing_out_one_device(client, db):
-    a = client.post("/auth/login", json={"email": "tejas@demo.agripulse", "password": "agripulse-demo"},
+    a = client.post("/auth/login", json={"email": "farmer@demo.agripulse", "password": "agripulse-demo"},
                     headers={"User-Agent": "Phone"}).json()
-    b = client.post("/auth/login", json={"email": "tejas@demo.agripulse", "password": "agripulse-demo"},
+    b = client.post("/auth/login", json={"email": "farmer@demo.agripulse", "password": "agripulse-demo"},
                     headers={"User-Agent": "Laptop"}).json()
     ha, hb = ({"Authorization": f"Bearer {x['access_token']}"} for x in (a, b))
     lst = client.get("/auth/sessions", headers=hb).json()
@@ -99,7 +99,7 @@ def test_device_list_and_signing_out_one_device(client, db):
 def test_old_sessions_are_pruned(client, db):
     from agripulse_api.sessions import prune
 
-    client.post("/auth/login", json={"email": "tejas@demo.agripulse", "password": "agripulse-demo"})
+    client.post("/auth/login", json={"email": "farmer@demo.agripulse", "password": "agripulse-demo"})
     old = db.scalars(select(UserSession)).all()
     for s in old:
         s.created_at = datetime.now(timezone.utc) - timedelta(days=60)

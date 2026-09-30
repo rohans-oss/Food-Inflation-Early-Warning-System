@@ -10,7 +10,7 @@ from tests.test_tracking import FARM, journey  # noqa: F401  (fixture)
 
 
 def test_refresh_token_flow(client):
-    r = client.post("/auth/login", json={"email": "tejas@demo.agripulse", "password": "agripulse-demo"}).json()
+    r = client.post("/auth/login", json={"email": "farmer@demo.agripulse", "password": "agripulse-demo"}).json()
     assert r["refresh_token"] and r["refresh_token"] != r["access_token"]
     # a refresh token is not an access token
     assert client.get("/auth/me", headers={"Authorization": f"Bearer {r['refresh_token']}"}).status_code == 401
