@@ -34,6 +34,9 @@ def check_stale_trips(db: Session, now: datetime | None = None) -> dict:
         # the ETA can't be earlier than now: push it out and re-check lateness
         if trip.eta_at and trip.eta_at < now and not _has_event(db, trip.id, "reached_mandi"):
             trip.eta_at = now + timedelta(minutes=5)
-            _check_delay(db, trip, s)
+            # V3-3 (backlog 17): a paused phone's position is stale, so a delay computed from it isn't evidence;
+            # the "tracking paused" alert already tells the fleet owner. Delay alerts resume with the next fix.
+            if trip.tracking_paused_at is None:
+                _check_delay(db, trip, s)
     db.commit()
     return {"flagged": flagged}

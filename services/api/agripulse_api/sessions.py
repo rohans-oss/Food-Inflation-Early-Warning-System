@@ -118,3 +118,64 @@ def active_counts(db: Session) -> dict[int, int]:
         UserSession.revoked_at.is_(None), func.coalesce(UserSession.rotated_at, UserSession.created_at) >= since)
         .group_by(UserSession.user_id)).all()
     return {u: n for u, n in rows}
+
+
+# ---------------------------------------------------------------- V3-3: device list, clean-up, WebSocket tickets
+
+
+def list_active(db: Session, user_id: int) -> list[UserSession]:
+    """The user's sessions that can still be used (not revoked, refresh not expired), newest first."""
+    from .config import get_settings
+
+    since = _now() - timedelta(days=get_settings().jwt_refresh_days)
+    rows = db.scalars(select(UserSession).where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+                      .order_by(UserSession.created_at.desc())).all()
+    return [s for s in rows if _aware(s.rotated_at or s.created_at) >= since]
+
+
+def prune(db: Session, now: datetime | None = None, grace_days: int = 1) -> int:
+    """Delete sessions revoked, or unused, for longer than the refresh lifetime (+ grace). audit_log keeps history."""
+    from sqlalchemy import delete, or_
+
+    from .config import get_settings
+
+    cutoff = (now or _now()) - timedelta(days=get_settings().jwt_refresh_days + grace_days)
+    res = db.execute(delete(UserSession).where(or_(
+        UserSession.revoked_at < cutoff,
+        func.coalesce(UserSession.rotated_at, UserSession.created_at) < cutoff)))
+    db.commit()
+    return res.rowcount or 0
+
+
+WS_TICKET_SECONDS = 60
+_used_tickets: dict[str, datetime] = {}
+
+
+def ws_ticket(user: User, sid: str) -> str:
+    """Short-lived, single-use ticket for opening a WebSocket, so the long-lived access token never goes in a URL
+    (URLs end up in proxy logs; backlog 6). Single use is enforced per API process; a ticket also expires in 60 s."""
+    from .security import _encode
+
+    return _encode(user.id, "ws", timedelta(seconds=WS_TICKET_SECONDS), sid=sid)
+
+
+def redeem_ws_ticket(db: Session, ticket: str) -> tuple[User | None, str | None]:
+    try:
+        payload = decode_token(ticket, typ="ws")
+        sess = active_session(db, payload)
+    except Exception:
+        return None, None
+    now = _now()
+    for j, t in list(_used_tickets.items()):
+        if t < now:
+            del _used_tickets[j]
+    if payload["jti"] in _used_tickets:
+        return None, None
+    _used_tickets[payload["jti"]] = now + timedelta(seconds=WS_TICKET_SECONDS)
+    u = db.get(User, int(payload["sub"]))
+    return (u, sess.id) if u and u.is_active else (None, None)
+
+
+def sid_is_active(db: Session, sid: str | None) -> bool:
+    s = db.get(UserSession, sid) if sid else None
+    return s is not None and s.revoked_at is None

@@ -260,11 +260,40 @@ def scan_delivery(trip_id: int, body: ScanIn, db: Session = Depends(get_db), use
 
 @router.post("/trips/{trip_id}/end")
 def end(trip_id: int, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
+    """Driver ends the trip. V3-3 (backlog 4): only after the trader scanned the delivery QR, so a lot can't be left
+    in transit forever. To stop sharing location before that, the driver withdraws consent; a load that won't be
+    delivered is closed by the fleet owner (POST /trips/{id}/close)."""
     t = _driver_trip(db, user, trip_id)
+    if t.shipment_id and t.delivery_scanned_at is None:
+        raise HTTPException(409, "The trader hasn't scanned your delivery QR yet. To stop sharing location now, untick "
+                                 "location sharing; if the load won't be delivered, your fleet owner closes the trip.")
     move(db, t, "completed", user.id)
     t.ended_at = datetime.now(timezone.utc)
     t.tracking_paused_at = t.tracking_pause_reason = None
     t.share_expires_at = min(t.share_expires_at or t.ended_at, t.ended_at + timedelta(hours=2))
+    db.commit()
+    hub.publish(f"trip:{t.id}", {"type": "status", "trip_id": t.id, "status": t.status})
+    return trip_out(db, t, user)
+
+
+class CloseIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=200)
+
+
+@router.post("/trips/{trip_id}/close")
+def close_trip(trip_id: int, body: CloseIn, db: Session = Depends(get_db), user: User = Depends(require("vehicles:manage"))):
+    """Fleet owner / admin ends a trip that won't be delivered (breakdown, rejected load). Tracking stops; the lots
+    are NOT marked delivered - they stay in transit for the FPO / trader to resolve. Audited with the reason."""
+    t = db.get(Trip, trip_id)
+    if t is None or (user.role != "admin" and t.fleet_org_id != user.org_id):
+        raise forbid()
+    if t.status not in ("assigned", "accepted", "in_progress"):
+        raise HTTPException(409, f"Trip is {t.status}")
+    move(db, t, "cancelled", user.id, reason=body.reason, delivered=t.delivery_scanned_at is not None)
+    now = datetime.now(timezone.utc)
+    t.ended_at = now
+    t.tracking_paused_at = t.tracking_pause_reason = None
+    t.share_expires_at = min(t.share_expires_at or now, now)
     db.commit()
     hub.publish(f"trip:{t.id}", {"type": "status", "trip_id": t.id, "status": t.status})
     return trip_out(db, t, user)
@@ -345,29 +374,44 @@ def public_track(share_token: str, db: Session = Depends(get_db)):
 # ------------------------------------------------------------------ websockets
 
 
-def _ws_user(db: Session, token: str | None) -> User | None:
-    """User behind an access token, only if its session is still active (B-3)."""
-    from ..sessions import user_from_access_token
+def _ws_auth(db: Session, token: str | None, ticket: str | None) -> tuple[User | None, str | None]:
+    """(user, session id) for a WebSocket. Preferred: ?ticket= (60 s, single use, V3-3). ?token= (the access token)
+    still works for older clients (e.g. installed Android builds) but puts a long-lived token in the URL."""
+    from ..sessions import redeem_ws_ticket, user_from_access_token
 
-    return user_from_access_token(db, token) if token else None
+    if ticket:
+        return redeem_ws_ticket(db, ticket)
+    if token:
+        u = user_from_access_token(db, token)
+        if u is None:
+            return None, None
+        try:
+            return u, decode_token(token).get("sid")
+        except Exception:
+            return None, None
+    return None, None
 
 
-def _ws_session_ok(token: str) -> bool:
-    from ..sessions import session_is_active
+def _ws_user(db: Session, token: str | None, ticket: str | None = None) -> User | None:
+    return _ws_auth(db, token, ticket)[0]
+
+
+def _ws_session_ok(sid: str | None) -> bool:
+    from ..sessions import sid_is_active
 
     with dbmod.SessionLocal() as db:
-        return session_is_active(db, token)
+        return sid_is_active(db, sid)
 
 
 SESSION_RECHECK_S = 60  # live viewers: a revoked session is disconnected within this many seconds
 
 
 @router.websocket("/ws/driver/{trip_id}")
-async def ws_driver(ws: WebSocket, trip_id: int, token: str = Query(...)):
+async def ws_driver(ws: WebSocket, trip_id: int, token: str | None = None, ticket: str | None = None):
     """Driver phone streams {"points": [...]} or a single point; server acks with counts."""
     await ws.accept()
     with dbmod.SessionLocal() as db:
-        user = _ws_user(db, token)
+        user, sid = _ws_auth(db, token, ticket)
         t = db.get(Trip, trip_id)
         if user is None or t is None or t.driver_id != user.id:
             await ws.close(code=4403)
@@ -376,7 +420,7 @@ async def ws_driver(ws: WebSocket, trip_id: int, token: str = Query(...)):
         while True:
             msg = await ws.receive_json()
             pts = msg.get("points") or [msg]
-            if not await asyncio.to_thread(_ws_session_ok, token):  # B-3: revoked -> stop taking this phone's GPS
+            if not await asyncio.to_thread(_ws_session_ok, sid):  # B-3: revoked -> stop taking this phone's GPS
                 await ws.close(code=4401)
                 return
 
@@ -395,9 +439,9 @@ async def ws_driver(ws: WebSocket, trip_id: int, token: str = Query(...)):
         return
 
 
-async def _pump(ws: WebSocket, channels: list[str], initial: list[dict], token: str | None = None,
+async def _pump(ws: WebSocket, channels: list[str], initial: list[dict], sid: str | None = None,
                 recheck_s: float | None = None):
-    """Forward hub messages. With a token, the session is re-checked every `recheck_s` seconds (B-3)."""
+    """Forward hub messages. With a session id, the session is re-checked every `recheck_s` seconds (B-3)."""
     q = hub.subscribe(*channels)
     loop = asyncio.get_running_loop()
     recheck_s = SESSION_RECHECK_S if recheck_s is None else recheck_s
@@ -408,12 +452,12 @@ async def _pump(ws: WebSocket, channels: list[str], initial: list[dict], token: 
         while True:
             getter = asyncio.create_task(q.get())
             recv = asyncio.create_task(ws.receive_text())
-            timeout = max(0.0, next_check - loop.time()) if token else None
+            timeout = max(0.0, next_check - loop.time()) if sid else None
             done, pending = await asyncio.wait({getter, recv}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             for p in pending:
                 p.cancel()
-            if token and loop.time() >= next_check:
-                if not await asyncio.to_thread(_ws_session_ok, token):
+            if sid and loop.time() >= next_check:
+                if not await asyncio.to_thread(_ws_session_ok, sid):
                     await ws.close(code=4401)
                     return
                 next_check = loop.time() + recheck_s
@@ -429,7 +473,8 @@ async def _pump(ws: WebSocket, channels: list[str], initial: list[dict], token: 
 
 
 @router.websocket("/ws/trips/{trip_id}")
-async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: str | None = None):
+async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: str | None = None,
+                  ticket: str | None = None):
     """Live view for one trip. Auth with a JWT (?token=) or a public share token (?share=)."""
     await ws.accept()
     with dbmod.SessionLocal() as db:
@@ -440,7 +485,7 @@ async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: 
             initial = [{"type": "position", **public_payload(db, t)}] if ok else []
             public = True
         else:
-            user = _ws_user(db, token)
+            user, sid = _ws_auth(db, token, ticket)
             ok = bool(user and t and db.scalar(select(Trip.id).where(Trip.id == trip_id, trip_filter(user))))
             initial = [{"type": "position", **live_payload(t)}] if ok else []
             public = False
@@ -450,7 +495,7 @@ async def ws_trip(ws: WebSocket, trip_id: int, token: str | None = None, share: 
     if public:
         await _pump_public(ws, trip_id, initial)
     else:
-        await _pump(ws, [f"trip:{trip_id}"], initial, token=token)
+        await _pump(ws, [f"trip:{trip_id}"], initial, sid=sid)
 
 
 @router.websocket("/ws/public/{share_token}")
@@ -504,11 +549,11 @@ async def _pump_public(ws: WebSocket, trip_id: int, initial: list[dict]):
 
 
 @router.websocket("/ws/live")
-async def ws_live(ws: WebSocket, token: str = Query(...)):
+async def ws_live(ws: WebSocket, token: str | None = None, ticket: str | None = None):
     """Role-scoped live feed: fleet owners get their fleet, traders their mandi, others their alerts."""
     await ws.accept()
     with dbmod.SessionLocal() as db:
-        user = _ws_user(db, token)
+        user, sid = _ws_auth(db, token, ticket)
         if user is None:
             await ws.close(code=4401)
             return
@@ -522,7 +567,7 @@ async def ws_live(ws: WebSocket, token: str = Query(...)):
                 select(Trip.id).where(trip_filter(user), Trip.status == "in_progress"))]
         if user.role in ("admin", "policy", "buyer"):
             channels += [f"mandi:{mid}" for mid in db.scalars(select(Mandi.id))]
-    await _pump(ws, channels, [{"type": "hello", "channels": len(channels)}], token=token)
+    await _pump(ws, channels, [{"type": "hello", "channels": len(channels)}], sid=sid)
 
 
 def _jsonable(d):

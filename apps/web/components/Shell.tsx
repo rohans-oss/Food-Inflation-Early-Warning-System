@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
-import { api, Role, ROLE_HOME, wsUrl } from "@/lib/api";
+import { api, Role, ROLE_HOME, wsTicket, wsUrl } from "@/lib/api";
 import { ago } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -56,6 +56,7 @@ export function Shell({ roles, title, children, wide = false }: { roles: Role[];
               <option value="hi">हिन्दी</option>
             </select>
             <AlertsBell token={session!.access_token} />
+            <Link href="/account" className="text-sm text-ink2 hover:text-ink">Account</Link>
             <button onClick={async () => { await logout(); router.replace("/login"); }} className="text-sm text-ink2 hover:text-ink">
               {t("signOut")}
             </button>
@@ -91,8 +92,10 @@ function AlertsBell({ token }: { token: string }) {
     const id = setInterval(load, 60000);
     // live alerts over the role-scoped websocket
     let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(wsUrl("/ws/live", { token }));
+    let gone = false;
+    wsTicket().then((ticket) => {
+      if (gone) return;
+      ws = new WebSocket(wsUrl("/ws/live", { ticket }));
       ws.onmessage = (m) => {
         const msg = JSON.parse(m.data);
         if (msg.type === "alert") {
@@ -101,8 +104,8 @@ function AlertsBell({ token }: { token: string }) {
           load();
         }
       };
-    } catch { /* no live alerts; polling still works */ }
-    return () => { clearInterval(id); ws?.close(); };
+    }).catch(() => { /* no live alerts; polling still works */ });
+    return () => { gone = true; clearInterval(id); ws?.close(); };
   }, [token]);
 
   useEffect(() => {

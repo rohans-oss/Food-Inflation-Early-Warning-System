@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { getSession, wsUrl } from "./api";
+import { getSession, wsTicket, wsUrl } from "./api";
 
 /** Subscribe to one trip's live stream. Auth with the session token, or a public share token. */
 export function useLiveTrip(tripId: number | null | undefined, opts: { share?: string } = {}) {
@@ -15,8 +15,12 @@ export function useLiveTrip(tripId: number | null | undefined, opts: { share?: s
     if (!tripId) return;
     let ws: WebSocket | null = null;
     let closed = false;
-    const open = () => {
-      const params: Record<string, string> = opts.share ? { share: opts.share } : { token: getSession()?.access_token ?? "" };
+    const open = async () => {
+      let params: Record<string, string>;
+      try {
+        params = opts.share ? { share: opts.share } : { ticket: await wsTicket() };
+      } catch { if (!closed) setTimeout(open, Math.min(30000, 2000 * 2 ** retry.current++)); return; }
+      if (closed) return;
       ws = new WebSocket(wsUrl(`/ws/trips/${tripId}`, params));
       ws.onopen = () => { setConnected(true); retry.current = 0; };
       ws.onmessage = (m) => {
@@ -44,10 +48,12 @@ export function useLiveFeed(onMessage: (msg: any) => void) {
   useEffect(() => {
     let ws: WebSocket | null = null;
     let closed = false;
-    const open = () => {
-      const token = getSession()?.access_token;
-      if (!token) return;
-      ws = new WebSocket(wsUrl("/ws/live", { token }));
+    const open = async () => {
+      if (!getSession()?.access_token) return;
+      let ticket: string;
+      try { ticket = await wsTicket(); } catch { if (!closed) setTimeout(open, 10000); return; }
+      if (closed) return;
+      ws = new WebSocket(wsUrl("/ws/live", { ticket }));
       ws.onmessage = (m) => cb.current(JSON.parse(m.data));
       ws.onclose = () => { if (!closed) setTimeout(open, 5000); };
     };

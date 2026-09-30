@@ -130,6 +130,11 @@ export async function api<T = any>(
   return data as T;
 }
 
+/** V3-3: a 60-second, single-use ticket for opening a WebSocket, so the access token never goes in a URL. */
+export async function wsTicket(): Promise<string> {
+  return (await api<{ ticket: string }>("/auth/ws-ticket", { method: "POST" })).ticket;
+}
+
 export function wsUrl(path: string, params: Record<string, string>): string {
   const q = new URLSearchParams(params).toString();
   return apiBase().replace(/^http/, "ws") + path + (q ? "?" + q : "");

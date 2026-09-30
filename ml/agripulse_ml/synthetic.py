@@ -110,8 +110,13 @@ def generate(start: date = date(2022, 1, 1), end: date = date(2026, 9, 25), seed
     )
 
 
+PINNED_HORIZON_END = date(2030, 12, 31)
+
+
 def load_into_db(db, start: date = date(2022, 1, 1), end: date | None = None, seed: int = 7) -> dict:
-    """Write synthetic history for the seeded mandis (source='synthetic')."""
+    """Write synthetic history for the seeded mandis (source='synthetic').
+    V3-3 (backlog 11): the draw is generated once to a fixed far horizon and CUT at `end`, so the demo database is the
+    same history every day (only extended), instead of a new random draw whenever `end` moves."""
     from sqlalchemy import delete, select
 
     from agripulse_api.models import Arrival, Mandi, Price, Weather
@@ -119,7 +124,9 @@ def load_into_db(db, start: date = date(2022, 1, 1), end: date | None = None, se
     end = end or date.today()
     by_name = {m.name: m for m in db.scalars(select(Mandi))}
     mandis = [m for m in SYNTH_MANDIS if m[0] in by_name]
-    prices, weather, arrivals = generate(start, end, seed, mandis)
+    prices, weather, arrivals = generate(start, max(end, PINNED_HORIZON_END), seed, mandis)
+    cut = pd.Timestamp(end)
+    prices, weather, arrivals = (d[d["date"] <= cut] for d in (prices, weather, arrivals))
     for model in (Price, Weather, Arrival):
         db.execute(delete(model).where(model.source == "synthetic"))
     db.bulk_insert_mappings(

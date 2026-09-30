@@ -67,6 +67,12 @@ def job_trip_monitor(db):
     return check_stale_trips(db)
 
 
+def job_session_cleanup(db):
+    from agripulse_api.sessions import prune
+
+    return {"deleted": prune(db)}
+
+
 JOBS = [
     ("agmarknet_midday", job_agmarknet, CronTrigger(hour=13, minute=10, timezone=TZ)),
     ("agmarknet_evening", job_agmarknet, CronTrigger(hour=19, minute=40, timezone=TZ)),
@@ -75,6 +81,7 @@ JOBS = [
     ("forecast_daily", job_forecast_and_alerts, CronTrigger(hour=20, minute=30, timezone=TZ)),
     ("trip_monitor", job_trip_monitor, CronTrigger(minute="*", timezone=TZ)),
     ("graph_weekly", job_graph_build, CronTrigger(day_of_week="sun", hour=21, minute=10, timezone=TZ)),
+    ("session_cleanup_weekly", job_session_cleanup, CronTrigger(day_of_week="sun", hour=3, minute=15, timezone=TZ)),
 ]
 
 

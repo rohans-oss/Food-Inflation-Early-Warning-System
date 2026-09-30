@@ -169,7 +169,13 @@ function render() {
     await act("start");
     startTracking(current.id);
   });
-  if (t.status === "in_progress") btn("End trip", async () => {
+  if (t.status === "in_progress" && t.shipment_id && !t.delivery_scanned_at) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "End trip unlocks after the trader scans your delivery QR. To stop sharing location now, untick location sharing above.";
+    a.appendChild(p);
+  }
+  if (t.status === "in_progress" && (!t.shipment_id || t.delivery_scanned_at)) btn("End trip", async () => {
     if (!confirm("End the trip and stop sharing location?")) return;
     await flush();
     await act("end");
@@ -328,8 +334,13 @@ function reportPause(tripId) {
   }).catch(() => { /* offline: the monitor will call it "no signal" instead */ });
 }
 
-function openSocket(tripId) {
-  const url = API.replace(/^http/, "ws") + `/ws/driver/${tripId}?token=${encodeURIComponent(token)}`;
+async function openSocket(tripId) {
+  // V3-3: a 60-second single-use ticket, so the access token never goes in a URL (proxies log URLs)
+  let ticket;
+  try { ticket = (await api("/auth/ws-ticket", { method: "POST" })).ticket; } catch { ticket = null; }
+  if (tracking !== tripId) return;
+  if (!ticket) { setTimeout(() => { if (tracking === tripId) openSocket(tripId); }, 10000); return; }
+  const url = API.replace(/^http/, "ws") + `/ws/driver/${tripId}?ticket=${encodeURIComponent(ticket)}`;
   ws = new WebSocket(url);
   ws.onopen = () => flush();
   ws.onmessage = (m) => {

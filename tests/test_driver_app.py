@@ -21,7 +21,8 @@ TRIP = {"id": 7, "vehicle": "KA-01-XX-1234", "mandi": "Kolar APMC", "status": "i
 BASE_INIT = """
 window.AGRIPULSE_API = location.origin + '/api';
 localStorage.setItem('ap_driver_token', 'tok');
-window.WebSocket = class { constructor(){ this.readyState = 0; } send(){} close(){} };
+window.__wsUrls = [];
+window.WebSocket = class { constructor(u){ window.__wsUrls.push(u); this.readyState = 0; } send(){} close(){} };
 window.__vis = 'visible';
 Object.defineProperty(document, 'visibilityState', {get: () => window.__vis, configurable: true});
 window.__setVisible = (v) => { window.__vis = v ? 'visible' : 'hidden';
@@ -95,6 +96,8 @@ def open_app(browser, server, native=False, points_status=200):
             if points_status != 200:
                 return route.fulfill(status=points_status, json={"detail": "Tracking is only accepted during an active trip"})
             return route.fulfill(json={"accepted": len(json.loads(req.post_data)["points"]), "trip": {}})
+        if path == "/auth/ws-ticket":
+            return route.fulfill(json={"ticket": "T1", "expires_in": 60})
         return route.fulfill(json={"paused": True} if path.endswith("/pause") else TRIP)
 
     page.route("**/api/**", api)
@@ -197,3 +200,12 @@ def test_log_out_ends_the_session_on_the_server(browser, server):
     assert len(out) == 1 and out[0]["method"] == "POST" and out[0]["auth"] == "Bearer tok"
     assert page.evaluate("localStorage.getItem('ap_driver_token')") is None and page.locator("#loginView").is_visible()
     assert page.locator("#logoutAll").is_hidden()
+
+
+def test_live_socket_uses_a_one_time_ticket_not_the_token(browser, server):
+    """V3-3 (backlog 6): the long-lived access token never appears in a WebSocket URL."""
+    page, calls = open_app(browser, server)
+    page.wait_for_function("window.__wsUrls.length > 0")
+    urls = page.evaluate("window.__wsUrls")
+    assert all("ticket=T1" in u and "token=" not in u for u in urls)
+    assert any(c["path"] == "/auth/ws-ticket" and c["auth"] == "Bearer tok" for c in calls)

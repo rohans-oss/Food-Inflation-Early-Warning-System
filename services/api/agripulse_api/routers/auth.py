@@ -181,6 +181,32 @@ def logout_all(body: LogoutAllIn | None = None, user: User = Depends(get_current
     return {"sessions_revoked": n}
 
 
+@router.get("/sessions")
+def my_sessions(user: User = Depends(get_current_user), sid: str | None = Depends(current_session_id),
+                db: Session = Depends(get_db)):
+    """V3-3: where am I signed in (device, when). `current` marks this device."""
+    return [{"id": s.id, "created_at": s.created_at, "last_refresh": s.rotated_at, "device": s.user_agent or "unknown",
+             "current": s.id == sid} for s in sessions.list_active(db, user.id)]
+
+
+@router.post("/sessions/{session_id}/revoke")
+def revoke_my_session(session_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Sign out one of MY devices. Another user's session id gives 404."""
+    s = db.get(sessions.UserSession, session_id)
+    if s is None or s.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    n = sessions.revoke(db, user.id, actor_id=user.id, reason="signed out from the device list", via="self_device",
+                        only=session_id)
+    db.commit()
+    return {"sessions_revoked": n}
+
+
+@router.post("/ws-ticket")
+def ws_ticket(user: User = Depends(get_current_user), sid: str | None = Depends(current_session_id)):
+    """V3-3: a 60-second, single-use ticket for opening a WebSocket (?ticket=...), instead of the access token."""
+    return {"ticket": sessions.ws_ticket(user, sid), "expires_in": sessions.WS_TICKET_SECONDS}
+
+
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return user_out(user)

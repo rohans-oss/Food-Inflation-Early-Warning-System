@@ -93,6 +93,9 @@ def test_ending_the_trip_or_withdrawing_consent_clears_the_pause(client, as_role
     assert db.get(Trip, tid).tracking_paused_at is None
     _live(db, tid)
     client.post(f"/trips/{tid}/pause", json={"reason": "screen_off"}, headers=as_role("driver"))
+    t = db.get(Trip, tid)
+    t.delivery_scanned_at = datetime.now(timezone.utc)  # V3-3: a driver ends a trip only after the delivery scan
+    db.commit()
     assert client.post(f"/trips/{tid}/end", headers=as_role("driver")).status_code == 200
     db.expire_all()
     assert db.get(Trip, tid).tracking_paused_at is None
