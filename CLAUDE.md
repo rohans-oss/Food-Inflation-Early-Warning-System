@@ -280,6 +280,6 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `docs/final-evaluation.md` is the single rule-24 table: update it with every study re-run.
 - Public demo (V3-4): `infra/Dockerfile.demo` bakes a SYNTHETIC SQLite demo; `scripts/demo_start.py` sets
   JWT_SECRET=auto and disables admin unless ADMIN_PASSWORD is set. Never point it at real data. Render services
-  `agripulse-demo-api` / `agripulse-demo` (Singapore, free); pushes don't auto-deploy there, trigger manually.
+  `agripulse-api` (https://agripulse-api-0ir4.onrender.com) / `agripulse-demo` (Singapore, free); pushes don't auto-deploy there, trigger manually.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).
