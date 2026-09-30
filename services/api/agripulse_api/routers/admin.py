@@ -319,3 +319,35 @@ def sim_status(_=Depends(admin_only)):
     from tracking import simulator
 
     return simulator.state.status()
+
+
+# ---------------------------------------------------------------- V3-0 recommenders
+
+
+@router.get("/recommenders")
+def recommenders(_=Depends(admin_only)):
+    """Which recommender users get ([recommender] default in config/recommender.toml) and the study's result."""
+    from ..decisions.service import RECOMMENDERS, default_recommender
+
+    return {"default": default_recommender(), "available": list(RECOMMENDERS), "config": "config/recommender.toml",
+            "study": "docs/optimizer-results.md"}
+
+
+class CompareIn(BaseModel):
+    density: str = "medium"
+    seed: int = Field(default=1, ge=0, le=10_000)
+    weeks: int = Field(default=1, ge=1, le=4)
+
+
+@router.post("/recommenders/compare")
+def compare_recommenders(body: CompareIn, db: Session = Depends(get_db), _=Depends(admin_only)):
+    """Run the OLD rule and the optimizer on the same simulated batch of lots and trucks (V3-0, rule 21)."""
+    from ..decisions.service import compare
+
+    try:
+        out = compare(db, body.density, body.seed, body.weeks)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if "error" in out:
+        raise HTTPException(409, out["error"])
+    return out

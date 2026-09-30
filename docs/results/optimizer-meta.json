@@ -1,0 +1,70 @@
+{
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "days_per_seed": 10,
+  "densities": {
+    "sparse": [
+      6,
+      8,
+      null
+    ],
+    "medium": [
+      20,
+      18,
+      null
+    ],
+    "dense_tight": [
+      60,
+      null,
+      0.7
+    ]
+  },
+  "config": {
+    "transport": {
+      "rate_per_km_ton": 12.0,
+      "vehicle": {
+        "base_rate_per_km": 18.0,
+        "rate_per_km_per_capacity_ton": 4.0,
+        "count_return_leg": true
+      }
+    },
+    "spoilage": {
+      "base_pct_per_hour": 0.4,
+      "reference_temp_c": 30.0,
+      "q10": 2.0,
+      "default_temp_c": 30.0,
+      "crop_sensitivity": {
+        "Tomato": 1.0
+      }
+    },
+    "search": {
+      "radius_km": 300,
+      "max_candidates": 12
+    },
+    "recommender": {
+      "default": "rule"
+    },
+    "constraints": {
+      "max_spoilage_pct": 8.0,
+      "mandi_extra_share": 0.25
+    },
+    "optimizer": {
+      "objective": "p50",
+      "time_limit_s": 10.0,
+      "max_mandis_per_lot": 12,
+      "workers": 8
+    }
+  },
+  "distances": "approximate (straight-line x road factor)",
+  "forecast": "V1 LightGBM, B-1 track-record calibration, 1-week horizon",
+  "scored_at": "realised price (h=1)",
+  "data_provenance": "synthetic"
+}

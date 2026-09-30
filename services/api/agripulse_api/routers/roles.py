@@ -39,7 +39,9 @@ def best_mandi(
         lat, lon, tons = lot.pickup_lat, lot.pickup_lon, lot.quantity_tons
     if lat is None or lon is None or not tons:
         raise HTTPException(400, "Give lot_id, or lat + lon + tons")
-    return recommend(db, lat, lon, tons, weeks=weeks)
+    from ..decisions.service import recommend_single  # V3-0: rule or optimizer, per config/recommender.toml
+
+    return recommend_single(db, lat, lon, tons, weeks=weeks)
 
 
 # ------------------------------------------------------------------ in-transit supply

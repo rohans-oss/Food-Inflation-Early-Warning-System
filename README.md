@@ -392,6 +392,44 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 - **Real phone** (field test): lock the screen for 10 min and use Maps for 10 min mid-route. Fixes keep arriving,
   and the notification is visible the whole time.
 
+## V3-0: optimizer (OR-Tools) vs the V1 rule
+
+> SYNTHETIC — METHODOLOGY DEMO, NOT A REAL RESULT for every study number below.
+
+- **What it is:** `agripulse_api.decisions`, one database-free core for the API, the Admin comparison and the
+  study.
+  - `rule.py`: V1's lot-by-lot ranking, plus a nearest-truck dispatcher.
+  - `optimizer.py`: CP-SAT over all lots, mandis and trucks at once.
+    - Hard limits: truck capacity, spoilage ≤ 8%, and tonnes into a mandi ≤ 25% of its typical daily arrivals
+      (minus trucks already on the way).
+    - Maximises calibrated p50 net value (or p10, risk-averse).
+  - `evaluate.py`: scores any plan with one cost model.
+- **Results** ([docs/optimizer-results.md](docs/optimizer-results.md)): 8 synthetic datasets × 10 days × 3 batch
+  sizes, scored at the price **realised** a week later.
+  - The pre-registered switch rule was met, so **the optimizer is now the default** (`[recommender] default` in
+    `config/recommender.toml`; `"rule"` brings V1 back).
+  - Net value is a tie (+0.07%); violations fell from 140 to 0.
+  - Transport cost is 22–34% lower. The dependable gain is truck assignment.
+  - In dense batches it earns 1.3% less, because it refuses to flood mandis and flooding isn't priced in the scoring.
+  - **Real data: not evaluable yet** (no real lots with a sale outcome).
+- **Product:**
+  - The farmer's best-mandi table lists options that break a limit last, with the reason.
+  - Admin → "Recommenders: V1 rule vs optimizer" runs both on a simulated batch against today's forecasts.
+  - New dependency: `ortools` (in `pyproject.toml`, so the Docker image picks it up).
+
+**How to verify**
+- `pytest tests/test_decisions.py`: 12 tests.
+  - Every hard limit holds, and the rule is caught breaking them.
+  - With limits off, the optimizer is never worse than the rule on its own objective (optimality).
+  - Plans are graded at the prices given, not the forecast; the p10 objective works.
+  - The farmer endpoint follows the config, and the rule stays callable.
+  - Trucks already on the road reduce a mandi's room.
+  - The Admin comparison works and is admin-only.
+  - **The config default equals the pre-registered verdict on the committed CSV.**
+- `python -m agripulse_ml.decision_study` (~40 min) regenerates `docs/results/optimizer-synthetic.csv`.
+- Admin page → "Recommenders" → pick "Dense" → Compare. The rule shows mandi-room violations; the optimizer shows 0,
+  with lower transport cost.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

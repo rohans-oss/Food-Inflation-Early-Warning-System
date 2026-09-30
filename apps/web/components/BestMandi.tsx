@@ -7,7 +7,8 @@ import { useSession } from "@/lib/session";
 
 import { ErrorNote, Note, ProvenanceBadge, SpikeBadge, Table, Td, useApi, worstProvenance } from "./ui";
 
-/** Rule-based best mandi (V1). Ranked by p50 net value; p10-p90 shown so overlap is visible. */
+/** Best mandi: the V1 rule or the V3 optimizer (config/recommender.toml). Ranked by p50 net value; p10-p90 shown so
+ * overlap is visible. With the optimizer, options that break a hard limit (spoilage, mandi room) are listed last. */
 export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId: number) => void }) {
   const { t } = useSession();
   const [weeks, setWeeks] = useState(1);
@@ -31,11 +32,12 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
       <Table head={["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk")]}
         empty={r.loading ? t("loading") : "No mandis with a forecast nearby."}>
         {ranked.map((m) => (
-          <tr key={m.mandi_id} className={m.rank === 1 ? "bg-page" : ""}>
+          <tr key={m.mandi_id} className={m.feasible === false ? "opacity-60" : m.rank === 1 ? "bg-page" : ""}>
             <Td>{m.rank}</Td>
             <Td>
               <div className="font-medium">{m.mandi}</div>
               <div className="text-xs text-muted">{m.district}{!m.coords_verified && " · location unverified"}</div>
+              {m.feasible === false && <div className="text-xs text-critical">Not advised: {m.why_not.join("; ")}</div>}
               {onPick && <button onClick={() => onPick(m.mandi_id)} className="text-xs underline">forecast</button>}
             </Td>
             <Td>{num(m.road_km, 0)} km<div className="text-xs text-muted">{num(m.drive_hours, 1)} h{m.route_source !== "osrm" && " · approx."}</div></Td>
@@ -51,7 +53,11 @@ export function BestMandi({ lotId, onPick }: { lotId: number; onPick?: (mandiId:
         <Note>The top two ranges overlap, so the ranking is not decisive: #{2} could pay as much. Weigh distance and reliability too.</Note>
       )}
       {r.data?.no_forecast?.length > 0 && <p className="text-xs text-muted">Nearby but no forecast yet: {r.data.no_forecast.join(", ")}.</p>}
-      {r.data && <p className="text-xs text-muted">{r.data.formula}. Cost assumptions: ₹{r.data.inputs.rate_per_km_ton}/km/t, from {r.data.inputs.config_file}.</p>}
+      {r.data && r.data.recommender !== "optimizer" && <p className="text-xs text-muted">{r.data.formula}. Cost assumptions: ₹{r.data.inputs.rate_per_km_ton}/km/t, from {r.data.inputs.config_file}.</p>}
+      {r.data?.recommender === "optimizer" && (
+        <p className="text-xs text-muted">{r.data.formula}. Assumes a {r.data.vehicle_assumption.capacity_tons} t truck hired at your farm,
+          ₹{num(r.data.vehicle_assumption.rate_per_km, 0)}/km{r.data.vehicle_assumption.return_leg ? ", paid both ways" : ""} (from {r.data.inputs.config_file}).</p>
+      )}
     </div>
   );
 }

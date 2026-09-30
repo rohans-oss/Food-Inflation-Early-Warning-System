@@ -26,3 +26,29 @@ Tomato = 1.0
 [search]
 radius_km = 300                 # straight-line pre-filter before routing
 max_candidates = 12             # nearest N mandis get routed and ranked
+
+# ---------------------------------------------------------------- V3-0: optimizer (agripulse_api.decisions)
+[recommender]
+# Which recommender users get: "rule" (V1, one lot at a time) or "optimizer" (OR-Tools CP-SAT, all lots together).
+# Pre-registered switch rule (docs/optimizer-results.md): "optimizer" becomes the default only if, on the V3-0 study,
+# its realised net value is >= the rule's on average AND it has fewer constraint violations.
+# V3-0 result (SYNTHETIC): met. Net value a tie (+0.07%), violations 140 -> 0. tests/test_decisions.py pins this.
+default = "optimizer"
+
+[transport.vehicle]
+# Trucks are hired per trip, so V3 costs a vehicle per km driven (not per tonne-km as V1 did).
+# Cost per km = base_rate_per_km + rate_per_km_per_capacity_ton x capacity. ASSUMPTIONS: replace with fleet quotes.
+base_rate_per_km = 18.0         # INR/km, any vehicle (driver, fuel base)
+rate_per_km_per_capacity_ton = 4.0   # INR/km per tonne of capacity (a 5 t truck = 38 INR/km)
+count_return_leg = true         # the truck drives back to its base empty (V3-1 return loads reduce this)
+sizes_tons = [2.5, 5.0, 9.0, 10.0, 16.0]   # truck sizes a farmer can hire; single-lot advice assumes the smallest that fits
+
+[constraints]
+max_spoilage_pct = 8.0          # hard cap on expected transit loss per lot (%). ASSUMPTION.
+mandi_extra_share = 0.25        # extra tonnes a mandi can take in one day, as a share of its typical daily arrivals. ASSUMPTION.
+
+[optimizer]
+objective = "p50"               # "p50" = expected value; "p10" = risk-averse (plan on the low price)
+time_limit_s = 10.0
+max_mandis_per_lot = 12         # nearest N mandis considered per lot (same as [search] max_candidates)
+workers = 8

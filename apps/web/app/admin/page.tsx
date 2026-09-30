@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { Shell } from "@/components/Shell";
-import { Badge, Button, CalibrationBadge, Card, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Badge, Button, CalibrationBadge, Card, SimBadge, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ago, dateTime, day, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -159,6 +159,8 @@ export default function Admin() {
         </Table>
       </Card>
 
+      <CompareRecommenders />
+
       <Card title={t("v2Results")} action={<span className="text-xs text-muted">details and numbers in each linked doc</span>}>
         <Table head={["Phase", "Study", "Result", "Outcome", "Data"]} empty="No V2 results listed.">
           {v2.data?.map((r) => (
@@ -234,5 +236,66 @@ function RevokeSessions({ user, onDone }: { user: any; onDone: () => void }) {
       <button className="text-sm text-ink2" onClick={() => setOpen(false)}>Cancel</button>
       <ErrorNote error={act.error} />
     </div>
+  );
+}
+
+/** V3-0: the OLD V1 rule vs the OR-Tools optimizer on the same simulated batch of lots (rule 21). */
+function CompareRecommenders() {
+  const rec = useApi<any>("/admin/recommenders");
+  const [density, setDensity] = useState("medium");
+  const [seed, setSeed] = useState("1");
+  const [out, setOut] = useState<any>(null);
+  const act = useAction();
+  const run = () => act.run(async () => setOut(await api("/admin/recommenders/compare", { method: "POST", body: { density, seed: Number(seed) || 0 } })));
+  const LABEL: Record<string, string> = { rule: "V1 rule (old)", optimizer: "Optimizer", optimizer_p10: "Optimizer, risk-averse (p10)" };
+  const inr = (v: number) => "₹" + num(v, 0);
+  return (
+    <Card title="Recommenders: V1 rule vs optimizer" action={<span className="text-xs text-muted">study: docs/optimizer-results.md</span>}>
+      <p className="mb-3 text-sm text-ink2">
+        Users get <b>{rec.data?.default === "optimizer" ? "the optimizer" : "the V1 rule"}</b> (<code>[recommender] default</code> in
+        config/recommender.toml). Compare both on one simulated batch of lots and trucks, using today&apos;s forecasts.
+      </p>
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <Field label="Batch">
+          <select className={inputCls} value={density} onChange={(e) => setDensity(e.target.value)}>
+            <option value="sparse">Sparse: 6 lots, 8 trucks</option>
+            <option value="medium">Medium: 20 lots, 18 trucks</option>
+            <option value="dense_tight">Dense: 60 lots, trucks for 70% of the tonnes</option>
+          </select>
+        </Field>
+        <Field label="Seed"><div className="w-24"><input className={inputCls} value={seed} onChange={(e) => setSeed(e.target.value)} inputMode="numeric" /></div></Field>
+        <Button onClick={run} disabled={act.busy}>{act.busy ? "Solving…" : "Compare"}</Button>
+      </div>
+      <ErrorNote error={act.error} />
+      {out && (
+        <>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <SimBadge on label="Simulated lots and trucks" />
+            <ProvenanceBadge p={out.data_provenance} compact />
+            <Badge>{out.distances}</Badge>
+            <span className="text-ink2">{out.n_lots} lots, {out.tons_offered} t · {out.n_vehicles} trucks, {out.vehicle_capacity} t</span>
+          </div>
+          <Table head={["Method", "Net value", "Transport", "Spoilage loss", "Lots shipped", "Violations", "Solve"]}>
+            {out.results.map((r: any) => (
+              <tr key={r.method}>
+                <Td>{LABEL[r.method] ?? r.method}{r.status !== "ok" && <div className="text-xs text-muted">{r.status}</div>}</Td>
+                <Td>{inr(r.net_value)}</Td><Td>{inr(r.transport_cost)}</Td><Td>{inr(r.spoilage_loss)}</Td>
+                <Td>{r.lots_shipped} / {r.lots_shipped + r.lots_unserved}</Td>
+                <Td>{r.violations_total ? <Badge kind="critical">{r.violations_total}</Badge> : "0"}
+                  {r.violations_mandi_over_tons > 0 && <div className="text-xs text-muted">{num(r.violations_mandi_over_tons, 1)} t over mandi room</div>}
+                  {r.violations_spoilage_lots > 0 && <div className="text-xs text-muted">{r.violations_spoilage_lots} lots over spoilage cap</div>}</Td>
+                <Td>{num(r.solve_seconds, 2)} s</Td>
+              </tr>
+            ))}
+          </Table>
+          {out.mandis_with_known_room < out.mandis && (
+            <Note>{out.mandis - out.mandis_with_known_room} of {out.mandis} mandis have no arrivals history, so no mandi-room limit applies to them and
+              overloading them can&apos;t show up as a violation.</Note>
+          )}
+          <p className="mt-2 text-xs text-muted">A planning view, scored at the forecast p50; the study (docs/optimizer-results.md) scores decisions
+            at realised prices. Mandi overload is counted, not priced, so the rule can look richer by flooding a mandi.</p>
+        </>
+      )}
+    </Card>
   );
 }

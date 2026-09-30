@@ -249,5 +249,10 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `agripulse_api.sessions` (`start`, `rotate`, `issue`), never `security.create_*_token` directly. Auth checks go
   through `rbac.get_current_user` (HTTP) and `sessions.user_from_access_token` (WebSockets); long-lived sockets
   re-check (`SESSION_RECHECK_S`). Revoke ONLY via `sessions.revoke(...)`, which writes the audit_log row.
+- Decisions (V3-0): `agripulse_api.decisions` (DB-free: model/rule/optimizer/evaluate/sample; service.py = DB adapter).
+  ONE cost model (`Problem.net`/`trip_cost`/`spoilage`) for every method; compare methods ONLY through `evaluate()`, and
+  in studies score at REALISED prices. `[recommender] default` must equal `decision_study.switch_decision()` on the
+  committed CSV (test pins it); re-run the study before changing costs, limits or the default. Mandi overload is a
+  violation, never a modelled price drop (that would favour the optimizer by construction).
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

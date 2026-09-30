@@ -29,6 +29,9 @@ Each item says where it came from and why it's deferred.
 | 20 | No password change / reset | A compromised password can be cut off (revoke + disable) but not changed by the user | Password change (revoking other sessions) + admin reset; email reset needs SMTP |
 | 21 | `user_sessions` grows forever | Revoked / expired rows are never deleted | Weekly job: delete rows revoked or idle for longer than the refresh lifetime (keep audit_log) |
 | 22 | Refresh-reuse grace (30 s) is a window | A thief using a stolen refresh token within 30 s of the owner's refresh also gets tokens | Acceptable for now; tighten to a per-device binding if needed |
+| 23 | Price impact of oversupply is not modelled | V3-0: the rule's dense-batch "advantage" comes from flooding mandis at no modelled cost; the mandi-room limit (25% of typical arrivals) is an assumption | Estimate price response to arrivals from REAL Agmarknet prices + arrivals; then either price it in the evaluator or re-set the room share from data |
+| 24 | Dense batches hit the CP-SAT time limit | 43/80 dense solves FEASIBLE, not proven OPTIMAL, at 10 s | Warm-start from the rule's plan (AddHint), longer limit for batch planning, or symmetry breaking on identical trucks |
+| 25 | Spoilage cap (8%) never binds in Karnataka | V3-0: no trip got close; the limit is inert | Set from measured tomato quality loss (field pilot) before relying on it |
 
 ## V3 (by design)
 
