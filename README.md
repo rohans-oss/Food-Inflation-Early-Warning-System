@@ -3,8 +3,19 @@
 Forecasts tomato prices 1–4 weeks ahead as **ranges** (p10 / p50 / p90 + spike probability) and tracks produce vehicles
 **live from farm to mandi**, so supply in motion becomes a leading price signal. Nine user roles, one platform.
 
-**Status: Version 1 (Live Platform) — code complete.** Two V1 done-criteria need you in the real world:
-the field test and the demo video. See [V1 status](#v1-status).
+**Status: V1 (platform), V2 (intelligence), pre-V3 hardening and V3 (decisions and proof) are code complete.**
+
+- **What is proven on real data, what is only shown on SYNTHETIC data, and what can't be proven yet:**
+  [docs/final-evaluation.md](docs/final-evaluation.md). In short, no forecast model beats "today's price" yet
+  (synthetic), and real price history started on 2026-09-25.
+- **Write-ups:** [paper](docs/paper.md) · [pitch outline](docs/pitch-outline.md) · [open backlog](docs/backlog.md).
+- **Still needs you in the real world:**
+  - the field test with a real phone;
+  - native Kannada and Hindi review;
+  - confirming the 18 mandi locations;
+  - real price history (a backfill, or about 13 months of the daily pull).
+- **Public demo** (SYNTHETIC data, resets on restart): <https://agripulse-demo.onrender.com> ·
+  [how it's deployed](docs/deployment.md#public-demo-render-0).
 
 ```
 Agmarknet · Open-Meteo · NASA POWER ──> ingest (APScheduler) ──> PostgreSQL + PostGIS + TimescaleDB
@@ -24,8 +35,9 @@ Driver PWA ──WebSocket / HTTP batch──> tracking (geofence, ETA, OSRM) �
 | `apps/web` | Next.js 15 + Tailwind + MapLibre: one screen per role, public `/track/{token}` |
 | `apps/driver-pwa` | Driver app (served by the API at `/driver/`) |
 | `config/recommender.toml` | transport and spoilage cost assumptions |
-| `infra` | Dockerfile, Caddyfile, OSRM prep |
-| `docs` | [data sources](docs/data-sources.md) · [forecasting](docs/forecasting.md) · [alerts](docs/alerts.md) · [routing](docs/routing.md) · [deployment](docs/deployment.md) · [field test + demo script](docs/field-test.md) |
+| `infra` | Dockerfiles (API, public demo), Caddyfile, OSRM prep, tiles |
+| `scripts` | demo recorder, demo start |
+| `docs` | [final evaluation](docs/final-evaluation.md) · [data sources](docs/data-sources.md) · [forecasting](docs/forecasting.md) · [alerts](docs/alerts.md) · [routing](docs/routing.md) · [deployment](docs/deployment.md) · [field test + demo script](docs/field-test.md) |
 
 ## Quick start
 

@@ -52,7 +52,7 @@ DOMAIN=agripulse.example.org docker compose -f docker-compose.yml -f docker-comp
   production traffic. For a pilot, run your own tile server or use a provider, and change `STYLE` in
   `apps/web/components/MapView.tsx`.
 
-## Public demo (Render + Vercel, $0)
+## Public demo (Render, $0)
 
 A shareable demo with **SYNTHETIC** data only. It is not the real system: nothing is collected, and it resets on every
 restart.

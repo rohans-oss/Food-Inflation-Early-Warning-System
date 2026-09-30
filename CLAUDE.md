@@ -275,5 +275,11 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   put an access token in a URL in new code. Map tiles: ONLY through `apps/web/lib/mapstyle.ts` (docs/map-tiles.md).
 - Mandi locations (V3-3): moved only via `PATCH /admin/mandis/{id}` (audited; moving resets `verified`). `verified`
   means a person confirmed it; OSM candidates (`/osm-candidates`, Nominatim) are suggestions, never auto-applied.
+- Real backtest (V3-4): `agripulse_ml.real_backtest` (PREREG rules in the module docstring; changing them needs a dated
+  note in docs/backtest-real.md, and never after real events were scored). Real and synthetic are separate outputs.
+  `docs/final-evaluation.md` is the single rule-24 table: update it with every study re-run.
+- Public demo (V3-4): `infra/Dockerfile.demo` bakes a SYNTHETIC SQLite demo; `scripts/demo_start.py` sets
+  JWT_SECRET=auto and disables admin unless ADMIN_PASSWORD is set. Never point it at real data. Render services
+  `agripulse-demo-api` / `agripulse-demo` (Singapore, free); pushes don't auto-deploy there, trigger manually.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).
