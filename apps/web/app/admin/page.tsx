@@ -161,6 +161,8 @@ export default function Admin() {
 
       <CompareRecommenders />
 
+      <TranslationStatus />
+
       <Card title={t("v2Results")} action={<span className="text-xs text-muted">details and numbers in each linked doc</span>}>
         <Table head={["Phase", "Study", "Result", "Outcome", "Data"]} empty="No V2 results listed.">
           {v2.data?.map((r) => (
@@ -296,6 +298,28 @@ function CompareRecommenders() {
             at realised prices. Mandi overload is counted, not priced, so the rule can look richer by flooding a mandi.</p>
         </>
       )}
+    </Card>
+  );
+}
+
+/** V3-3: how much of the Kannada / Hindi text a native speaker has reviewed (the rest are machine drafts). */
+function TranslationStatus() {
+  const st = useApi<any>("/admin/i18n-status");
+  const NAME: Record<string, string> = { kn: "Kannada", hi: "Hindi" };
+  return (
+    <Card title="Translations" action={<span className="text-xs text-muted">python -m agripulse_api.i18n_tools export / import</span>}>
+      <Table head={["Language", "Alert texts reviewed", "Screen texts reviewed", "Missing"]}>
+        {Object.entries(st.data ?? {}).map(([lang, v]: [string, any]) => (
+          <tr key={lang}>
+            <Td>{NAME[lang] ?? lang}</Td>
+            <Td>{v.alerts.reviewed} / {v.alerts.total} {v.alerts.reviewed < v.alerts.total && <Badge kind="warn">machine drafts</Badge>}</Td>
+            <Td>{v.ui.reviewed} / {v.ui.total} {v.ui.reviewed < v.ui.total && <Badge kind="warn">machine drafts</Badge>}</Td>
+            <Td>{v.alerts.missing.length + v.ui.missing.length}</Td>
+          </tr>
+        ))}
+      </Table>
+      <p className="mt-2 text-xs text-muted">Export a review sheet, have a native speaker fill in corrections or approve each line, then import it.
+        Placeholders like {"{mandi}"} must stay exactly as in English, or the import refuses the whole sheet.</p>
     </Card>
   );
 }

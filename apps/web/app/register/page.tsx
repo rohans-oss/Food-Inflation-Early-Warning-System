@@ -69,7 +69,7 @@ export default function Register() {
         <Field label="Password" hint="At least 8 characters"><input className={inputCls} type="password" minLength={8} required value={f.password} onChange={set("password")} /></Field>
         <Field label="Language for alerts">
           <select className={inputCls} value={f.preferred_lang} onChange={set("preferred_lang")}>
-            <option value="en">English</option><option value="kn">ಕನ್ನಡ (Kannada)</option>
+            <option value="en">English</option><option value="kn">ಕನ್ನಡ (Kannada)</option><option value="hi">हिन्दी (Hindi)</option>
           </select>
         </Field>
         {role?.org_kind && f.role === "driver" && (

@@ -75,7 +75,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(ForeignKey("roles.name"))
     org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
     mandi_id: Mapped[int | None] = mapped_column(ForeignKey("mandis.id"))  # traders: their mandi
-    preferred_lang: Mapped[str] = mapped_column(String(5), default="en")  # en|kn
+    preferred_lang: Mapped[str] = mapped_column(String(5), default="en")  # en|kn|hi
     watch_mandi_ids: Mapped[list] = mapped_column(JSON, default=list)  # buyers: mandis to watch
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -1,9 +1,10 @@
 """Rule-based alerts (V1): price spike, vehicle delay, unexpected stop, pickup,
 arrival and delivery. In-app always; email when SMTP is configured; SMS through an
-optional webhook adapter. English and Kannada.
+optional webhook adapter. English, Kannada and Hindi (V3-3).
 
-Copy lives in i18n/alerts.json. The Kannada strings were machine-drafted and are marked
-unreviewed there; get a native speaker to check them before a field pilot (docs/alerts.md).
+Copy lives in i18n/alerts.json. Kannada and Hindi are machine-drafted; each string's review status is in
+`_review` there. A native speaker reviews them via `python -m agripulse_api.i18n_tools export / import`
+before a field pilot (docs/alerts.md).
 """
 import json
 import logging
@@ -34,7 +35,7 @@ SEVERITY = {
     "delivered": "info",
     "incoming_vehicle": "info",
 }
-LANGS = ("en", "kn")
+LANGS = ("en", "kn", "hi")
 
 
 @lru_cache

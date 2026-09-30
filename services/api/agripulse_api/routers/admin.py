@@ -351,3 +351,11 @@ def compare_recommenders(body: CompareIn, db: Session = Depends(get_db), _=Depen
     if "error" in out:
         raise HTTPException(409, out["error"])
     return out
+
+
+@router.get("/i18n-status")
+def i18n_status(_=Depends(admin_only)):
+    """V3-3: per language, how many alert / screen strings a native speaker has reviewed (the rest are machine drafts)."""
+    from ..i18n_tools import status
+
+    return status()

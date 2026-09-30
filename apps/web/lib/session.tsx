@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import messages from "./messages.json";
 import { api, getSession, Session, setSession, User } from "./api";
 
-type Lang = "en" | "kn";
+type Lang = "en" | "kn" | "hi";
 type Msgs = Record<string, string>;
 const M = messages as unknown as Record<Lang, Msgs>;
 

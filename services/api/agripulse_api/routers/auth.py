@@ -18,7 +18,7 @@ class RegisterIn(BaseModel):
     full_name: str
     role: str
     phone: str | None = None
-    preferred_lang: str = Field(default="en", pattern="^(en|kn)$")
+    preferred_lang: str = Field(default="en", pattern="^(en|kn|hi)$")
     org_id: int | None = None  # join an existing org...
     org_name: str | None = None  # ...or create one (first member of an FPO / fleet / ...)
     mandi_id: int | None = None  # traders
@@ -187,7 +187,7 @@ def me(user: User = Depends(get_current_user)):
 
 
 class PrefsIn(BaseModel):
-    preferred_lang: str | None = Field(default=None, pattern="^(en|kn)$")
+    preferred_lang: str | None = Field(default=None, pattern="^(en|kn|hi)$")
     watch_mandi_ids: list[int] | None = None
 
 

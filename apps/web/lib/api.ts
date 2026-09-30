@@ -21,7 +21,7 @@ export interface User {
   org_id: number | null;
   org_name: string | null;
   mandi_id: number | null;
-  preferred_lang: "en" | "kn";
+  preferred_lang: "en" | "kn" | "hi";
   watch_mandi_ids: number[];
 }
 

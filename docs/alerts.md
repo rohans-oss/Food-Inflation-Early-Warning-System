@@ -21,8 +21,22 @@ The channel outcome is recorded per alert (`sent`, `failed`, `not_configured`).
 
 ## Languages
 
-Each user picks `preferred_lang` (`en` or `kn`) at sign-up or with `PATCH /auth/me`. Templates live in
-`services/api/agripulse_api/alerts.py`.
+Each user picks `preferred_lang` (`en`, `kn` or `hi`) at sign-up, in the header's language menu, or with
+`PATCH /auth/me`. Alert text lives in `services/api/agripulse_api/i18n/alerts.json`; screen text lives in
+`apps/web/lib/messages.json`.
 
-> **The Kannada strings are machine-drafted and not yet reviewed** (`KN_REVIEWED = False`). Have a native speaker check
-> them, especially numbers, units and the word for quintal, before any farmer sees them. Hindi arrives in V3.
+> **Kannada and Hindi are machine-drafted** (V3-3). Each string has its own review status (`_review` in both files),
+> and Admin → **Translations** shows how many are reviewed. Have a native speaker check them before any farmer sees
+> them, especially numbers, units and the word for quintal.
+
+**Review workflow**
+1. `python -m agripulse_api.i18n_tools export --lang kn --out review_kn.csv` writes one row per string: English,
+   current translation, and empty `corrected`, `approve` and `notes` columns. The file opens in Excel or Google
+   Sheets with Kannada and Hindi intact.
+2. The reviewer either writes a corrected translation or puts `yes` in `approve`.
+3. `python -m agripulse_api.i18n_tools import --lang kn review_kn.csv --reviewer "Name"` applies the sheet and marks
+   each touched string `reviewed`, with the reviewer's name and the date.
+   - Every `{placeholder}` must match English exactly. If one doesn't, **the whole sheet is refused** and the error
+     names the line, so a typo can never break an alert.
+4. `pytest tests/test_i18n.py` then checks that every alert and screen string exists in all three languages with
+   matching placeholders.

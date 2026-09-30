@@ -1,7 +1,11 @@
 {
   "_meta": {
-    "kn_reviewed": false,
-    "note": "Kannada strings are machine-drafted. A native speaker must review them before a field pilot, then set kn_reviewed to true."
+    "note": "Alert copy. Kannada and Hindi are machine-drafted until a native speaker reviews them (python -m agripulse_api.i18n_tools export / import); per-string status lives in _review.",
+    "languages": [
+      "en",
+      "kn",
+      "hi"
+    ]
   },
   "en": {
     "price_spike": {
@@ -69,6 +73,94 @@
     "tracking_paused": {
       "title": "ಟ್ರ್ಯಾಕಿಂಗ್ ನಿಂತಿದೆ: {vehicle}",
       "body": "{vehicle} ವಾಹನದ ಚಾಲಕರ ಫೋನ್ {minutes} ನಿಮಿಷಗಳ ಹಿಂದೆ ಸ್ಥಳ ಹಂಚಿಕೆಯನ್ನು ನಿಲ್ಲಿಸಿದೆ (ಆ್ಯಪ್ ಪರದೆಯ ಮೇಲೆ ಇಲ್ಲ). ವಾಹನ ಇನ್ನೂ ಚಲಿಸುತ್ತಿರಬಹುದು; ಚಾಲಕರಿಗೆ ಕರೆ ಮಾಡಿ."
+    }
+  },
+  "hi": {
+    "price_spike": {
+      "title": "भाव उछाल का जोखिम: {mandi}",
+      "body": "अगले 2 हफ़्तों में {mandi} में टमाटर का भाव {threshold}% से ज़्यादा बढ़ने की संभावना {prob}% है। 2 हफ़्ते का दायरा: ₹{p10}-{p90}/क्विंटल (मध्य {p50})।{synthetic}"
+    },
+    "vehicle_delay": {
+      "title": "वाहन में देरी: {vehicle}",
+      "body": "{mandi} जा रहा वाहन {vehicle} लगभग {minutes} मिनट देर से चल रहा है। नया पहुँचने का समय {eta}।"
+    },
+    "unexpected_stop": {
+      "title": "वाहन रुका: {vehicle}",
+      "body": "वाहन {vehicle} पिकअप स्थान और मंडी से दूर {minutes} मिनट से रुका हुआ है।"
+    },
+    "picked_up": {
+      "title": "लॉट #{lot} उठा लिया गया",
+      "body": "वाहन {vehicle} ने आपका लॉट #{lot} {mandi} के लिए उठा लिया है। लाइव ट्रैक करें: {link}"
+    },
+    "vehicle_arrived": {
+      "title": "वाहन {mandi} पहुँचा",
+      "body": "वाहन {vehicle} {time} पर {mandi} पहुँचा।"
+    },
+    "delivered": {
+      "title": "डिलीवरी पक्की: लॉट #{lot}",
+      "body": "लॉट #{lot} का {mandi} में तौल हुआ: {kg} किलो, ₹{price}/क्विंटल। भुगतान: {payout}।"
+    },
+    "incoming_vehicle": {
+      "title": "आ रहा है: {vehicle}",
+      "body": "{tons} टन टमाटर के साथ {vehicle} {mandi} आ रहा है, पहुँचने का समय {eta}।"
+    },
+    "tracking_paused": {
+      "title": "ट्रैकिंग रुकी: {vehicle}",
+      "body": "{vehicle} के ड्राइवर के फ़ोन ने {minutes} मिनट पहले लोकेशन भेजना बंद किया (ऐप स्क्रीन पर नहीं)। वाहन शायद अभी भी चल रहा है; ड्राइवर को फ़ोन करें।"
+    }
+  },
+  "_review": {
+    "kn": {
+      "price_spike": {
+        "status": "machine"
+      },
+      "vehicle_delay": {
+        "status": "machine"
+      },
+      "unexpected_stop": {
+        "status": "machine"
+      },
+      "picked_up": {
+        "status": "machine"
+      },
+      "vehicle_arrived": {
+        "status": "machine"
+      },
+      "delivered": {
+        "status": "machine"
+      },
+      "incoming_vehicle": {
+        "status": "machine"
+      },
+      "tracking_paused": {
+        "status": "machine"
+      }
+    },
+    "hi": {
+      "price_spike": {
+        "status": "machine"
+      },
+      "vehicle_delay": {
+        "status": "machine"
+      },
+      "unexpected_stop": {
+        "status": "machine"
+      },
+      "picked_up": {
+        "status": "machine"
+      },
+      "vehicle_arrived": {
+        "status": "machine"
+      },
+      "delivered": {
+        "status": "machine"
+      },
+      "incoming_vehicle": {
+        "status": "machine"
+      },
+      "tracking_paused": {
+        "status": "machine"
+      }
     }
   }
 }

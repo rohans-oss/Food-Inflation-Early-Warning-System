@@ -1,7 +1,11 @@
 {
   "_meta": {
-    "kn_reviewed": false,
-    "note": "UI strings. Kannada is machine-drafted; have a native speaker review before a field pilot. Missing keys fall back to English."
+    "note": "UI strings. Kannada and Hindi are machine-drafted until a native speaker reviews them (python -m agripulse_api.i18n_tools export / import). Missing keys fall back to English; tests require every key in every language.",
+    "languages": [
+      "en",
+      "kn",
+      "hi"
+    ]
   },
   "en": {
     "app": "AgriPulse",
@@ -138,6 +142,628 @@
     "typicalDay": "ಸಾಮಾನ್ಯ ದಿನ",
     "inTransit": "ಸಾಗಣೆಯಲ್ಲಿ",
     "signOutAll": "ಎಲ್ಲಾ ಸಾಧನಗಳಿಂದ ಸೈನ್ ಔಟ್",
-    "signOutAllConfirm": "ಮತ್ತೊಮ್ಮೆ ಒತ್ತಿ: ಎಲ್ಲಾ ಸಾಧನಗಳಿಂದ ಸೈನ್ ಔಟ್"
+    "signOutAllConfirm": "ಮತ್ತೊಮ್ಮೆ ಒತ್ತಿ: ಎಲ್ಲಾ ಸಾಧನಗಳಿಂದ ಸೈನ್ ಔಟ್",
+    "syntheticNote": "ಸಿಂಥೆಟಿಕ್ — ವಿಧಾನ ಪ್ರದರ್ಶನ: ಈ ಮುನ್ಸೂಚನೆ ಸಿಂಥೆಟಿಕ್ ಡೇಟಾದಿಂದ ತರಬೇತಿ ಪಡೆದ ಮಾದರಿಯಿಂದ ಬಂದಿದೆ. ವ್ಯವಸ್ಥೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಎಂದು ತೋರಿಸುತ್ತದೆ; ಇದು ನಿಜವಾದ ಬೆಲೆ ಮುನ್ಸೂಚನೆ ಅಲ್ಲ. ಸುಮಾರು 13 ತಿಂಗಳ ನಿಜವಾದ Agmarknet ದತ್ತಾಂಶ ಸಂಗ್ರಹವಾದ ನಂತರ ಇದನ್ನು ಬದಲಾಯಿಸಲಾಗುತ್ತದೆ.",
+    "approximateRoute": "ಅಂದಾಜು ಮಾರ್ಗ (OSRM ಇಲ್ಲ)",
+    "fpo": "ಎಫ್‌ಪಿಒ",
+    "shipments": "ಸಾಗಣೆಗಳು",
+    "createShipment": "ಒಂದು ಸಾಗಣೆಯಾಗಿ ಗುಂಪು ಮಾಡಿ",
+    "bookFleet": "ವಾಹನ ಪಡೆ ಕಾಯ್ದಿರಿಸಿ",
+    "farmerTonnage": "ರೈತವಾರು ಟನ್‌ಗಳು",
+    "markPaid": "ಪಾವತಿಯಾಗಿದೆ ಎಂದು ಗುರುತಿಸಿ",
+    "vehicles": "ವಾಹನಗಳು",
+    "drivers": "ಚಾಲಕರು",
+    "assign": "ನಿಯೋಜಿಸಿ",
+    "addVehicle": "ವಾಹನ ಸೇರಿಸಿ",
+    "utilization": "ಬಳಕೆ (30 ದಿನಗಳು)",
+    "scanDelivery": "ವಿತರಣಾ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ",
+    "awaitingWeighing": "ಗೇಟಿನಲ್ಲಿದೆ, ತೂಕಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ",
+    "recordWeighing": "ತೂಕ ಮತ್ತು ಬೆಲೆ ದಾಖಲಿಸಿ",
+    "watchlist": "ಗಮನಿಸುತ್ತಿರುವ ಮಂಡಿಗಳು",
+    "expected3d": "ಮುಂದಿನ 3 ದಿನಗಳಲ್ಲಿ ನಿರೀಕ್ಷಿತ",
+    "districts": "ಜಿಲ್ಲೆಗಳು",
+    "trend4w": "4 ವಾರಗಳ ಪ್ರವೃತ್ತಿ",
+    "arrivalAnomaly": "ಆವಕ ಸಾಮಾನ್ಯಕ್ಕೆ ಹೋಲಿಸಿದರೆ (7 ದಿನಗಳು)",
+    "reliability": "ಪ್ರಯಾಣ ವಿಶ್ವಾಸಾರ್ಹತೆ",
+    "freshness": "ದತ್ತಾಂಶ ತಾಜಾತನ",
+    "failedJobs": "ವಿಫಲವಾದ ಕೆಲಸಗಳು",
+    "dataQuality": "ದತ್ತಾಂಶ ಗುಣಮಟ್ಟ (90 ದಿನಗಳು)",
+    "modelPerformance": "ಮಾದರಿಯ ಕಾರ್ಯಕ್ಷಮತೆ",
+    "users": "ಬಳಕೆದಾರರು",
+    "simulator": "ವಾಹನ ಸಿಮ್ಯುಲೇಟರ್",
+    "realPartialNote": "ನಿಜ — ಸೀಮಿತ ಇತಿಹಾಸ: ನಿಜವಾದ ಬೆಲೆಗಳಿಂದ ರೂಪಿಸಲಾಗಿದೆ, ಆದರೆ ಈ ಮಂಡಿಗೆ ಸಿದ್ಧತಾ ಮಿತಿಗಿಂತ ಕಡಿಮೆ ಇತಿಹಾಸವಿದೆ. ಶ್ರೇಣಿಯನ್ನು ಸೂಚಕವಾಗಿ ಮಾತ್ರ ಪರಿಗಣಿಸಿ.",
+    "readiness": "ನಿಜವಾದ ದತ್ತಾಂಶ ಸಿದ್ಧತೆ",
+    "evalRuns": "ಮೌಲ್ಯಮಾಪನ ಓಟಗಳು (ಹಂಚಿಕೆಯ ವ್ಯವಸ್ಥೆ)",
+    "connectedMandis": "ಸಂಪರ್ಕಿತ ಮಂಡಿಗಳು",
+    "v2Results": "ಅಧ್ಯಯನ ಫಲಿತಾಂಶಗಳು (ಅಧ್ಯಯನಗಳು ಕಂಡುಕೊಂಡದ್ದು)"
+  },
+  "hi": {
+    "app": "AgriPulse",
+    "signOut": "साइन आउट",
+    "alerts": "अलर्ट",
+    "noAlerts": "अभी कोई अलर्ट नहीं",
+    "markRead": "पढ़ा हुआ मानें",
+    "language": "भाषा",
+    "loading": "लोड हो रहा है…",
+    "simulated": "सिम्युलेटेड",
+    "synthetic": "सिंथेटिक डेटा",
+    "syntheticNote": "सिंथेटिक — पद्धति प्रदर्शन: यह पूर्वानुमान सिंथेटिक डेटा पर प्रशिक्षित मॉडल से आया है। यह दिखाता है कि प्रणाली काम करती है; यह असली भाव पूर्वानुमान नहीं है। लगभग 13 महीने का असली Agmarknet डेटा जमा होने पर इसकी जगह असली पूर्वानुमान आएगा।",
+    "approximateRoute": "अनुमानित मार्ग (OSRM नहीं)",
+    "myLots": "मेरे लॉट",
+    "newLot": "फसल लॉट दर्ज करें",
+    "quantityTons": "मात्रा (टन)",
+    "grade": "ग्रेड",
+    "pickupPoint": "पिकअप स्थान",
+    "pickupLabel": "पिकअप जगह का नाम",
+    "useMyLocation": "मेरी लोकेशन इस्तेमाल करें",
+    "orClickMap": "या नक्शे पर क्लिक करें",
+    "fpo": "एफ़पीओ",
+    "lender": "ऋणदाता (वैकल्पिक)",
+    "none": "कोई नहीं",
+    "register": "लॉट दर्ज करें",
+    "pricesNearby": "आपके पास आज के भाव",
+    "mandi": "मंडी",
+    "distance": "दूरी",
+    "modalPrice": "मॉडल भाव",
+    "range": "दायरा",
+    "priceForecast": "भाव पूर्वानुमान",
+    "bestMandi": "इस लॉट के लिए सबसे अच्छी मंडी",
+    "netValue": "शुद्ध मूल्य",
+    "transport": "ढुलाई",
+    "spoilage": "खराबी",
+    "spikeRisk": "भाव उछाल जोखिम (14 दिन)",
+    "liveVehicle": "लाइव वाहन",
+    "eta": "पहुँचने का समय",
+    "remaining": "बाकी",
+    "status": "स्थिति",
+    "pickupQr": "पिकअप QR — यह ड्राइवर को दिखाएँ",
+    "delivery": "डिलीवरी",
+    "weight": "वज़न",
+    "price": "भाव",
+    "payout": "भुगतान",
+    "history": "इतिहास",
+    "events": "यात्रा की घटनाएँ",
+    "shareWithLender": "ऋणदाता के साथ साझा करें",
+    "trackingLink": "सार्वजनिक ट्रैकिंग लिंक",
+    "shipments": "शिपमेंट",
+    "createShipment": "एक शिपमेंट में समूह बनाएँ",
+    "bookFleet": "वाहन बेड़ा बुक करें",
+    "farmerTonnage": "किसान-वार टन",
+    "markPaid": "भुगतान हुआ मानें",
+    "vehicles": "वाहन",
+    "drivers": "ड्राइवर",
+    "assign": "सौंपें",
+    "addVehicle": "वाहन जोड़ें",
+    "utilization": "उपयोग (30 दिन)",
+    "incoming": "आने वाले वाहन",
+    "expectedToday": "आज अपेक्षित",
+    "typicalDay": "सामान्य दिन",
+    "inTransit": "रास्ते में",
+    "scanDelivery": "डिलीवरी QR स्कैन करें",
+    "awaitingWeighing": "गेट पर, तौल का इंतज़ार",
+    "recordWeighing": "वज़न और भाव दर्ज करें",
+    "watchlist": "निगरानी वाली मंडियाँ",
+    "expected3d": "अगले 3 दिनों में अपेक्षित",
+    "districts": "ज़िले",
+    "trend4w": "4 हफ़्ते का रुझान",
+    "arrivalAnomaly": "आवक, सामान्य की तुलना में (7 दिन)",
+    "reliability": "यात्रा विश्वसनीयता",
+    "freshness": "डेटा ताज़गी",
+    "failedJobs": "विफल कार्य",
+    "dataQuality": "डेटा गुणवत्ता (90 दिन)",
+    "modelPerformance": "मॉडल प्रदर्शन",
+    "users": "उपयोगकर्ता",
+    "simulator": "वाहन सिम्युलेटर",
+    "realPartialNote": "असली — सीमित इतिहास: असली भावों से बना है, पर इस मंडी का इतिहास तैयारी सीमा से कम है। दायरे को केवल संकेत मानें।",
+    "readiness": "असली डेटा की तैयारी",
+    "evalRuns": "मूल्यांकन रन (साझा व्यवस्था)",
+    "connectedMandis": "जुड़ी हुई मंडियाँ",
+    "v2Results": "अध्ययन परिणाम (अध्ययनों में क्या मिला)",
+    "signOutAll": "हर जगह से साइन आउट",
+    "signOutAllConfirm": "फिर टैप करें: सभी डिवाइस से साइन आउट"
+  },
+  "_review": {
+    "kn": {
+      "app": {
+        "status": "machine"
+      },
+      "signOut": {
+        "status": "machine"
+      },
+      "alerts": {
+        "status": "machine"
+      },
+      "noAlerts": {
+        "status": "machine"
+      },
+      "markRead": {
+        "status": "machine"
+      },
+      "language": {
+        "status": "machine"
+      },
+      "loading": {
+        "status": "machine"
+      },
+      "simulated": {
+        "status": "machine"
+      },
+      "synthetic": {
+        "status": "machine"
+      },
+      "syntheticNote": {
+        "status": "machine"
+      },
+      "approximateRoute": {
+        "status": "machine"
+      },
+      "myLots": {
+        "status": "machine"
+      },
+      "newLot": {
+        "status": "machine"
+      },
+      "quantityTons": {
+        "status": "machine"
+      },
+      "grade": {
+        "status": "machine"
+      },
+      "pickupPoint": {
+        "status": "machine"
+      },
+      "pickupLabel": {
+        "status": "machine"
+      },
+      "useMyLocation": {
+        "status": "machine"
+      },
+      "orClickMap": {
+        "status": "machine"
+      },
+      "fpo": {
+        "status": "machine"
+      },
+      "lender": {
+        "status": "machine"
+      },
+      "none": {
+        "status": "machine"
+      },
+      "register": {
+        "status": "machine"
+      },
+      "pricesNearby": {
+        "status": "machine"
+      },
+      "mandi": {
+        "status": "machine"
+      },
+      "distance": {
+        "status": "machine"
+      },
+      "modalPrice": {
+        "status": "machine"
+      },
+      "range": {
+        "status": "machine"
+      },
+      "priceForecast": {
+        "status": "machine"
+      },
+      "bestMandi": {
+        "status": "machine"
+      },
+      "netValue": {
+        "status": "machine"
+      },
+      "transport": {
+        "status": "machine"
+      },
+      "spoilage": {
+        "status": "machine"
+      },
+      "spikeRisk": {
+        "status": "machine"
+      },
+      "liveVehicle": {
+        "status": "machine"
+      },
+      "eta": {
+        "status": "machine"
+      },
+      "remaining": {
+        "status": "machine"
+      },
+      "status": {
+        "status": "machine"
+      },
+      "pickupQr": {
+        "status": "machine"
+      },
+      "delivery": {
+        "status": "machine"
+      },
+      "weight": {
+        "status": "machine"
+      },
+      "price": {
+        "status": "machine"
+      },
+      "payout": {
+        "status": "machine"
+      },
+      "history": {
+        "status": "machine"
+      },
+      "events": {
+        "status": "machine"
+      },
+      "shareWithLender": {
+        "status": "machine"
+      },
+      "trackingLink": {
+        "status": "machine"
+      },
+      "shipments": {
+        "status": "machine"
+      },
+      "createShipment": {
+        "status": "machine"
+      },
+      "bookFleet": {
+        "status": "machine"
+      },
+      "farmerTonnage": {
+        "status": "machine"
+      },
+      "markPaid": {
+        "status": "machine"
+      },
+      "vehicles": {
+        "status": "machine"
+      },
+      "drivers": {
+        "status": "machine"
+      },
+      "assign": {
+        "status": "machine"
+      },
+      "addVehicle": {
+        "status": "machine"
+      },
+      "utilization": {
+        "status": "machine"
+      },
+      "incoming": {
+        "status": "machine"
+      },
+      "expectedToday": {
+        "status": "machine"
+      },
+      "typicalDay": {
+        "status": "machine"
+      },
+      "inTransit": {
+        "status": "machine"
+      },
+      "scanDelivery": {
+        "status": "machine"
+      },
+      "awaitingWeighing": {
+        "status": "machine"
+      },
+      "recordWeighing": {
+        "status": "machine"
+      },
+      "watchlist": {
+        "status": "machine"
+      },
+      "expected3d": {
+        "status": "machine"
+      },
+      "districts": {
+        "status": "machine"
+      },
+      "trend4w": {
+        "status": "machine"
+      },
+      "arrivalAnomaly": {
+        "status": "machine"
+      },
+      "reliability": {
+        "status": "machine"
+      },
+      "freshness": {
+        "status": "machine"
+      },
+      "failedJobs": {
+        "status": "machine"
+      },
+      "dataQuality": {
+        "status": "machine"
+      },
+      "modelPerformance": {
+        "status": "machine"
+      },
+      "users": {
+        "status": "machine"
+      },
+      "simulator": {
+        "status": "machine"
+      },
+      "realPartialNote": {
+        "status": "machine"
+      },
+      "readiness": {
+        "status": "machine"
+      },
+      "evalRuns": {
+        "status": "machine"
+      },
+      "connectedMandis": {
+        "status": "machine"
+      },
+      "v2Results": {
+        "status": "machine"
+      },
+      "signOutAll": {
+        "status": "machine"
+      },
+      "signOutAllConfirm": {
+        "status": "machine"
+      }
+    },
+    "hi": {
+      "app": {
+        "status": "machine"
+      },
+      "signOut": {
+        "status": "machine"
+      },
+      "alerts": {
+        "status": "machine"
+      },
+      "noAlerts": {
+        "status": "machine"
+      },
+      "markRead": {
+        "status": "machine"
+      },
+      "language": {
+        "status": "machine"
+      },
+      "loading": {
+        "status": "machine"
+      },
+      "simulated": {
+        "status": "machine"
+      },
+      "synthetic": {
+        "status": "machine"
+      },
+      "syntheticNote": {
+        "status": "machine"
+      },
+      "approximateRoute": {
+        "status": "machine"
+      },
+      "myLots": {
+        "status": "machine"
+      },
+      "newLot": {
+        "status": "machine"
+      },
+      "quantityTons": {
+        "status": "machine"
+      },
+      "grade": {
+        "status": "machine"
+      },
+      "pickupPoint": {
+        "status": "machine"
+      },
+      "pickupLabel": {
+        "status": "machine"
+      },
+      "useMyLocation": {
+        "status": "machine"
+      },
+      "orClickMap": {
+        "status": "machine"
+      },
+      "fpo": {
+        "status": "machine"
+      },
+      "lender": {
+        "status": "machine"
+      },
+      "none": {
+        "status": "machine"
+      },
+      "register": {
+        "status": "machine"
+      },
+      "pricesNearby": {
+        "status": "machine"
+      },
+      "mandi": {
+        "status": "machine"
+      },
+      "distance": {
+        "status": "machine"
+      },
+      "modalPrice": {
+        "status": "machine"
+      },
+      "range": {
+        "status": "machine"
+      },
+      "priceForecast": {
+        "status": "machine"
+      },
+      "bestMandi": {
+        "status": "machine"
+      },
+      "netValue": {
+        "status": "machine"
+      },
+      "transport": {
+        "status": "machine"
+      },
+      "spoilage": {
+        "status": "machine"
+      },
+      "spikeRisk": {
+        "status": "machine"
+      },
+      "liveVehicle": {
+        "status": "machine"
+      },
+      "eta": {
+        "status": "machine"
+      },
+      "remaining": {
+        "status": "machine"
+      },
+      "status": {
+        "status": "machine"
+      },
+      "pickupQr": {
+        "status": "machine"
+      },
+      "delivery": {
+        "status": "machine"
+      },
+      "weight": {
+        "status": "machine"
+      },
+      "price": {
+        "status": "machine"
+      },
+      "payout": {
+        "status": "machine"
+      },
+      "history": {
+        "status": "machine"
+      },
+      "events": {
+        "status": "machine"
+      },
+      "shareWithLender": {
+        "status": "machine"
+      },
+      "trackingLink": {
+        "status": "machine"
+      },
+      "shipments": {
+        "status": "machine"
+      },
+      "createShipment": {
+        "status": "machine"
+      },
+      "bookFleet": {
+        "status": "machine"
+      },
+      "farmerTonnage": {
+        "status": "machine"
+      },
+      "markPaid": {
+        "status": "machine"
+      },
+      "vehicles": {
+        "status": "machine"
+      },
+      "drivers": {
+        "status": "machine"
+      },
+      "assign": {
+        "status": "machine"
+      },
+      "addVehicle": {
+        "status": "machine"
+      },
+      "utilization": {
+        "status": "machine"
+      },
+      "incoming": {
+        "status": "machine"
+      },
+      "expectedToday": {
+        "status": "machine"
+      },
+      "typicalDay": {
+        "status": "machine"
+      },
+      "inTransit": {
+        "status": "machine"
+      },
+      "scanDelivery": {
+        "status": "machine"
+      },
+      "awaitingWeighing": {
+        "status": "machine"
+      },
+      "recordWeighing": {
+        "status": "machine"
+      },
+      "watchlist": {
+        "status": "machine"
+      },
+      "expected3d": {
+        "status": "machine"
+      },
+      "districts": {
+        "status": "machine"
+      },
+      "trend4w": {
+        "status": "machine"
+      },
+      "arrivalAnomaly": {
+        "status": "machine"
+      },
+      "reliability": {
+        "status": "machine"
+      },
+      "freshness": {
+        "status": "machine"
+      },
+      "failedJobs": {
+        "status": "machine"
+      },
+      "dataQuality": {
+        "status": "machine"
+      },
+      "modelPerformance": {
+        "status": "machine"
+      },
+      "users": {
+        "status": "machine"
+      },
+      "simulator": {
+        "status": "machine"
+      },
+      "realPartialNote": {
+        "status": "machine"
+      },
+      "readiness": {
+        "status": "machine"
+      },
+      "evalRuns": {
+        "status": "machine"
+      },
+      "connectedMandis": {
+        "status": "machine"
+      },
+      "v2Results": {
+        "status": "machine"
+      },
+      "signOutAll": {
+        "status": "machine"
+      },
+      "signOutAllConfirm": {
+        "status": "machine"
+      }
+    }
   }
 }

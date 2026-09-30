@@ -48,11 +48,12 @@ export function Shell({ roles, title, children, wide = false }: { roles: Role[];
             <select
               aria-label={t("language")}
               value={lang}
-              onChange={(e) => setLang(e.target.value as "en" | "kn")}
+              onChange={(e) => setLang(e.target.value as "en" | "kn" | "hi")}
               className="rounded-md border border-line bg-surface px-2 py-1 text-sm"
             >
               <option value="en">English</option>
               <option value="kn">ಕನ್ನಡ</option>
+              <option value="hi">हिन्दी</option>
             </select>
             <AlertsBell token={session!.access_token} />
             <button onClick={async () => { await logout(); router.replace("/login"); }} className="text-sm text-ink2 hover:text-ink">
