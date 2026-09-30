@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Logo } from "@/components/Logo";
+import { ServerNotice, useServerReady } from "@/components/ServerWake";
 import { Button, ErrorNote, Field, inputCls } from "@/components/ui";
 import { api, ROLE_HOME, Session, setSession } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -18,7 +20,8 @@ const DEMO = [
   ["Bulk buyer", "buyer@demo.agripulse"],
   ["Policy analyst", "policy@demo.agripulse"],
   ["Lender / insurer", "lender@demo.agripulse"],
-  ["Admin", "admin@agripulse.local"],
+  // the public demo disables admin (docs/deployment.md), so it isn't offered there
+  ...(process.env.NEXT_PUBLIC_DEMO_NOTICE ? [] : [["Admin", "admin@agripulse.local"]]),
 ];
 
 export default function Login() {
@@ -28,6 +31,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const server = useServerReady();
 
   useEffect(() => { if (ready && user) router.replace(ROLE_HOME[user.role]); }, [ready, user, router]);
 
@@ -40,7 +44,8 @@ export default function Login() {
       setSession(s);
       router.replace(ROLE_HOME[s.user.role]);
     } catch (e: any) {
-      setErr(e.message);
+      setErr(e instanceof TypeError || /fetch/i.test(e.message ?? "")
+        ? "Can't reach the server yet. It may still be starting; try again in a moment." : e.message);
     } finally {
       setBusy(false);
     }
@@ -49,15 +54,16 @@ export default function Login() {
   return (
     <main className="mx-auto grid min-h-screen max-w-4xl items-center gap-8 px-4 py-10 md:grid-cols-2">
       <div>
-        <div className="mb-6 flex items-center gap-2 text-lg font-semibold">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-brand-ink">A</span> AgriPulse
-        </div>
+        <Link href="/" className="mb-6 inline-block"><Logo /></Link>
         <p className="mb-6 text-sm text-ink2">Tomato price early warning, and live tracking of produce from farm to mandi.</p>
         <form onSubmit={submit} className="space-y-3">
           <Field label="Email"><input className={inputCls} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" /></Field>
           <Field label="Password"><input className={inputCls} type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></Field>
+          <ServerNotice state={server} />
           <ErrorNote error={err} />
-          <Button type="submit" disabled={busy} className="w-full">{busy ? "Signing in…" : "Sign in"}</Button>
+          <Button type="submit" disabled={busy || server === "waking" || server === "checking"} className="w-full">
+            {busy ? "Signing in…" : server === "waking" || server === "checking" ? "Waiting for the server…" : "Sign in"}
+          </Button>
         </form>
         <p className="mt-4 text-sm text-ink2">New here? <Link href="/register" className="underline">Create an account</Link></p>
       </div>

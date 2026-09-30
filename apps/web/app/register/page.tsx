@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Logo } from "@/components/Logo";
+import { ServerNotice, useServerReady } from "@/components/ServerWake";
 import { Button, ErrorNote, Field, inputCls } from "@/components/ui";
 import { api, ROLE_HOME, Session, setSession } from "@/lib/api";
 
@@ -19,9 +21,17 @@ export default function Register() {
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
+  const server = useServerReady();
+  const [lookupErr, setLookupErr] = useState<string | null>(null);
   useEffect(() => {
-    api<RoleInfo[]>("/auth/roles", { auth: false }).then((r) => setRoles(r.filter((x) => x.name !== "admin"))).catch(() => {});
-  }, []);
+    if (server !== "ready") return;
+    api<RoleInfo[]>("/auth/roles", { auth: false })
+      .then((r) => { setRoles(r.filter((x) => x.name !== "admin")); setLookupErr(null); })
+      .catch((e) => setLookupErr(`Could not load the list of roles: ${e.message}`));
+    // public lookups (names only)
+    api<{ id: number; name: string }[]>("/mandis", { auth: false }).then(setMandis).catch(() => setMandis([]));
+    api<{ id: number; name: string }[]>("/orgs/directory", { query: { kind: "fleet" }, auth: false }).then(setFleets).catch(() => setFleets([]));
+  }, [server]);
   const role = roles.find((r) => r.name === f.role);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
@@ -45,20 +55,17 @@ export default function Register() {
     }
   };
 
-  useEffect(() => {
-    // public lookups (names only)
-    api<{ id: number; name: string }[]>("/mandis", { auth: false }).then(setMandis).catch(() => setMandis([]));
-    api<{ id: number; name: string }[]>("/orgs/directory", { query: { kind: "fleet" }, auth: false }).then(setFleets).catch(() => setFleets([]));
-  }, []);
-
   if (done) return <main className="mx-auto max-w-md p-8"><p>{done}</p><Link href="/login" className="underline">Back to sign in</Link></main>;
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10">
+      <Link href="/" className="mb-6 inline-block"><Logo /></Link>
       <h1 className="mb-4 text-xl font-semibold">Create an account</h1>
+      <div className="mb-3 space-y-2"><ServerNotice state={server} /><ErrorNote error={lookupErr} /></div>
       <form onSubmit={submit} className="space-y-3">
         <Field label="I am a">
-          <select className={inputCls} value={f.role} onChange={set("role")}>
+          <select className={inputCls} value={f.role} onChange={set("role")} disabled={!roles.length}>
+            {!roles.length && <option value={f.role}>{server === "down" ? "Server unavailable" : "Loading roles…"}</option>}
             {roles.map((r) => <option key={r.name} value={r.name}>{r.label}</option>)}
           </select>
         </Field>

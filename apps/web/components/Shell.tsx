@@ -6,6 +6,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 
 import { api, Role, ROLE_HOME, wsTicket, wsUrl } from "@/lib/api";
 import { ago } from "@/lib/format";
+import { LogoMark } from "./Logo";
 import { useSession } from "@/lib/session";
 
 interface Alert {
@@ -38,7 +39,7 @@ export function Shell({ roles, title, children, wide = false }: { roles: Role[];
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">
         <div className={`mx-auto flex items-center gap-3 px-4 py-3 ${wide ? "max-w-[1400px]" : "max-w-6xl"}`}>
           <Link href={ROLE_HOME[user!.role]} className="flex items-center gap-2 font-semibold">
-            <span aria-hidden className="grid h-7 w-7 place-items-center rounded-lg bg-brand text-sm text-brand-ink">A</span>
+            <LogoMark size={28} />
             <span className="hidden sm:inline">{t("app")}</span>
           </Link>
           <span className="truncate text-sm text-ink2">
