@@ -34,13 +34,18 @@ def best_mandi(
 ):
     if not 1 <= weeks <= 4:
         raise HTTPException(400, "weeks must be 1-4")
+    crop = "Tomato"
     if lot_id is not None:
         lot = get_scoped_lot(db, user, lot_id)
-        lat, lon, tons = lot.pickup_lat, lot.pickup_lon, lot.quantity_tons
+        lat, lon, tons, crop = lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, lot.crop
     if lat is None or lon is None or not tons:
         raise HTTPException(400, "Give lot_id, or lat + lon + tons")
+    from ..crops import has_forecast
     from ..decisions.service import recommend_single  # V3-0: rule or optimizer, per config/recommender.toml
+    from ..supply import options_without_forecast
 
+    if not has_forecast(crop):
+        return options_without_forecast(db, lat, lon, tons, crop)
     return recommend_single(db, lat, lon, tons, weeks=weeks)
 
 
@@ -90,7 +95,8 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
                                "grade": lot.grade, "shipment_id": lot.shipment_id} for lot in at_gate],
         "delivered_last_24h": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "kg": lot.delivered_weight_kg,
                                 "price_per_quintal": lot.sale_price_per_quintal, "payout_status": lot.payout_status,
-                                "payment_method": lot.payment_method, "payment_ref": lot.payment_ref}
+                                "payment_method": lot.payment_method, "payment_ref": lot.payment_ref,
+                                "receipt_token": lot.receipt_token}
                                for lot in delivered_today],
         "date": today,
     }
@@ -110,6 +116,9 @@ def weigh_lot(lot_id: int, body: WeighIn, db: Session = Depends(get_db), user: U
     lot.delivered_weight_kg, lot.sale_price_per_quintal = body.weight_kg, body.price_per_quintal
     move(db, lot, "delivered", user.id, weight_kg=body.weight_kg, price_per_quintal=body.price_per_quintal)
     lot.delivered_at = now
+    from .receipts import issue
+
+    issue(db, lot)  # proof of delivery & sale
     sh = lot.shipment
     # Confirmed tonnage feeds the mandi's arrivals series (source kept separate from Agmarknet)
     day = ist_today(now)

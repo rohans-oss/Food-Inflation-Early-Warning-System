@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from agripulse_api.models import Lot, Mandi, TransportBooking, Trip, User, Vehicle
-from tests.test_tracking import FARM, seed_forecasts
+from tests.test_tracking import FARM, journey, seed_forecasts  # noqa: F401 (journey is a fixture)
 
 
 def _chosen_lot(client, as_role, db, mandi="Kolar APMC"):
@@ -80,13 +80,77 @@ def test_demo_autopilot_runs_a_simulated_trip_end_to_end(client, as_role, db, mo
     fleet = _fleet(client, as_role, lot)
     slot = next(s for s in fleet["slots"] if s["free_trucks"] > 0)
     b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": fleet["org_id"], "pickup_at": slot["pickup_at"]}).json()
-    trip_id = bk._demo_prepare(db, lot["id"], b["id"])
+    trip_id, depot = bk._demo_prepare(db, lot["id"], b["id"])
     t = db.get(Trip, trip_id)
     assert t.is_simulated and t.vehicle.is_simulated and t.status == "in_progress"
+    assert client.get(f"/lots/{lot['id']}", headers=F).json()["status"] == "grouped"  # truck still coming to the farm
+    for i in range(1, 6):
+        bk._demo_approach(db, trip_id, depot, i / 5)
+    events = [e["event"] for e in client.get(f"/trips/{trip_id}", headers=F).json()["events"]]
+    assert "reached_pickup" in events and "left_pickup_zone" not in events
+    bk._demo_pickup(db, trip_id)
     assert client.get(f"/lots/{lot['id']}", headers=F).json()["status"] == "in_transit"
     for i in range(1, 11):
         bk._demo_step(db, trip_id, i / 10)
+    events = [e["event"] for e in client.get(f"/trips/{trip_id}", headers=F).json()["events"]]
+    assert "left_pickup_zone" in events and "reached_mandi" in events
     bk._demo_finish(db, lot["id"], trip_id)
     out = client.get(f"/lots/{lot['id']}", headers=F).json()
     assert out["status"] == "delivered" and out["payout_status"] == "paid" and "simulated" in out["payment"]["method"]
     assert db.get(TransportBooking, b["id"]).status == "confirmed"
+    # proof of delivery & sale: public, verifiable, and it says SIMULATED
+    rc = client.get(f"/public/receipts/{out['receipt_token']}").json()
+    assert rc["receipt_no"].startswith("AP-") and rc["simulated"] and rc["amount"] == out["payment"]["amount"]
+    steps = {s["step"]: s for s in rc["timeline"]}
+    assert all(steps[k]["verified"] for k in ("Truck reached the farm", "Picked up", "Reached the mandi",
+                                              "Delivered at the gate", "Weighed and priced"))
+    assert rc["gps_points"] >= 15 and rc["vehicle"].startswith("SIM-")
+    assert client.get("/public/receipts/not-a-real-receipt-token").status_code == 404
+
+
+def test_any_vegetable_can_be_registered_and_non_tomato_gets_mandis_without_a_price(client, as_role, db):
+    seed_forecasts(db)
+    crops = client.get("/crops").json()
+    assert {"Tomato", "Onion", "Potato"} <= {c["name"] for c in crops}
+    assert [c["name"] for c in crops if c["forecast"]] == ["Tomato"]
+    F = as_role("farmer")
+    assert client.post("/lots", headers=F, json={"crop": "Dragonfruit", "quantity_tons": 1, "pickup_lat": FARM[0],
+                                                 "pickup_lon": FARM[1]}).status_code == 400
+    lot = client.post("/lots", headers=F, json={"crop": "onion", "quantity_tons": 3, "pickup_lat": FARM[0],
+                                                "pickup_lon": FARM[1]}).json()
+    assert lot["crop"] == "Onion" and lot["crop_has_forecast"] is False
+    rec = client.get("/recommend/best-mandi", headers=F, params={"lot_id": lot["id"]}).json()
+    assert rec["no_price_forecast"] and rec["ranked"] and rec["ranked"][0]["price_forecast"] is None
+    assert rec["ranked"][0]["transport_cost"] <= rec["ranked"][-1]["transport_cost"]
+    tomato = client.post("/lots", headers=F, json={"quantity_tons": 3, "pickup_lat": FARM[0], "pickup_lon": FARM[1]}).json()
+    t_rec = client.get("/recommend/best-mandi", headers=F, params={"lot_id": tomato["id"]}).json()
+    assert t_rec["ranked"][0]["price_forecast"]["p50"] > 0
+    # onion spoils slower than tomato on the same road (config/recommender.toml crop sensitivity)
+    same = next(r for r in rec["ranked"] if r["mandi_id"] == t_rec["ranked"][0]["mandi_id"])
+    assert same["spoilage_pct"] < t_rec["ranked"][0]["spoilage_pct"]
+
+
+def test_weighing_issues_a_receipt(client, as_role, db, journey):
+    """The real (non-demo) path: trader weighs -> receipt with the QR scans as evidence."""
+    from datetime import datetime, timedelta, timezone
+
+    from tests.test_tracking import path
+
+    D, lot, trip, kolar = as_role("driver"), journey["lot"], journey["trip"], journey["kolar"]
+    client.post(f"/trips/{trip['id']}/accept", headers=D)
+    client.post(f"/trips/{trip['id']}/consent", headers=D, json={"consent": True})
+    client.post(f"/trips/{trip['id']}/start", headers=D)
+    tok = client.get(f"/lots/{lot['id']}", headers=as_role("farmer")).json()["trip"]["pickup_qr_token"]
+    client.post(f"/trips/{trip['id']}/scan/pickup", headers=D, json={"token": tok})
+    t0 = datetime.now(timezone.utc) - timedelta(seconds=45)
+    pts = [{"recorded_at": (t0 + timedelta(seconds=i)).isoformat(), "lat": a, "lon": b, "speed_kmph": 40}
+           for i, (a, b) in enumerate(path(FARM, (kolar.lat, kolar.lon), 40))]
+    client.post(f"/trips/{trip['id']}/points", headers=D, json={"points": pts})
+    dtok = client.get(f"/trips/{trip['id']}", headers=D).json()["delivery_qr_token"]
+    client.post(f"/trips/{trip['id']}/scan/delivery", headers=as_role("trader"), json={"token": dtok})
+    client.post(f"/trader/lots/{lot['id']}/weigh", headers=as_role("trader"), json={"weight_kg": 1985, "price_per_quintal": 1400})
+    out = client.get(f"/lots/{lot['id']}", headers=as_role("farmer")).json()
+    rc = client.get(f"/public/receipts/{out['receipt_token']}").json()
+    assert rc["amount"] == 27790 and rc["buyer"] and not rc["simulated"] and rc["payment"]["status"] == "pending"
+    steps = {s["step"]: s["verified"] for s in rc["timeline"]}
+    assert steps["Picked up"] and steps["Reached the mandi"] and steps["Delivered at the gate"] and steps["Weighed and priced"]

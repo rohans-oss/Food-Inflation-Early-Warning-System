@@ -113,7 +113,7 @@ export default function Trader() {
       <Card title="Weighed in the last 24 hours">
         <Table head={["Lot", "Farmer", "Weight", "Price", "Value", "Payment to farmer"]} empty="None yet today.">
           {b?.delivered_last_24h?.map((l: any) => (
-            <tr key={l.lot_id}><Td>#{l.lot_id}</Td><Td>{l.farmer}</Td><Td>{num(l.kg, 0)} kg</Td><Td>{inr(l.price_per_quintal)}/q</Td>
+            <tr key={l.lot_id}><Td>#{l.lot_id}{l.receipt_token && <div><a className="text-xs underline" href={`/receipt/${l.receipt_token}`} target="_blank" rel="noreferrer">receipt</a></div>}</Td><Td>{l.farmer}</Td><Td>{num(l.kg, 0)} kg</Td><Td>{inr(l.price_per_quintal)}/q</Td>
               <Td>{inr((l.kg / 100) * l.price_per_quintal)}</Td>
               <Td>
                 {l.payout_status === "paid" ? (

@@ -225,8 +225,9 @@ def test_in_transit_supply_and_live_websocket(client, as_role, db, journey):
         assert ws.receive_json()["type"] == "position"  # initial snapshot
         client.post(f"/trips/{tid}/points", headers=D, json={"points": [
             {"recorded_at": datetime.now(timezone.utc).isoformat(), "lat": 13.17, "lon": 78.07, "speed_kmph": 35}]})
-        msgs = [ws.receive_json() for _ in range(2)]
-        assert any(m.get("type") == "position" and m.get("lat") == 13.17 for m in msgs)
+        # before the pickup QR a truck away from the farm is still on its way there: one position, no geofence event
+        m = ws.receive_json()
+        assert m.get("type") == "position" and m.get("lat") == 13.17
     supply = client.get("/supply/in-transit", params={"mandi_id": kolar.id}, headers=as_role("policy")).json()[0]
     assert supply["tons_in_transit"] == 2 and supply["tons_real"] == 2 and supply["vehicles"] == []
     trader = client.get("/supply/in-transit", headers=as_role("trader")).json()[0]

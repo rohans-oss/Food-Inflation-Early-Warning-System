@@ -21,11 +21,12 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
   const [weeks, setWeeks] = useState(1);
   const r = useApi<any>("/recommend/best-mandi", { query: { lot_id: lotId, weeks } });
   const ranked: any[] = r.data?.ranked ?? [];
+  const noPrice = !!r.data?.no_price_forecast;
   const prov = worstProvenance(ranked.map((x) => x.data_provenance));
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      <div className={`flex flex-wrap items-center gap-2 text-sm ${noPrice ? "hidden" : ""}`}>
         <span className="text-ink2">Selling in</span>
         {[1, 2, 3, 4].map((w) => (
           <button key={w} onClick={() => setWeeks(w)}
@@ -33,10 +34,16 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
             {w} wk
           </button>
         ))}
-        <ProvenanceBadge p={prov} />
+        {!noPrice && <ProvenanceBadge p={prov} />}
       </div>
       <ErrorNote error={r.error} />
-      <Table head={["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk"), ...(onChoose ? ["Your choice"] : [])]}
+      {noPrice && (
+        <Note>There is no price forecast for {r.data.crop} yet (AgriPulse models tomato prices only), so mandis are ranked by
+          transport cost; check today&apos;s rate with the mandi before you sell.</Note>
+      )}
+      <Table head={noPrice
+        ? ["#", t("mandi"), "Road", t("transport"), t("spoilage"), ...(onChoose ? ["Your choice"] : [])]
+        : ["#", t("mandi"), "Road", `${t("price")} p50 (p10–p90)`, t("transport"), t("spoilage"), `${t("netValue")} p50 (p10–p90)`, t("spikeRisk"), ...(onChoose ? ["Your choice"] : [])]}
         empty={r.loading ? t("loading") : "No mandis with a forecast nearby."}>
         {ranked.map((m) => (
           <tr key={m.mandi_id} className={m.mandi_id === chosenId ? "bg-brand/10" : m.feasible === false ? "opacity-60" : m.rank === 1 ? "bg-page" : ""}>
@@ -48,11 +55,11 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
               {onPick && <button onClick={() => onPick(m.mandi_id)} className="text-xs underline">forecast</button>}
             </Td>
             <Td>{num(m.road_km, 0)} km<div className="text-xs text-muted">{num(m.drive_hours, 1)} h{m.route_source !== "osrm" && " · approx."}</div></Td>
-            <Td>{inr(m.price_forecast.p50)}<div className="text-xs text-muted">{inr(m.price_forecast.p10)}–{inr(m.price_forecast.p90)}/q</div></Td>
+            {!noPrice && <Td>{inr(m.price_forecast?.p50)}<div className="text-xs text-muted">{inr(m.price_forecast?.p10)}–{inr(m.price_forecast?.p90)}/q</div></Td>}
             <Td>−{inr(m.transport_cost)}</Td>
             <Td>−{num(m.spoilage_pct, 1)}%<div className="text-xs text-muted">{num(m.temp_c, 0)}°C{m.temp_source === "default" && " (assumed)"}</div></Td>
-            <Td><b>{inr(m.net_value.p50)}</b><div className="text-xs text-muted">{inr(m.net_value.p10)}–{inr(m.net_value.p90)}</div></Td>
-            <Td><SpikeBadge p={m.spike_prob_14d} /></Td>
+            {!noPrice && <Td><b>{inr(m.net_value?.p50)}</b><div className="text-xs text-muted">{inr(m.net_value?.p10)}–{inr(m.net_value?.p90)}</div></Td>}
+            {!noPrice && <Td><SpikeBadge p={m.spike_prob_14d} /></Td>}
             {onChoose && (
               <Td>
                 {m.mandi_id === chosenId ? (
@@ -71,11 +78,12 @@ export function BestMandi({ lotId, onPick, chosenId, onChoose, chooseLocked }: {
           </tr>
         ))}
       </Table>
-      {ranked.length > 1 && !ranked[0].clearly_better_than_next && (
+      {!noPrice && ranked.length > 1 && !ranked[0].clearly_better_than_next && (
         <Note>The top two ranges overlap, so the ranking is not decisive: #{2} could pay as much. Weigh distance and reliability too.</Note>
       )}
       {r.data?.no_forecast?.length > 0 && <p className="text-xs text-muted">Nearby but no forecast yet: {r.data.no_forecast.join(", ")}.</p>}
-      {r.data && r.data.recommender !== "optimizer" && <p className="text-xs text-muted">{r.data.formula}. Cost assumptions: ₹{r.data.inputs.rate_per_km_ton}/km/t, from {r.data.inputs.config_file}.</p>}
+      {noPrice && <p className="text-xs text-muted">{r.data.formula}.</p>}
+      {r.data && !noPrice && r.data.recommender !== "optimizer" && <p className="text-xs text-muted">{r.data.formula}. Cost assumptions: ₹{r.data.inputs.rate_per_km_ton}/km/t, from {r.data.inputs.config_file}.</p>}
       {r.data?.recommender === "optimizer" && (
         <p className="text-xs text-muted">{r.data.formula}. Assumes a {r.data.vehicle_assumption.capacity_tons} t truck hired at your farm,
           ₹{num(r.data.vehicle_assumption.rate_per_km, 0)}/km{r.data.vehicle_assumption.return_leg ? ", paid both ways" : ""} (from {r.data.inputs.config_file}).</p>

@@ -1,0 +1,71 @@
+# Vegetables a farmer can register (lots, transport booking, tracking, delivery receipt, payment work for all of them).
+# Price FORECASTS exist only where forecast = true: tomato is the only crop with a model (V1-V3 scope). Other crops
+# get mandi options ranked by transport cost and spoilage, with no price, and the UI says so.
+# Spoilage sensitivity per crop lives in config/recommender.toml [spoilage.crop_sensitivity] (assumptions).
+# Override the file location with CROPS_CONFIG=/path/file.toml
+
+[[crop]]
+name = "Tomato"
+kn = "ಟೊಮ್ಯಾಟೊ"
+hi = "टमाटर"
+forecast = true
+
+[[crop]]
+name = "Onion"
+kn = "ಈರುಳ್ಳಿ"
+hi = "प्याज"
+forecast = false
+
+[[crop]]
+name = "Potato"
+kn = "ಆಲೂಗಡ್ಡೆ"
+hi = "आलू"
+forecast = false
+
+[[crop]]
+name = "Cabbage"
+kn = "ಎಲೆಕೋಸು"
+hi = "पत्ता गोभी"
+forecast = false
+
+[[crop]]
+name = "Cauliflower"
+kn = "ಹೂಕೋಸು"
+hi = "फूल गोभी"
+forecast = false
+
+[[crop]]
+name = "Brinjal"
+kn = "ಬದನೆಕಾಯಿ"
+hi = "बैंगन"
+forecast = false
+
+[[crop]]
+name = "Green Chilli"
+kn = "ಹಸಿ ಮೆಣಸಿನಕಾಯಿ"
+hi = "हरी मिर्च"
+forecast = false
+
+[[crop]]
+name = "Beans"
+kn = "ಬೀನ್ಸ್"
+hi = "बीन्स"
+forecast = false
+
+[[crop]]
+name = "Carrot"
+kn = "ಕ್ಯಾರೆಟ್"
+hi = "गाजर"
+forecast = false
+
+[[crop]]
+name = "Capsicum"
+kn = "ದೊಣ್ಣೆ ಮೆಣಸಿನಕಾಯಿ"
+hi = "शिमला मिर्च"
+forecast = false
+
+[[crop]]
+name = "Okra"
+kn = "ಬೆಂಡೆಕಾಯಿ"
+hi = "भिंडी"
+forecast = false

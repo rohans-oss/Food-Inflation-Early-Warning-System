@@ -57,3 +57,9 @@ html, body { background: rgb(var(--page)); color: rgb(var(--ink)); }
   .route-dash, .pulse-ring, .live-dot { animation: none; }
   .truck { display: none; }
 }
+
+/* printing a receipt: only the document */
+@media print {
+  .no-print, header, [role="note"] { display: none !important; }
+  html, body { background: #fff !important; }
+}

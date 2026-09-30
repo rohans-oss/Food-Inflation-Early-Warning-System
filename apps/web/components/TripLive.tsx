@@ -11,6 +11,7 @@ import { MapLine, MapMarker, MapView } from "./MapView";
 import { Badge, SimBadge, Stat, StatusBadge } from "./ui";
 
 const EVENT_LABEL: Record<string, string> = {
+  reached_pickup: "Truck reached the farm",
   picked_up: "Picked up (QR scanned)",
   left_pickup_zone: "Left pickup area",
   reached_mandi: "Reached mandi",
@@ -28,7 +29,9 @@ export function TripLive({ tripId }: { tripId: number }) {
   const live = useLiveTrip(tripId);
 
   const load = () => api(`/trips/${tripId}`).then((d) => { setTrip(d); setErr(null); }).catch((e) => setErr(e.message));
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [tripId]);
+  // refresh often while the truck is moving (the live socket pushes positions too; this covers a dropped socket)
+  const moving = trip?.status === "in_progress" || trip?.status === "accepted" || trip?.status === "assigned";
+  useEffect(() => { load(); const id = setInterval(load, moving ? 5000 : 30000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [tripId, moving]);
   // a geofence event arrives live -> refresh the event list
   useEffect(() => { if (live.events.length) load(); /* eslint-disable-next-line */ }, [live.events.length]);
 
@@ -42,7 +45,7 @@ export function TripLive({ tripId }: { tripId: number }) {
   const markers = useMemo<MapMarker[]>(() => {
     if (!trip) return [];
     const m: MapMarker[] = [
-      { id: "o", lat: trip.origin_lat, lon: trip.origin_lon, kind: "pickup", label: "Pickup", popup: "Pickup" },
+      { id: "o", lat: trip.origin_lat, lon: trip.origin_lon, kind: "pickup", label: "Farm (pickup)", popup: "Farm (pickup)" },
     ];
     if (trip.mandi_lat != null) m.push({ id: "m", lat: trip.mandi_lat, lon: trip.mandi_lon, kind: "mandi", label: trip.mandi, popup: trip.mandi });
     if (cur.lat != null) m.push({ id: "v", lat: cur.lat, lon: cur.lon, kind: trip.is_simulated ? "vehicle-sim" : "vehicle",
@@ -60,9 +63,19 @@ export function TripLive({ tripId }: { tripId: number }) {
   if (err) return <p className="text-sm text-critical">{err}</p>;
   if (!trip) return <p className="text-sm text-muted">{t("loading")}</p>;
 
-  const headline = cur.remaining_km != null && cur.eta_local
-    ? `Vehicle ${trip.vehicle} is ${num(cur.remaining_km, 0)} km away, arriving ${cur.eta_local}`
-    : `Vehicle ${trip.vehicle}`;
+  // Two legs: the truck coming TO the farm (before the pickup QR), then farm -> mandi.
+  const pickedUp = !!trip.pickup_scanned_at;
+  const done = !!trip.delivery_scanned_at || cur.status === "completed";
+  const toFarmKm = !pickedUp && cur.lat != null ? kmBetween(cur.lat, cur.lon, trip.origin_lat, trip.origin_lon) * 1.3 : null;
+  const planned = trip.planned_distance_km ?? null;
+  const leg2 = pickedUp && planned && cur.remaining_km != null ? Math.min(1, Math.max(0, 1 - cur.remaining_km / planned)) : done ? 1 : 0;
+  const headline = done
+    ? `Delivered at ${trip.mandi}`
+    : !pickedUp
+      ? (toFarmKm != null ? `Truck ${trip.vehicle} is coming to the farm: ${num(toFarmKm, 1)} km away` : `Truck ${trip.vehicle} is assigned`)
+      : cur.remaining_km != null && cur.eta_local
+        ? `Truck ${trip.vehicle} is on the way to ${trip.mandi}: ${num(cur.remaining_km, 0)} km left, arriving ${cur.eta_local}`
+        : `Truck ${trip.vehicle} is on the way to ${trip.mandi}`;
 
   return (
     <div className="space-y-3">
@@ -76,13 +89,23 @@ export function TripLive({ tripId }: { tripId: number }) {
           <p className="w-full text-sm text-warn"><Badge kind="warn">Location paused</Badge> The driver's phone stopped sharing location at {time(cur.tracking_paused_since)} (app not on screen). The vehicle may still be moving.</p>
         )}
       </div>
+      <div aria-label="Trip progress" className="grid grid-cols-[1fr_3fr] gap-2 text-xs">
+        <div>
+          <div className="h-2 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand transition-all duration-700" style={{ width: pickedUp || done ? "100%" : toFarmKm != null ? "50%" : "0%" }} /></div>
+          <p className={`mt-1 ${pickedUp ? "text-brand" : "text-ink2"}`}>{pickedUp ? "✓ Picked up at the farm" : "1. Coming to the farm"}</p>
+        </div>
+        <div>
+          <div className="h-2 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand transition-all duration-700" style={{ width: `${Math.round(leg2 * 100)}%` }} /></div>
+          <p className={`mt-1 ${done ? "text-brand" : "text-ink2"}`}>{done ? `✓ Reached ${trip.mandi}` : `2. Farm → ${trip.mandi}${pickedUp ? ` · ${Math.round(leg2 * 100)}%` : ""}`}</p>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label={t("eta")} value={cur.eta_local ?? "–"} />
         <Stat label={t("remaining")} value={cur.remaining_km != null ? `${num(cur.remaining_km, 0)} km` : "–"} sub={trip.planned_distance_km ? `of ${num(trip.planned_distance_km, 0)} km` : undefined} />
         <Stat label="Load" value={`${num(trip.load_tons, 1)} t`} />
         <Stat label="Last GPS fix" value={ago(cur.last_seen_at)} sub={cur.speed_kmph != null ? `${num(cur.speed_kmph, 0)} km/h` : undefined} />
       </div>
-      <MapView height="h-96" markers={markers} lines={lines} fitKey={trip.id} />
+      <MapView height="h-96" markers={markers} lines={lines} fitKey={`${trip.id}-${pickedUp}-${done}`} />
       <div>
         <h3 className="mb-1 text-sm font-semibold">{t("events")}</h3>
         <ol className="space-y-1 text-sm">
@@ -96,4 +119,10 @@ export function TripLive({ tripId }: { tripId: number }) {
       </div>
     </div>
   );
+}
+
+function kmBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const r = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * r) / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(a));
 }

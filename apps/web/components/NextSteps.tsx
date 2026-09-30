@@ -35,7 +35,7 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
   const post = (path: string, body?: unknown) => act.run(async () => { await api(path, { method: "POST", body }); refresh(); });
 
   return (
-    <Card title="Next steps" action={r && <ProvenanceBadge p={r.data_provenance} />}>
+    <Card title="Next steps" action={r?.data_provenance && <ProvenanceBadge p={r.data_provenance} />}>
       <ol className="mb-5 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {STEPS.map(([k, label, hint], i) => {
           const done = d.done[k];
@@ -60,7 +60,9 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
             {b && !["declined", "cancelled"].includes(b.status)
               ? <Info label="Transport fare (est.)" value={inr(b.fare_estimate)} sub={`booked with ${b.fleet}`} />
               : <Info label="Transport (est.)" value={r ? inr(r.transport_cost) : "–"} sub="hired truck, before you pick a transporter" />}
-            <Info label="Net value p50" value={r ? inr(r.net_value?.p50) : "–"} sub={r ? `${inr(r.net_value?.p10)}–${inr(r.net_value?.p90)}` : undefined} />
+            {r?.net_value
+              ? <Info label="Net value p50" value={inr(r.net_value.p50)} sub={`${inr(r.net_value.p10)}–${inr(r.net_value.p90)}`} />
+              : <Info label="Net value" value="–" sub="no price forecast for this vegetable" />}
           </div>
 
           {/* 1. choose a transporter and a pickup time */}
@@ -164,6 +166,12 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
                     ? <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">You confirmed receipt {ago(l.payment.received_at)}</span>
                     : <Button disabled={act.busy} onClick={() => post(`/lots/${lotId}/payment-received`)}>I received it</Button>}
                 </div>
+              )}
+              {l.receipt_token && (
+                <a href={`/receipt/${l.receipt_token}`} target="_blank" rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-brand px-3 py-2 text-sm font-medium text-brand hover:bg-brand hover:text-brand-ink">
+                  Delivery receipt {l.receipt_no} (proof for the mandi)
+                </a>
               )}
               <p className="mt-2 text-xs text-muted">AgriPulse records the payment; the money moves between you and the trader, not through AgriPulse.</p>
             </div>

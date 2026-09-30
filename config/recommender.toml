@@ -18,10 +18,18 @@ reference_temp_c = 30.0
 q10 = 2.0                       # loss rate multiplies by q10 for every +10 C (standard respiration rule of thumb)
 default_temp_c = 30.0           # used when no weather row exists for the mandi today
 
-[spoilage.crop_sensitivity]     # multiplier on the base rate
-Tomato = 1.0
-# Onion = 0.3                   # enable when onion is in scope (V2+)
-# Tur = 0.05
+[spoilage.crop_sensitivity]     # multiplier on the base rate. ASSUMPTIONS (relative perishability, not measured):
+Tomato = 1.0                    # replace with field quality-loss data per crop (backlog 25)
+Onion = 0.3
+Potato = 0.25
+Cabbage = 0.6
+Cauliflower = 0.9
+Brinjal = 0.9
+"Green Chilli" = 0.9
+Beans = 1.0
+Carrot = 0.5
+Capsicum = 0.8
+Okra = 1.1
 
 [search]
 radius_km = 300                 # straight-line pre-filter before routing

@@ -358,6 +358,9 @@ class Lot(Base):
     payment_ref: Mapped[str | None] = mapped_column(String(80))
     paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     payment_received_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # farmer confirmed receipt
+    # proof of delivery & sale: issued at weighing; the token is the unguessable public verification link
+    receipt_no: Mapped[str | None] = mapped_column(String(32))
+    receipt_token: Mapped[str | None] = mapped_column(String(64), unique=True)
     crop: Mapped[str] = mapped_column(String(50), default="Tomato")
     quantity_tons: Mapped[float] = mapped_column(Float)
     grade: Mapped[str] = mapped_column(String(20), default="Local")

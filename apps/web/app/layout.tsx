@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="font-sans antialiased">
         {DEMO_NOTICE && (
-          <div role="note" className="bg-ink px-4 py-1.5 text-center text-xs text-page">{DEMO_NOTICE}</div>
+          <div role="note" className="no-print bg-ink px-4 py-1.5 text-center text-xs text-page">{DEMO_NOTICE}</div>
         )}
         <SessionProvider>{children}</SessionProvider>
       </body>

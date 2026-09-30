@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..crops import has_forecast
 from ..db import get_db
 from ..lifecycle import history, move
 from ..models import AuditLog, Lot, Mandi, Organization, Shipment, Trip, User, Vehicle
@@ -14,7 +15,7 @@ from ..scoping import lot_filter, scoped_lots
 
 router = APIRouter(tags=["lots & shipments"])
 
-V1_CROPS = {"Tomato"}  # scope: tomato only in V1
+# Any vegetable in config/crops.toml can be registered, transported, tracked and paid; price forecasts are tomato only.
 
 
 class LotIn(BaseModel):
@@ -43,6 +44,7 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
     out = {
         "id": lot.id,
         "crop": lot.crop,
+        "crop_has_forecast": has_forecast(lot.crop),
         "quantity_tons": lot.quantity_tons,
         "grade": lot.grade,
         "pickup_label": lot.pickup_label,
@@ -55,6 +57,8 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
         "preferred_mandi_id": lot.preferred_mandi_id,
         "preferred_mandi": db.get(Mandi, lot.preferred_mandi_id).name if lot.preferred_mandi_id else None,
         "transport_requested_at": lot.transport_requested_at,
+        "receipt_no": lot.receipt_no,
+        "receipt_token": lot.receipt_token,
         "payment": {"method": lot.payment_method, "reference": lot.payment_ref, "paid_at": lot.paid_at,
                     "received_at": lot.payment_received_at,
                     "amount": round(lot.delivered_weight_kg / 100 * lot.sale_price_per_quintal)
@@ -89,11 +93,21 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
     return out
 
 
+@router.get("/crops")
+def list_crops():
+    """Vegetables a farmer can sell (public). `forecast` = a price model exists (tomato only today)."""
+    from ..crops import crops
+
+    return crops()
+
+
 @router.post("/lots", status_code=201)
 def create_lot(body: LotIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
-    crop = body.crop.strip().title()
-    if crop not in V1_CROPS:
-        raise HTTPException(400, f"V1 supports {sorted(V1_CROPS)} only")
+    from ..crops import canonical, names
+
+    crop = canonical(body.crop)
+    if crop is None:
+        raise HTTPException(400, f"Unknown crop; choose one of {sorted(names())}")
     for org_id, kind in ((body.fpo_org_id, "fpo"), (body.lender_org_id, "lender")):
         if org_id is not None:
             org = db.get(Organization, org_id)
@@ -190,7 +204,10 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
     mandi = db.get(Mandi, mandi_id) if mandi_id else None
     route = None
     if mandi:
-        rec = recommend_single(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, weeks=1)
+        from ..supply import options_without_forecast
+
+        rec = (recommend_single(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, weeks=1) if has_forecast(lot.crop)
+               else options_without_forecast(db, lot.pickup_lat, lot.pickup_lon, lot.quantity_tons, lot.crop))
         row = next((r for r in rec.get("ranked", []) if r["mandi_id"] == mandi.id), None)
         if row:
             route = {k: row.get(k) for k in ("road_km", "drive_hours", "route_source", "transport_cost", "spoilage_pct",

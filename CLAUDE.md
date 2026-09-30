@@ -95,7 +95,9 @@ Kannada native-speaker review, mandi-map confirmation (all V1 hardening or V3 it
 listed in /docs/backlog.md instead of doing them here).
 
 ## V1 scope (still enforced)
-- Crop: tomato only. Region: Karnataka + neighbouring states.
+- Crop: tomato only for price FORECASTS. Lots / transport / tracking / receipt / payment accept any vegetable in
+  config/crops.toml (user request after V3-4); non-forecast crops are ranked by transport cost + spoilage, no price.
+  Region: Karnataka + neighbouring states.
 - 9 roles, all with real login + RBAC + a working screen:
   1 Farmer, 2 FPO/aggregator, 3 Transporter/driver, 4 Fleet owner,
   5 Mandi trader/commission agent, 6 Bulk buyer, 7 Policy analyst/government,
@@ -283,3 +285,7 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `agripulse-api` (https://agripulse-api-0ir4.onrender.com) / `agripulse-demo` (Singapore, free); pushes don't auto-deploy there, trigger manually.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).
+- Receipts: `routers.receipts.issue(db, lot)` at weighing gives `receipt_no` + unguessable `receipt_token`; public
+  `GET /public/receipts/{token}` / web `/receipt/[token]` (printable proof: QR scans, GPS count, payment). Payment is
+  recorded, never processed. Crops: `agripulse_api.crops` (config/crops.toml), validate with `crops.canonical`.
+- Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

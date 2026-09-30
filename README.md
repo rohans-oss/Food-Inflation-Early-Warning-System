@@ -624,6 +624,17 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
 
 **How to verify:** `pytest tests/test_bookings.py tests/test_preferred_mandi.py`.
 
+- **Delivery receipt (proof for the mandi):** once the lot is weighed, the lot page shows "Open delivery receipt":
+  receipt number, parties, weight, rate, amount, payment status and the evidence timeline (QR scans, geofence
+  events, GPS count), with Print / Save as PDF and a verification QR/link. Demo receipts are watermarked SIMULATED.
+- **Live tracking on both legs:** the map shows the truck coming to the farm (reached_pickup), then moving from the
+  farm to the mandi after the pickup scan, with a progress bar for each leg.
+- **Vegetable choice:** 11 vegetables (config/crops.toml). Only tomato has a price forecast; others are ranked by
+  transport cost and crop spoilage sensitivity, with no price shown.
+
+How to verify: farmer login → new lot, pick Onion → Sell here → Choose time → Book → Run demo trip → watch both
+legs → Open delivery receipt → Print.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

@@ -188,3 +188,33 @@ def recommend(db: Session, lat: float, lon: float, tons: float, crop: str = "Tom
         "ranked": ranked,
         "no_forecast": no_forecast,
     }
+
+
+def options_without_forecast(db: Session, lat: float, lon: float, tons: float, crop: str) -> dict:
+    """Mandi options for a crop with NO price model (everything except tomato): nearest mandis with road distance, a
+    hired-truck transport cost and crop-specific spoilage. No price, no net value: the UI says there is no forecast."""
+    cfg = cost_config()
+    t = cfg["transport"]["vehicle"]
+    sizes = sorted(t.get("sizes_tons", [2.5, 5, 9, 10, 16]))
+    cap = next((s for s in sizes if s >= tons - 1e-9), sizes[-1])
+    rate = t["base_rate_per_km"] + t["rate_per_km_per_capacity_ton"] * cap
+    legs = 2 if t.get("count_return_leg", True) else 1
+    radius = cfg["search"]["radius_km"]
+    cands = sorted(((haversine_km(lat, lon, m.lat, m.lon), m) for m in db.scalars(select(Mandi).where(Mandi.lat.is_not(None)))),
+                   key=lambda x: x[0])
+    rows = []
+    for _, m in [c for c in cands if c[0] <= radius][: cfg["search"]["max_candidates"]]:
+        km, minutes, src = road_km(lat, lon, m.lat, m.lon)
+        temp, temp_src = _temp_c(db, m.id)
+        rows.append({"mandi_id": m.id, "mandi": m.name, "district": m.district, "state": m.state,
+                     "coords_verified": m.coords_verified, "road_km": km, "drive_hours": round(minutes / 60, 1),
+                     "route_source": src, "price_forecast": None, "net_value": None, "spike_prob_14d": None,
+                     "transport_cost": round(km * legs * rate), "spoilage_pct": round(spoilage_pct(minutes / 60, temp, crop), 2),
+                     "temp_c": temp, "temp_source": temp_src, "data_provenance": None, "feasible": True})
+    rows.sort(key=lambda r: r["transport_cost"])
+    for i, r in enumerate(rows):
+        r["rank"] = i + 1
+    return {"crop": crop, "no_price_forecast": True, "recommender": "distance",
+            "formula": f"No price model for {crop} yet: mandis ranked by transport cost (hired {cap:g} t truck, "
+                       f"Rs {rate:.0f}/km{', both ways' if legs == 2 else ''}) and spoilage",
+            "ranked": rows, "no_forecast": [], "inputs": {"config_file": Path(cfg["_path"]).name}}

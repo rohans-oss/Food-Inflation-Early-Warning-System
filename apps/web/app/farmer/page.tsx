@@ -15,11 +15,13 @@ import { useSession } from "@/lib/session";
 const DEFAULT_FARM: [number, number] = [13.2, 78.02]; // Kolar belt, until the farmer sets a point
 
 export default function Farmer() {
-  const { t } = useSession();
+  const { t, lang } = useSession();
   const router = useRouter();
+  const crops = useApi<{ name: string; kn: string; hi: string; forecast: boolean }[]>("/crops");
+  const cropLabel = (c: { name: string; kn: string; hi: string }) => (lang === "kn" ? `${c.kn} · ${c.name}` : lang === "hi" ? `${c.hi} · ${c.name}` : c.name);
   const lots = useApi<any[]>("/lots", { poll: 30000 });
   const [point, setPoint] = useState<[number, number] | null>(null);
-  const [f, setF] = useState({ quantity_tons: "2", grade: "Local", pickup_label: "", fpo_org_id: "", lender_org_id: "" });
+  const [f, setF] = useState({ crop: "Tomato", quantity_tons: "2", grade: "Local", pickup_label: "", fpo_org_id: "", lender_org_id: "" });
   const [fpos, setFpos] = useState<{ id: number; name: string }[]>([]);
   const [lenders, setLenders] = useState<{ id: number; name: string }[]>([]);
   const { busy, error, run, setError } = useAction();
@@ -49,7 +51,7 @@ export default function Farmer() {
       const lot = await api("/lots", {
         method: "POST",
         body: {
-          quantity_tons: Number(f.quantity_tons), grade: f.grade, pickup_label: f.pickup_label,
+          crop: f.crop, quantity_tons: Number(f.quantity_tons), grade: f.grade, pickup_label: f.pickup_label,
           pickup_lat: point[0], pickup_lon: point[1],
           fpo_org_id: f.fpo_org_id ? Number(f.fpo_org_id) : null, lender_org_id: f.lender_org_id ? Number(f.lender_org_id) : null,
         },
@@ -61,10 +63,11 @@ export default function Farmer() {
   return (
     <Shell roles={["farmer"]} title={t("myLots")}>
       <Card>
-        <Table head={["Lot", t("quantityTons"), t("status"), t("mandi"), t("eta"), ""]} empty="No lots yet. Register your first harvest below.">
+        <Table head={["Lot", "Vegetable", t("quantityTons"), t("status"), t("mandi"), t("eta"), ""]} empty="No lots yet. Register your first harvest below.">
           {lots.data?.map((l) => (
             <tr key={l.id}>
               <Td>#{l.id} <span className="text-muted">{day(l.created_at)}</span></Td>
+              <Td>{l.crop}</Td>
               <Td>{tons(l.quantity_tons)}</Td>
               <Td><StatusBadge s={l.status} /></Td>
               <Td>{l.mandi ?? "–"}</Td>
@@ -78,6 +81,15 @@ export default function Farmer() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={t("newLot")}>
           <form onSubmit={create} className="space-y-3">
+            <Field label="Vegetable" hint={crops.data?.find((c) => c.name === f.crop)?.forecast === false
+              ? "No price forecast for this vegetable yet: you still get mandis by transport cost, booking, live tracking and a delivery receipt."
+              : undefined}>
+              <select className={inputCls} value={f.crop} onChange={(e) => setF({ ...f, crop: e.target.value })}>
+                {(crops.data ?? [{ name: "Tomato", kn: "ಟೊಮ್ಯಾಟೊ", hi: "टमाटर", forecast: true }]).map((c) => (
+                  <option key={c.name} value={c.name}>{cropLabel(c)}{c.forecast ? " · price forecast" : ""}</option>
+                ))}
+              </select>
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("quantityTons")}>
                 <input className={inputCls} type="number" min="0.1" max="60" step="0.1" required value={f.quantity_tons}

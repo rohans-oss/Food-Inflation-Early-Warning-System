@@ -34,7 +34,7 @@ export default function LotDetail() {
   const stepIdx = l ? STEPS.indexOf(l.status) : -1;
 
   return (
-    <Shell roles={["farmer"]} title={`Lot #${id}`}>
+    <Shell roles={["farmer"]} title={`Lot #${id}${lot.data ? ` · ${lot.data.crop}` : ""}`}>
       <Link href="/farmer" className="text-sm underline">← {t("myLots")}</Link>
       <ErrorNote error={lot.error} />
       {l && (
@@ -47,7 +47,7 @@ export default function LotDetail() {
             ))}
           </ol>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label={t("quantityTons")} value={tons(l.quantity_tons)} sub={`${t("grade")}: ${l.grade}`} />
+            <Stat label={t("quantityTons")} value={tons(l.quantity_tons)} sub={`${l.crop} · ${t("grade")}: ${l.grade}`} />
             <Stat label={t("status")} value={<StatusBadge s={l.status} />} sub={l.pickup_label || undefined} />
             <Stat label={t("mandi")} value={<span className="text-lg">{l.mandi ?? l.preferred_mandi ?? "Not chosen yet"}</span>}
               sub={l.mandi ? "shipment booked" : l.preferred_mandi ? "your choice · your FPO confirms it when grouping" : "pick one below with Sell here"} />
@@ -62,6 +62,12 @@ export default function LotDetail() {
                 <Stat label="Value" value={inr((l.delivered_weight_kg / 100) * l.sale_price_per_quintal)} />
                 <Stat label="Delivered" value={<span className="text-base">{dateTime(l.delivered_at)}</span>} />
               </div>
+              {l.receipt_token && (
+                <a href={`/receipt/${l.receipt_token}`} target="_blank" rel="noreferrer"
+                  className="mt-3 inline-flex rounded-lg bg-brand px-3 py-2 text-sm font-medium text-brand-ink">
+                  Open delivery receipt {l.receipt_no}
+                </a>
+              )}
             </Card>
           )}
 

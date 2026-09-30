@@ -122,7 +122,12 @@ def _geofence(db, trip: Trip, mandi: Mandi, ts, lat, lon, speed, s) -> list[str]
     in_pickup = d_pickup_m <= s.pickup_radius_m
     in_mandi = mandi.lat is not None and haversine_km(lat, lon, mandi.lat, mandi.lon) * 1000 <= mandi.geofence_radius_m
 
-    if not in_pickup and not _has_event(db, trip.id, "left_pickup_zone"):
+    # Before the pickup QR the truck is still on its way TO the farm: arriving there is "reached_pickup"; leaving the
+    # pickup zone only counts once the load is on board (it used to fire on the first fix of a truck coming from afar).
+    if in_pickup and trip.pickup_scanned_at is None and not _has_event(db, trip.id, "reached_pickup"):
+        add_event(db, trip, "reached_pickup", ts, lat, lon)
+        out.append("reached_pickup")
+    if not in_pickup and trip.pickup_scanned_at is not None and not _has_event(db, trip.id, "left_pickup_zone"):
         add_event(db, trip, "left_pickup_zone", ts, lat, lon)
         out.append("left_pickup_zone")
     if in_mandi and not _has_event(db, trip.id, "reached_mandi"):

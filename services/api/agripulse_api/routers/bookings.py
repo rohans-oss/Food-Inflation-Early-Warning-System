@@ -268,14 +268,16 @@ def payment_received(lot_id: int, db: Session = Depends(get_db), user: User = De
 
 
 DEMO_TASKS: dict[int, asyncio.Task] = {}
-DEMO_POINTS = 45  # positions along the route
-DEMO_TICK_S = 2.0  # ~90 s of driving on screen
+DEMO_APPROACH_POINTS = 15  # truck driving from its depot to the farm
+DEMO_POINTS = 45  # farm -> mandi
+DEMO_TICK_S = 2.0  # ~2 min on screen in all
 
 
 @router.post("/lots/{lot_id}/demo-trip", status_code=202)
 async def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
     """PUBLIC DEMO ONLY (DEMO_MODE): a SIMULATED transporter, driver and trader run this lot's booked trip so a visitor
-    can watch it end to end. The trip, truck and payment are flagged simulated / labelled; real deployments return 404."""
+    can watch it end to end: the truck drives to the farm, the pickup QR is scanned, it drives to the mandi, is scanned
+    in at the gate, weighed, and a simulated payment is recorded. Everything is flagged simulated; real deployments 404."""
     if not get_settings().demo_mode:
         raise HTTPException(404, "Not available")
     lot = get_scoped_lot(db, user, lot_id)
@@ -291,31 +293,29 @@ async def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Dep
 async def _autopilot(lot_id: int, booking_id: int) -> None:
     from .. import db as dbmod
 
+    def run(fn, *a):
+        with dbmod.SessionLocal() as db:
+            return fn(db, *a)
+
     try:
-        def prepare():
-            with dbmod.SessionLocal() as db:
-                return _demo_prepare(db, lot_id, booking_id)
-
-        trip_id = await asyncio.to_thread(prepare)
-        for i in range(1, DEMO_POINTS + 1):
-            def step(i=i):
-                with dbmod.SessionLocal() as db:
-                    _demo_step(db, trip_id, i / DEMO_POINTS)
-            await asyncio.to_thread(step)
+        trip_id, depot = await asyncio.to_thread(run, _demo_prepare, lot_id, booking_id)
+        for i in range(1, DEMO_APPROACH_POINTS + 1):
+            await asyncio.to_thread(run, _demo_approach, trip_id, depot, i / DEMO_APPROACH_POINTS)
             await asyncio.sleep(DEMO_TICK_S)
-
-        def finish():
-            with dbmod.SessionLocal() as db:
-                _demo_finish(db, lot_id, trip_id)
+        await asyncio.sleep(3)  # loading at the farm
+        await asyncio.to_thread(run, _demo_pickup, trip_id)
+        for i in range(1, DEMO_POINTS + 1):
+            await asyncio.to_thread(run, _demo_step, trip_id, i / DEMO_POINTS)
+            await asyncio.sleep(DEMO_TICK_S)
         await asyncio.sleep(3)
-        await asyncio.to_thread(finish)
+        await asyncio.to_thread(run, _demo_finish, lot_id, trip_id)
     except Exception:  # never take the API down; the visitor sees the trip stop
         log.exception("demo autopilot failed for lot %s", lot_id)
 
 
-def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> int:
-    from tracking.engine import add_event
-
+def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple[float, float]]:
+    """Confirm (simulated truck), accept, consent, start. The truck starts at a depot ~9 km from the farm, on the
+    side away from the mandi, so the farmer sees it come to the farm before it heads to the mandi."""
     from .trips import make_trip
 
     b = db.get(TransportBooking, booking_id)
@@ -333,7 +333,6 @@ def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> int:
         db.flush()
         db.get(Shipment, b.shipment_id).is_simulated = True
         trip = make_trip(db, owner, b.shipment_id, v.id, driver.id, via="demo_autopilot")
-        on_trip_assigned(db, db.get(Shipment, b.shipment_id), trip)
     trip.is_simulated = True
     if trip.status == "assigned":
         move(db, trip, "accepted", trip.driver_id, via="demo_autopilot")
@@ -345,23 +344,49 @@ def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> int:
         trip.share_expires_at = now + timedelta(hours=get_settings().share_link_hours)
         if trip.shipment and trip.shipment.status == "booked":
             move(db, trip.shipment, "in_transit", trip.driver_id, trip_id=trip.id, via="demo_autopilot")
-    if trip.pickup_scanned_at is None:
-        trip.pickup_scanned_at = now
-        add_event(db, trip, "picked_up", now, trip.origin_lat, trip.origin_lon, source="demo_autopilot")
-        link = f"{get_settings().public_base_url}/track/{trip.share_token}"
-        for x in db.scalars(select(Lot).where(Lot.shipment_id == trip.shipment_id)):
-            if x.status == "grouped":
-                move(db, x, "in_transit", trip.driver_id, trip_id=trip.id, via="demo_autopilot")
-                notify(db, x.farmer, "picked_up", f"pickup:{trip.id}:{x.id}", lot=x.id, vehicle=trip.vehicle.registration,
-                       mandi=trip.mandi.name, link=link)
+    m = trip.mandi
+    dlat, dlon = trip.origin_lat - m.lat, trip.origin_lon - m.lon
+    norm = max((dlat ** 2 + dlon ** 2) ** 0.5, 1e-6)
+    depot = (trip.origin_lat + 0.08 * dlat / norm, trip.origin_lon + 0.08 * dlon / norm)
     db.commit()
-    return trip.id
+    return trip.id, depot
+
+
+def _demo_approach(db: Session, trip_id: int, depot: tuple[float, float], frac: float) -> None:
+    from tracking.engine import process_points
+
+    t = db.get(Trip, trip_id)
+    if t is None or t.status != "in_progress":
+        return
+    lat = depot[0] + (t.origin_lat - depot[0]) * frac
+    lon = depot[1] + (t.origin_lon - depot[1]) * frac
+    process_points(db, t, [{"recorded_at": datetime.now(timezone.utc), "lat": lat, "lon": lon, "speed_kmph": 38,
+                            "accuracy_m": 15}])
+    db.commit()
+
+
+def _demo_pickup(db: Session, trip_id: int) -> None:
+    """The SIMULATED driver scans the farmer's pickup QR (same effects as POST /trips/{id}/scan/pickup)."""
+    from tracking.engine import add_event
+
+    t = db.get(Trip, trip_id)
+    now = datetime.now(timezone.utc)
+    if t.pickup_scanned_at is None:
+        t.pickup_scanned_at = now
+        add_event(db, t, "picked_up", now, t.last_lat or t.origin_lat, t.last_lon or t.origin_lon, source="demo_autopilot")
+        link = f"{get_settings().public_base_url}/track/{t.share_token}"
+        for x in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
+            if x.status == "grouped":
+                move(db, x, "in_transit", t.driver_id, trip_id=t.id, via="demo_autopilot")
+                notify(db, x.farmer, "picked_up", f"pickup:{t.id}:{x.id}", lot=x.id, vehicle=t.vehicle.registration,
+                       mandi=t.mandi.name, link=link)
+    db.commit()
 
 
 def _demo_step(db: Session, trip_id: int, frac: float) -> None:
     from tracking.engine import process_points
-    from tracking.simulator import _point_along
     from tracking.geo import haversine_km
+    from tracking.simulator import _point_along
 
     t = db.get(Trip, trip_id)
     if t is None or t.status != "in_progress":
@@ -392,6 +417,9 @@ def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
             price = round(f.p50) if f else 2000
             x.delivered_weight_kg, x.sale_price_per_quintal, x.delivered_at = round(x.quantity_tons * 985), price, now
             move(db, x, "delivered", None, weight_kg=x.delivered_weight_kg, price_per_quintal=price, via="demo_autopilot")
+            from .receipts import issue
+
+            issue(db, x)
             notify(db, x.farmer, "delivered", f"delivered:{x.id}", lot=x.id, mandi=t.mandi.name,
                    kg=round(x.delivered_weight_kg), price=price, payout="pending")
             _record_payment(db, x, None, "upi (simulated)", f"SIM-{secrets.token_hex(4).upper()}")
