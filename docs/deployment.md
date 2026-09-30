@@ -68,8 +68,10 @@ restart.
 - **Environment:** `PUBLIC_BASE_URL` = the web address, and `CORS_ORIGINS` = the web address plus
   `https://localhost` (for the Android app). The API refuses to start on an `https` `PUBLIC_BASE_URL` with the
   default JWT secret.
-- **Web:** a Vercel project with root `apps/web`, `NEXT_PUBLIC_API_URL` = the Render URL, and
-  `NEXT_PUBLIC_DEMO_NOTICE` = the banner text shown on every page.
+- **Web:** a second Render web service built from `apps/web/Dockerfile` (context `apps/web`). Set
+  `NEXT_PUBLIC_API_URL` = the API's Render URL and `NEXT_PUBLIC_DEMO_NOTICE` = the banner text shown on every page;
+  both are build arguments. Vercel also works (root `apps/web`, same two variables) once the Vercel GitHub app has
+  access to the repository.
 - **Driver app:** `https://<render-url>/driver/`.
 - **Not included:** the worker/scheduler, Redis, OSRM (routes are approximate and say so) and self-hosted tiles
   (the public OSM tiles, fine for a demo).
