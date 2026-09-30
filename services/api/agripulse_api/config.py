@@ -30,6 +30,10 @@ class Settings(BaseSettings):
 
     # --- routing ---
     osrm_url: str = ""  # e.g. http://osrm:5000 ; empty -> haversine fallback (flagged in API output)
+    # V3-3 (backlog 3): OpenStreetMap place search for mandi-location CANDIDATES (an admin still confirms each one).
+    # The public server's policy requires an identifying User-Agent: set NOMINATIM_CONTACT (email or URL) or it refuses.
+    nominatim_url: str = "https://nominatim.openstreetmap.org"
+    nominatim_contact: str = ""
     fallback_road_factor: float = 1.3  # straight-line km -> road km when OSRM is unavailable
     fallback_speed_kmph: float = 40.0
 

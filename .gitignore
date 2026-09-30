@@ -17,3 +17,5 @@ data/raw/
 tests/e2e/shots/
 data/feature_tables/
 data/cache/
+infra/tiles/*.pmtiles
+infra/tiles/assets/

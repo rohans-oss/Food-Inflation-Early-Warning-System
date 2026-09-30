@@ -2,6 +2,8 @@
 
 import type { Map as MLMap, Marker } from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { mapStyle } from "@/lib/mapstyle";
+import { useSession } from "@/lib/session";
 
 export type MarkerKind = "vehicle" | "vehicle-sim" | "mandi" | "pickup" | "status";
 
@@ -23,20 +25,7 @@ export interface MapLine {
   width?: number;
 }
 
-// OSM's public tiles are fine for development and a demo; for a pilot, point this at your own tile server.
-const STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: "raster" as const,
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: "© OpenStreetMap contributors",
-    },
-  },
-  layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
-};
+// Tile source: lib/mapstyle.ts (V3-3: configurable, self-hostable; public OSM only for development).
 
 function markerEl(m: MapMarker): HTMLElement {
   const el = document.createElement("div");
@@ -87,6 +76,7 @@ export function MapView({
   center?: [number, number];
   zoom?: number;
 }) {
+  const { lang } = useSession();
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const lib = useRef<typeof import("maplibre-gl") | null>(null);
@@ -100,10 +90,12 @@ export function MapView({
   // create once
   useEffect(() => {
     let cancelled = false;
-    import("maplibre-gl").then((ml) => {
+    import("maplibre-gl").then(async (ml) => {
       if (cancelled || !box.current) return;
       lib.current = ml;
-      const m = new ml.Map({ container: box.current, style: STYLE, center, zoom, attributionControl: { compact: true } });
+      const style = await mapStyle(ml, lang);
+      if (cancelled || !box.current) return;
+      const m = new ml.Map({ container: box.current, style, center, zoom, attributionControl: { compact: true } });
       m.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
       m.on("click", (e) => clickRef.current?.(e.lngLat.lat, e.lngLat.lng));
       m.on("load", () => {

@@ -6,6 +6,13 @@
 		reverse_proxy api:8000
 	}
 
+	# V3-3: self-hosted map tiles (one PMTiles file + style assets), served as static files with range requests
+	handle_path /tiles/* {
+		root * /srv/tiles
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
 	handle {
 		reverse_proxy web:3000
 	}
@@ -20,12 +27,13 @@
 
 	log {
 		output stdout
-		# JWTs travel in WebSocket query strings; don't write them to logs
+		# WebSocket tickets (and tokens from older clients) travel in query strings; don't write them to logs
 		format filter {
 			wrap json
 			fields {
 				request>uri query {
 					replace token REDACTED
+					replace ticket REDACTED
 					replace share REDACTED
 				}
 			}

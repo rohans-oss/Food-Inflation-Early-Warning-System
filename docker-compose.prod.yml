@@ -15,6 +15,7 @@ services:
     ports: ["80:80", "443:443"]
     volumes:
       - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/tiles:/srv/tiles:ro   # V3-3: self-hosted map tiles (docs/map-tiles.md); empty is fine
       - caddy_data:/data
     depends_on: [api, web]
 
@@ -29,7 +30,7 @@ services:
     ports: !reset []
     environment:
       PUBLIC_BASE_URL: https://${DOMAIN}
-      CORS_ORIGINS: https://${DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN},https://localhost   # https://localhost = the Android driver app (B-2)
       SEED_FLAGS: ""          # prod: roles + mandis + admin only, no demo users
   worker:
     restart: unless-stopped
@@ -39,6 +40,11 @@ services:
     build:
       args:
         NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
+        # V3-3 map tiles (docs/map-tiles.md): set ONE of these, or the public OSM tiles are used (dev only)
+        NEXT_PUBLIC_MAP_PMTILES: ${NEXT_PUBLIC_MAP_PMTILES:-}
+        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-}
+        NEXT_PUBLIC_MAP_TILES: ${NEXT_PUBLIC_MAP_TILES:-}
+        NEXT_PUBLIC_MAP_ATTRIBUTION: ${NEXT_PUBLIC_MAP_ATTRIBUTION:-}
 
 volumes:
   caddy_data:

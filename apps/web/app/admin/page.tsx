@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ConnectedMandis } from "@/components/ConnectedMandis";
+import { MandiLocations } from "@/components/MandiLocations";
 import { Shell } from "@/components/Shell";
 import { Badge, Button, CalibrationBadge, Card, SimBadge, ErrorNote, Field, inputCls, Note, ProvenanceBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -162,6 +163,8 @@ export default function Admin() {
       <CompareRecommenders />
 
       <TranslationStatus />
+
+      <MandiLocations />
 
       <Card title={t("v2Results")} action={<span className="text-xs text-muted">details and numbers in each linked doc</span>}>
         <Table head={["Phase", "Study", "Result", "Outcome", "Data"]} empty="No V2 results listed.">

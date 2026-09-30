@@ -247,7 +247,7 @@ class MandiPatch(BaseModel):
 
 
 @router.patch("/mandis/{mandi_id}")
-def patch_mandi(mandi_id: int, body: MandiPatch, db: Session = Depends(get_db), _=Depends(admin_only)):
+def patch_mandi(mandi_id: int, body: MandiPatch, db: Session = Depends(get_db), admin=Depends(admin_only)):
     m = db.get(Mandi, mandi_id)
     if m is None:
         raise HTTPException(404, "Mandi not found")
@@ -279,12 +279,87 @@ def patch_mandi(mandi_id: int, body: MandiPatch, db: Session = Depends(get_db), 
         db.delete(m)
         db.commit()
         return {"merged_into": target.id}
+    before = {f: getattr(m, f) for f in ("lat", "lon", "coords_verified", "geofence_radius_m")}
     for field in ("lat", "lon", "coords_verified", "geofence_radius_m"):
         v = getattr(body, field)
         if v is not None:
             setattr(m, field, v)
+    if (body.lat is not None or body.lon is not None) and body.coords_verified is None:
+        m.coords_verified = False  # a moved point is unverified until someone confirms it
+    after = {f: getattr(m, f) for f in before}
+    if after != before:  # V3-3: who moved / verified a mandi, when, from where to where
+        db.add(AuditLog(entity="mandi", entity_id=m.id, field="location",
+                        from_state="verified" if before["coords_verified"] else "unverified",
+                        to_state="verified" if after["coords_verified"] else "unverified", actor_id=admin.id,
+                        details={"before": before, "after": after}))
     db.commit()
-    return {"id": m.id, "lat": m.lat, "lon": m.lon, "coords_verified": m.coords_verified}
+    return {"id": m.id, "lat": m.lat, "lon": m.lon, "coords_verified": m.coords_verified,
+            "geofence_radius_m": m.geofence_radius_m}
+
+
+_osm_cache: dict = {}
+_osm_last = [0.0]
+
+
+@router.get("/mandis/{mandi_id}/osm-candidates")
+def osm_candidates(mandi_id: int, db: Session = Depends(get_db), _=Depends(admin_only)):
+    """V3-3 (backlog 3): CANDIDATE locations for a mandi from OpenStreetMap (Nominatim jsonv2). Suggestions only:
+    an admin confirms on the map. Public-server policy: identifying User-Agent, <= 1 request/s, cached."""
+    import time
+
+    import httpx
+
+    from tracking.geo import haversine_km
+
+    m = db.get(Mandi, mandi_id)
+    if m is None:
+        raise HTTPException(404, "Mandi not found")
+    s = get_settings()
+    public = "nominatim.openstreetmap.org" in s.nominatim_url
+    if public and not s.nominatim_contact:
+        raise HTTPException(409, "Set NOMINATIM_CONTACT (email or URL) to use the public OpenStreetMap search: its "
+                                 "usage policy requires an identifying User-Agent.")
+    town = m.name.replace("APMC", "").replace("(FF&V)", "").strip()
+    queries = [f"{town} APMC", f"{town} agricultural market", f"{town} market yard"]
+    found, seen = [], set()
+    for q in queries:
+        key = (s.nominatim_url, q, m.state or "")
+        if key not in _osm_cache:
+            wait = 1.0 - (time.monotonic() - _osm_last[0])
+            if wait > 0:
+                time.sleep(wait)
+            params = {"q": f"{q}, {m.district}, {m.state or 'Karnataka'}", "format": "jsonv2", "countrycodes": "in",
+                      "limit": 5}
+            try:
+                r = httpx.get(s.nominatim_url.rstrip("/") + "/search", params=params, timeout=15,
+                              headers={"User-Agent": f"AgriPulse/1.0 ({s.nominatim_contact})"})
+                r.raise_for_status()
+                _osm_cache[key] = r.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                raise HTTPException(502, f"OpenStreetMap search failed: {exc}")
+            finally:
+                _osm_last[0] = time.monotonic()
+        for c in _osm_cache[key]:
+            if c.get("place_id") in seen:
+                continue
+            seen.add(c.get("place_id"))
+            lat, lon = float(c["lat"]), float(c["lon"])  # jsonv2 returns strings
+            found.append({"name": c.get("name") or c.get("display_name", "").split(",")[0],
+                          "display_name": c.get("display_name"), "lat": lat, "lon": lon,
+                          "category": c.get("category"), "type": c.get("type"),
+                          "osm_url": f"https://www.openstreetmap.org/{c.get('osm_type')}/{c.get('osm_id')}",
+                          "km_from_current": round(haversine_km(m.lat, m.lon, lat, lon), 1) if m.lat is not None else None})
+    found.sort(key=lambda c: (c["km_from_current"] is None, c["km_from_current"] or 0))
+    return {"mandi_id": m.id, "mandi": m.name, "current": {"lat": m.lat, "lon": m.lon, "verified": m.coords_verified},
+            "candidates": found[:10], "attribution": "© OpenStreetMap contributors (ODbL)",
+            "note": "Suggestions only. Confirm on the map; an APMC yard can be several km from the town centre."}
+
+
+@router.get("/mandis/locations")
+def mandi_locations(db: Session = Depends(get_db), _=Depends(admin_only)):
+    return [{"id": m.id, "name": m.name, "district": m.district, "lat": m.lat, "lon": m.lon,
+             "coords_verified": m.coords_verified, "geofence_radius_m": m.geofence_radius_m}
+            for m in db.scalars(select(Mandi).order_by(Mandi.name))]
 
 
 # ---------------------------------------------------------------- simulator (synthetic trips)
