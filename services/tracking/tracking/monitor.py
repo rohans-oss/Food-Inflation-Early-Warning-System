@@ -25,7 +25,9 @@ def check_stale_trips(db: Session, now: datetime | None = None) -> dict:
             if _has_event(db, trip.id, "reached_mandi"):
                 continue
             minutes = int(silent.total_seconds() // 60)
-            add_event(db, trip, "unexpected_stop", now, trip.last_lat, trip.last_lon, minutes=minutes, reason="no_signal")
+            reason = "phone_paused" if trip.tracking_paused_at is not None else "no_signal"
+            add_event(db, trip, "unexpected_stop", now, trip.last_lat, trip.last_lon, minutes=minutes, reason=reason,
+                      **({"pause_reason": trip.tracking_pause_reason} if reason == "phone_paused" else {}))
             trip.stopped_since = trip.stopped_since or trip.last_seen_at
             _on_stop(db, trip, minutes)
             flagged += 1

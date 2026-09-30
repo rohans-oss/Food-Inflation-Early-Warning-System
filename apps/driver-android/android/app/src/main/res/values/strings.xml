@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AgriPulse Driver</string>
+    <string name="title_activity_main">AgriPulse Driver</string>
+    <string name="package_name">org.agripulse.driver</string>
+    <string name="custom_url_scheme">org.agripulse.driver</string>
+    <!-- background-geolocation plugin: notification channel shown in Android's notification settings -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Trip tracking</string>
+</resources>

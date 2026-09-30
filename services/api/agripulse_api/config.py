@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
     jwt_refresh_days: int = 14
-    cors_origins: str = "http://localhost:3000,http://localhost:8000"
+    cors_origins: str = "http://localhost:3000,http://localhost:8000,https://localhost"  # https://localhost = Android driver app (Capacitor)
     public_base_url: str = "http://localhost:3000"
 
     # --- data sources ---

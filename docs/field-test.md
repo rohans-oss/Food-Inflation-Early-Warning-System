@@ -22,8 +22,11 @@ watches live with ETA, geofence events and delivery confirmation.* Budget half a
 
 ## 1. Phone set-up (driver)
 
-- [ ] Android + Chrome is the reliable combination. iOS Safari works but pauses GPS the moment the screen locks.
-- [ ] Open `https://<domain>/api/driver/`, sign in, **Add to Home Screen**, open it from the home-screen icon.
+- [ ] **Preferred: the Android app** (`docs/driver-android.md`). Install the APK from the `driver-android` CI run,
+      allow location "While using the app" and notifications, and set battery to Unrestricted. Location then
+      continues with the screen locked, during calls and with Maps in front.
+- [ ] Browser fallback: Android + Chrome. iOS Safari works but pauses GPS the moment the screen locks.
+- [ ] Browser only: open `https://<domain>/api/driver/`, sign in, **Add to Home Screen**, open it from the home-screen icon.
 - [ ] Allow location ("while using the app") and camera.
 - [ ] Settings → Battery → set the browser to **unrestricted / no optimisation** (Android kills background tabs otherwise).
 - [ ] Plug the phone into the vehicle charger. Wake lock + GPS drains ~15–25%/hour.
@@ -50,7 +53,9 @@ watches live with ETA, geofence events and delivery confirmation.* Budget half a
 
 ## 3. Write down (docs/field-test-results.md)
 
-- Date, route, distance, phone model + OS + browser, network (Jio/Airtel/…)
+- Date, route, distance, phone model + OS, **Android app (APK run number) or browser**, network (Jio/Airtel/…)
+- With the Android app: lock the screen for 10 min and switch to Maps for 10 min mid-route. Did fixes keep arriving?
+  (This is what B-2 option (b) has to prove.)
 - GPS fixes received vs expected (`points_count` in `GET /trips/{id}`; expected ≈ trip seconds / 5–10)
 - Longest gap between fixes and why (screen locked? dead zone?)
 - ETA error at 30 / 15 / 5 min before arrival (predicted vs actual)
@@ -62,7 +67,9 @@ That results file is the evidence for the "real tracking" claim. Without it, say
 
 ## 4. Should the driver app become React Native?
 
-Decide from the gap numbers above, not from opinion:
+**Decided in Pre-V3 B-2: no.** It is a Capacitor wrapper around the same code instead (`docs/driver-app-investigation.md`,
+`docs/driver-android.md`). The reliability comes from the native foreground service, which Capacitor provides too.
+The notes below were the original decision rule:
 
 - **Stay on the PWA** if the phone stays unlocked on a mount and gaps are only from dead zones (the offline buffer covers those).
 - **Switch to React Native** (with a background-location library and a foreground service on Android) if drivers

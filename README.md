@@ -344,6 +344,54 @@ Details are in docs/data-sources.md.
   - The Farmer page chart shows the calibration badge next to the provenance badge.
 - Admin → "V2 results" lists the B-1 study (SYNTHETIC) and the live calibration status of the displayed forecasts.
 
+## Pre-V3 B-2: driver app keeps tracking with the screen locked
+
+The investigation is in [docs/driver-app-investigation.md](docs/driver-app-investigation.md). The chosen fix,
+option (b), is in [docs/driver-android.md](docs/driver-android.md).
+
+- **Android app** (`apps/driver-android`): a Capacitor 7 wrapper around the same `apps/driver-pwa` files.
+  - Location comes from a native foreground service with an ongoing "AgriPulse: tracking on" notification.
+  - It continues with the screen locked, during calls and with Maps in front.
+  - It runs only between Start trip and End trip. It also stops on logout, withdrawn consent, or when the server
+    refuses points.
+  - The APK is built by `.github/workflows/driver-android.yml` (debug build; set the `AGRIPULSE_API` Actions
+    variable first).
+- **Browser app fixes:**
+  - The screen lock is re-requested after every interruption. Before, one phone call let the screen sleep for the
+    rest of the trip.
+  - When hidden, the app reports "paused, screen off" to the server. On return it tells the driver how long
+    location was paused.
+  - A before-you-drive checklist on the trip screen.
+  - One fix per 5 s.
+  - Fixed: the red TRACKING ON bar stayed visible after a trip ended, because a CSS rule overrode the `hidden`
+    attribute.
+- **Server:**
+  - `POST /trips/{id}/pause` sets `trips.tracking_paused_at` / `tracking_pause_reason` (migration 0009). The next
+    fix clears it with a `tracking_resumed` event.
+  - When a paused phone goes quiet, the monitor records the stop as `phone_paused`, and the fleet owner and FPO
+    get a "Tracking paused — the vehicle may still be moving" alert instead of "Vehicle stopped".
+  - The farmer's live view shows "Location paused since HH:MM".
+  - CORS allows `https://localhost` (the Android app's origin).
+
+**How to verify**
+- `pytest tests/test_tracking_pause.py tests/test_driver_app.py`: 12 tests. `test_driver_app.py` runs the real
+  app files in headless Chromium and skips without Playwright (`pip install -e .[browser]`). It checks:
+  - pause needs an active, consented trip and the trip's own driver
+  - an offline replay from before the pause doesn't resume it
+  - the monitor and alert say "paused" rather than "stopped"
+  - end and withdrawn consent clear the pause
+  - Kannada copy exists, and CORS allows the app
+  - the screen lock is re-acquired 3 times out of 3
+  - the pause report is sent once, and the driver notice appears
+  - one fix per 5 s
+  - Android path: the plugin watcher shows a notification naming the trip, no screen lock is used, no pause is
+    reported when hidden, and points upload over HTTP
+  - GPS stops on logout and on a 409 from the server
+- `alembic upgrade head` applies migration 0009.
+- GitHub: Actions → driver-android shows a green run with an `agripulse-driver-debug` artifact.
+- **Real phone** (field test): lock the screen for 10 min and use Maps for 10 min mid-route. Fixes keep arriving,
+  and the notification is visible the whole time.
+
 ## V1 status
 
 | Done-criterion | Status |

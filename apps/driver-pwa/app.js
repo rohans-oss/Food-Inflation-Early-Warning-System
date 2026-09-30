@@ -1,7 +1,11 @@
-/* AgriPulse driver PWA.
+/* AgriPulse driver app: the browser PWA AND the Android app (apps/driver-android wraps these same files).
  * - GPS only while a trip is in_progress AND the driver ticked consent (server enforces it too)
  * - every fix goes to IndexedDB first, then is flushed over WebSocket (or HTTP when the socket is down)
  * - re-sends are safe: the server de-duplicates on (trip, timestamp)
+ * - Android app: location from the background-geolocation plugin (foreground service + "tracking on"
+ *   notification), so it keeps working with the screen locked or Maps in front.
+ * - Browser: location stops whenever the page is hidden (no web API can prevent it). The app keeps the screen on,
+ *   tells the server "paused, screen off" when hidden, and tells the driver how long it was paused on return.
  */
 // The PWA is served by the API at <api-root>/driver/, so the API root is the parent path:
 // dev  http://localhost:8000/driver/     -> http://localhost:8000
@@ -11,10 +15,21 @@ const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem("ap_driver_token");
 let refreshToken = localStorage.getItem("ap_driver_refresh");
 let current = null;      // trip being viewed
-let watchId = null;      // geolocation watch
+let tracking = null;     // id of the trip being tracked (null = not tracking)
+let watchId = null;      // browser geolocation watch
+let nativeWatcher = null; // Android background-geolocation watcher id
 let ws = null;
 let wakeLock = null;
 let flushing = false;
+let hiddenAt = null;     // browser: when the page was hidden during tracking
+let lastFixMs = 0;
+const MIN_FIX_MS = 5000; // one fix per 5 s (the native plugin reports every second)
+
+// ------------------------------------------------------------ platform
+const cap = window.Capacitor;
+const NATIVE = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+const plugin = (name) => (cap.registerPlugin ? cap.registerPlugin(name) : cap.Plugins[name]);
+const BG = NATIVE ? plugin("BackgroundGeolocation") : null;
 
 // ------------------------------------------------------------ IndexedDB buffer
 const dbp = new Promise((res, rej) => {
@@ -59,7 +74,7 @@ async function api(path, opts = {}, retried = false) {
   if (r.status === 401 && !retried && !path.startsWith("/auth/") && await tryRefresh()) return api(path, opts, true);
   if (r.status === 401) { logout(); throw new Error("Session expired"); }
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.detail || r.statusText);
+  if (!r.ok) { const e = new Error(body.detail || r.statusText); e.status = r.status; throw e; }
   return body;
 }
 
@@ -105,7 +120,7 @@ async function loadTrips() {
   }
   // resume tracking after a reload if a trip is live
   const live = trips.find((t) => t.status === "in_progress" && t.consent_given_at);
-  if (live && watchId === null) startTracking(live.id);
+  if (live && tracking === null) startTracking(live.id);
 }
 $("refresh").onclick = loadTrips;
 $("back").onclick = loadTrips;
@@ -122,6 +137,7 @@ function render() {
   $("tMeta").textContent = `Status: ${t.status} · load ${t.load_tons} t · planned ${t.planned_distance_km ?? "?"} km`
     + (t.route_source === "haversine" ? " (approximate route)" : "");
   $("consentBox").hidden = !["accepted", "in_progress"].includes(t.status);
+  $("checklist").hidden = $("consentBox").hidden;
   $("consent").checked = !!t.consent_given_at;
   $("scanBox").hidden = !(t.status === "in_progress" && !t.pickup_scanned_at && t.shipment_id);
   $("deliveryBox").hidden = !(t.status === "in_progress" && t.delivery_qr_token);
@@ -161,10 +177,11 @@ $("consent").onchange = async (e) => {
   if (!e.target.checked) stopTracking();
 };
 
-function notice(text) {
+function notice(text, warn = false) {
   $("notice").textContent = text;
+  $("notice").className = "notice" + (warn ? " warn" : "");
   $("notice").hidden = false;
-  setTimeout(() => { $("notice").hidden = true; }, 8000);
+  setTimeout(() => { $("notice").hidden = true; }, warn ? 20000 : 8000);
 }
 
 // ------------------------------------------------------------ QR
@@ -203,37 +220,101 @@ $("scanBtn").onclick = async () => {
 };
 
 // ------------------------------------------------------------ tracking
+function recordFix(tripId, f) {
+  // f = {time (ms), lat, lon, speed_mps, accuracy}
+  if (tracking !== tripId || f.time - lastFixMs < MIN_FIX_MS) return;
+  lastFixMs = f.time;
+  const p = {
+    k: `${tripId}:${f.time}`, trip: tripId,
+    recorded_at: new Date(f.time).toISOString(),
+    lat: f.lat, lon: f.lon,
+    speed_kmph: f.speed_mps != null ? f.speed_mps * 3.6 : null,
+    accuracy_m: f.accuracy,
+  };
+  bufAdd(p).then(flush);
+}
+
 async function startTracking(tripId) {
-  if (watchId !== null) return;
-  if (!("geolocation" in navigator)) return alert("This phone has no GPS access in the browser.");
+  if (tracking !== null) return;
+  tracking = tripId;
+  lastFixMs = 0;
   $("trackingBar").hidden = false;
   $("trackingTrip").textContent = "#" + tripId;
-  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* not supported */ }
   openSocket(tripId);
+  if (NATIVE) return startNative(tripId);
+  if (!("geolocation" in navigator)) { stopTracking(); return alert("This phone has no GPS access in the browser."); }
+  await holdScreen();
   watchId = navigator.geolocation.watchPosition(
-    async (pos) => {
-      const p = {
-        k: `${tripId}:${pos.timestamp}`, trip: tripId,
-        recorded_at: new Date(pos.timestamp).toISOString(),
-        lat: pos.coords.latitude, lon: pos.coords.longitude,
-        speed_kmph: pos.coords.speed != null ? pos.coords.speed * 3.6 : null,
-        accuracy_m: pos.coords.accuracy,
-      };
-      await bufAdd(p);
-      flush();
-    },
+    (pos) => recordFix(tripId, { time: pos.timestamp, lat: pos.coords.latitude, lon: pos.coords.longitude,
+      speed_mps: pos.coords.speed, accuracy: pos.coords.accuracy }),
     (err) => { $("tFix").textContent = "GPS error: " + err.message; },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
   );
 }
 
+async function startNative(tripId) {
+  // Android 13+: the plugin doesn't ask for notifications, and without them the "tracking on" notice is hidden.
+  try { await plugin("LocalNotifications").requestPermissions(); } catch { /* older Android: not needed */ }
+  try {
+    const id = await BG.addWatcher({
+      backgroundTitle: "AgriPulse: tracking on",
+      backgroundMessage: `Sharing your location for trip #${tripId} until you end the trip.`,
+      requestPermissions: true, stale: false, distanceFilter: 0,
+    }, (loc, err) => {
+      if (err) {
+        $("tFix").textContent = "GPS error: " + err.message;
+        if (err.code === "NOT_AUTHORIZED") notice("Location permission is off. Tap 'Open app settings' and allow location.", true);
+        return;
+      }
+      if (loc) recordFix(tripId, { time: loc.time ?? Date.now(), lat: loc.latitude, lon: loc.longitude,
+        speed_mps: loc.speed, accuracy: loc.accuracy });
+    });
+    if (tracking === tripId) nativeWatcher = id; else BG.removeWatcher({ id }); // stopped while starting
+  } catch (e) { $("tFix").textContent = "GPS error: " + e.message; }
+}
+
 function stopTracking() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  if (nativeWatcher !== null) BG.removeWatcher({ id: nativeWatcher }).catch(() => {});
   watchId = null;
+  nativeWatcher = null;
+  tracking = null;
+  hiddenAt = null;
   if (ws) { ws.onclose = null; ws.close(); ws = null; }
-  wakeLock?.release?.();
-  wakeLock = null;
+  releaseScreen();
   $("trackingBar").hidden = true;
+}
+
+// The server refused points: the trip ended or consent was withdrawn elsewhere. Stop GPS now (privacy rule 4).
+async function trackingRefused(tripId, why) {
+  const all = await bufAll();
+  await bufDel(all.filter((p) => String(p.trip) === String(tripId)).map((p) => p.k));
+  if (String(tracking) === String(tripId)) stopTracking();
+  notice(`Location sharing stopped: ${why}`, true);
+}
+
+// Browser only. The browser drops the screen lock whenever the page is hidden, so it is re-requested every time
+// the page comes back (B-2 finding: the old code asked once, and after one phone call the screen went to sleep).
+async function holdScreen() {
+  if (NATIVE || tracking === null || wakeLock || document.visibilityState !== "visible") return;
+  try {
+    wakeLock = await navigator.wakeLock?.request("screen");
+    wakeLock?.addEventListener("release", () => { wakeLock = null; });
+  } catch { wakeLock = null; /* not supported, or battery saver */ }
+}
+function releaseScreen() {
+  const w = wakeLock;
+  wakeLock = null;
+  w?.release?.().catch?.(() => {});
+}
+
+// Browser only: the page is about to stop running, so tell the server location is paused (not "vehicle stopped").
+function reportPause(tripId) {
+  fetch(API + `/trips/${tripId}/pause`, {
+    method: "POST", keepalive: true,
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ reason: "screen_off", at: new Date().toISOString() }),
+  }).catch(() => { /* offline: the monitor will call it "no signal" instead */ });
 }
 
 function openSocket(tripId) {
@@ -242,13 +323,13 @@ function openSocket(tripId) {
   ws.onopen = () => flush();
   ws.onmessage = (m) => {
     const r = JSON.parse(m.data);
-    if (r.ok === false) { $("scanMsg").textContent = r.error; return; }
+    if (r.ok === false) { trackingRefused(tripId, r.error); return; }
     if (r.trip && current && current.id === tripId) { Object.assign(current, r.trip); render(); }
   };
   // 4403 = token rejected (usually expired): refresh first, then reconnect
   ws.onclose = async (ev) => {
     ws = null;
-    if (watchId === null) return;
+    if (tracking !== tripId) return;
     if (ev.code === 4403) await tryRefresh();
     setTimeout(() => openSocket(tripId), 3000);
   };
@@ -268,8 +349,17 @@ async function flush() {
       for (let i = 0; i < pts.length; i += 500) {
         const chunk = pts.slice(i, i + 500);
         const payload = chunk.map(({ recorded_at, lat, lon, speed_kmph, accuracy_m }) => ({ recorded_at, lat, lon, speed_kmph, accuracy_m }));
-        if (ws && ws.readyState === 1 && String(current?.id) === tripId) ws.send(JSON.stringify({ points: payload }));
-        else await api(`/trips/${tripId}/points`, { method: "POST", body: JSON.stringify({ points: payload }) });
+        // the socket only while on screen: in the background (Android app) Android throttles it; HTTP is native there
+        if (ws && ws.readyState === 1 && String(current?.id) === tripId && document.visibilityState === "visible") {
+          ws.send(JSON.stringify({ points: payload }));
+        } else {
+          try {
+            await api(`/trips/${tripId}/points`, { method: "POST", body: JSON.stringify({ points: payload }) });
+          } catch (e) {
+            if (e.status === 409) { await trackingRefused(tripId, e.message); break; } // this trip's queue is already dropped
+            throw e;
+          }
+        }
         await bufDel(chunk.map((p) => p.k));
       }
     }
@@ -290,12 +380,25 @@ function netState() {
 }
 window.addEventListener("online", netState);
 window.addEventListener("offline", netState);
-document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState === "visible" && watchId !== null && !wakeLock) {
-    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+document.addEventListener("visibilitychange", () => {
+  if (tracking === null || NATIVE) return; // the Android app keeps recording in the background
+  if (document.visibilityState === "hidden") {
+    if (hiddenAt === null) { hiddenAt = Date.now(); reportPause(tracking); }
+    return;
+  }
+  holdScreen();
+  if (hiddenAt !== null) {
+    const min = Math.round((Date.now() - hiddenAt) / 60000);
+    hiddenAt = null;
+    if (min >= 1) notice(`Location was paused for ${min} min while this app was off screen. Keep it open on screen while driving.`, true);
   }
 });
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+$("openSettings").onclick = () => BG?.openSettings();
+$("checkWeb").hidden = NATIVE;
+$("checkNative").hidden = !NATIVE;
+$("footWeb").hidden = NATIVE;
+// The Android app serves these files itself; a service worker would only get in the way there.
+if (!NATIVE && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 netState();
 if (token) loadTrips().catch(() => show("loginView")); else show("loginView");

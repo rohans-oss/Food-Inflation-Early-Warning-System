@@ -1,0 +1,11 @@
+{
+  "appId": "org.agripulse.driver",
+  "appName": "AgriPulse Driver",
+  "webDir": "www",
+  "android": {
+    "useLegacyBridge": true
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true }
+  }
+}

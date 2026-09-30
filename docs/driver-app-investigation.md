@@ -1,6 +1,7 @@
 # Driver app: GPS gaps when the screen locks (Pre-V3 B-2, investigation only)
 
-**Status: investigation. No app code has changed.** The fix is chosen by the project owner.
+**Status: investigation done. Decision (project owner, 2026-09-30): option (b), Capacitor, Android first, with (a)'s
+fixes. Built in B-2; see `docs/driver-android.md`.**
 
 **Evidence level.** There is no field-test data yet (`docs/field-test-results.md` does not exist). The numbers
 below come from two simulations:

@@ -1,0 +1,54 @@
+# Pre-V3 B-2: builds the Android driver app (apps/driver-android wraps apps/driver-pwa) as a debug APK.
+# Download it from the run's "Artifacts". Set the API address once under
+# Settings -> Secrets and variables -> Actions -> Variables: AGRIPULSE_API = https://<domain>/api
+# (or type it when starting the workflow by hand). No signing keys are used or stored: debug build only.
+name: driver-android
+
+on:
+  push:
+    paths:
+      - "apps/driver-pwa/**"
+      - "apps/driver-android/**"
+      - ".github/workflows/driver-android.yml"
+  workflow_dispatch:
+    inputs:
+      api:
+        description: "API address baked into the app (https://<domain>/api)"
+        required: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/driver-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/driver-android/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: API address
+        id: api
+        run: |
+          API="${{ github.event.inputs.api || vars.AGRIPULSE_API }}"
+          if [ -z "$API" ]; then
+            echo "::warning::AGRIPULSE_API is not set: building with a placeholder API. The app will install but can't sign in."
+            API="https://api-not-configured.invalid/api"; echo "suffix=-NO-API" >> "$GITHUB_OUTPUT"
+          fi
+          echo "AGRIPULSE_API=$API" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run sync
+      - name: Build debug APK
+        working-directory: apps/driver-android/android
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agripulse-driver-debug${{ steps.api.outputs.suffix }}
+          path: apps/driver-android/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

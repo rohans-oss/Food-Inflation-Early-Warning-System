@@ -15,6 +15,8 @@ const EVENT_LABEL: Record<string, string> = {
   left_pickup_zone: "Left pickup area",
   reached_mandi: "Reached mandi",
   unexpected_stop: "Unexpected stop",
+  tracking_paused: "Driver's phone paused location (app not on screen)",
+  tracking_resumed: "Location sharing resumed",
   delivered: "Delivered (QR scanned at gate)",
 };
 
@@ -70,6 +72,9 @@ export function TripLive({ tripId }: { tripId: number }) {
         <SimBadge on={trip.is_simulated} />
         {trip.route_source === "haversine" && <Badge>{t("approximateRoute")}</Badge>}
         {cur.status === "in_progress" && <Badge kind={live.connected ? "good" : "neutral"}>{live.connected ? "Live" : "Reconnecting"}</Badge>}
+        {cur.status === "in_progress" && cur.tracking_paused_since && (
+          <p className="w-full text-sm text-warn"><Badge kind="warn">Location paused</Badge> The driver's phone stopped sharing location at {time(cur.tracking_paused_since)} (app not on screen). The vehicle may still be moving.</p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label={t("eta")} value={cur.eta_local ?? "–"} />
@@ -84,7 +89,7 @@ export function TripLive({ tripId }: { tripId: number }) {
           {trip.started_at && <li><span className="text-muted">{dateTime(trip.started_at)}</span> · Trip started, driver consented to location sharing</li>}
           {trip.events?.map((e: any, i: number) => (
             <li key={i}><span className="text-muted">{time(e.at)}</span> · {EVENT_LABEL[e.event] ?? e.event}
-              {e.details?.minutes ? ` (${e.details.minutes} min)` : ""}{e.details?.reason === "no_signal" ? " — phone silent" : ""}</li>
+              {e.details?.minutes ? ` (${e.details.minutes} min)` : ""}{e.details?.reason === "no_signal" ? " — phone silent" : ""}{e.details?.reason === "phone_paused" ? " — phone paused, not confirmed stopped" : ""}</li>
           ))}
           {trip.ended_at && <li><span className="text-muted">{dateTime(trip.ended_at)}</span> · Trip ended, tracking off</li>}
         </ol>

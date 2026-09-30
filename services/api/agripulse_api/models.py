@@ -346,6 +346,9 @@ class Trip(Base):
     remaining_km: Mapped[float | None] = mapped_column(Float)
     eta_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     stopped_since: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Pre-V3 B-2: the driver's phone said location stopped (e.g. screen off in the browser app); cleared by the next fix
+    tracking_paused_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    tracking_pause_reason: Mapped[str | None] = mapped_column(String(24))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     vehicle: Mapped[Vehicle] = relationship()

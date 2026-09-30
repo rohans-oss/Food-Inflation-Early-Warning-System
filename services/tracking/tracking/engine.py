@@ -92,6 +92,12 @@ def process_points(db: Session, trip: Trip, points: list[dict], now: datetime | 
         db.add(GpsPoint(trip_id=trip.id, recorded_at=ts, lat=lat, lon=lon, speed_kmph=speed, accuracy_m=acc,
                         received_at=now, is_simulated=trip.is_simulated))
         accepted += 1
+        # A fix recorded after a pause ends it (offline replays from before the pause don't).
+        if trip.tracking_paused_at is not None and ts >= trip.tracking_paused_at:
+            paused = int((ts - trip.tracking_paused_at).total_seconds() // 60)
+            add_event(db, trip, "tracking_resumed", ts, lat, lon, minutes=paused, reason=trip.tracking_pause_reason)
+            events.append("tracking_resumed")
+            trip.tracking_paused_at = trip.tracking_pause_reason = None
         # Only move "current position" forward in time (offline replays can arrive late).
         if trip.last_seen_at is None or ts >= trip.last_seen_at:
             trip.last_lat, trip.last_lon, trip.last_seen_at = lat, lon, ts
@@ -183,12 +189,34 @@ def _on_arrival(db: Session, trip: Trip, mandi: Mandi, ts: datetime) -> None:
                mandi=mandi.name, time=_local(ts))
 
 
+PAUSE_REASONS = {"screen_off"}  # the browser app is hidden: the phone cannot record location (docs/driver-app-investigation.md)
+
+
+def pause_tracking(db: Session, trip: Trip, reason: str, at: datetime) -> bool:
+    """The driver's phone reports that it will stop recording. Returns False if already paused."""
+    if trip.status != "in_progress" or trip.consent_given_at is None:
+        raise TrackingNotActive("Tracking is only accepted during an active trip with driver consent")
+    if reason not in PAUSE_REASONS:
+        raise ValueError(f"reason must be one of {sorted(PAUSE_REASONS)}")
+    if trip.tracking_paused_at is not None:
+        return False
+    trip.tracking_paused_at, trip.tracking_pause_reason = at, reason
+    add_event(db, trip, "tracking_paused", at, trip.last_lat, trip.last_lon, reason=reason)
+    payload = live_payload(trip)
+    hub.publish(f"trip:{trip.id}", {"type": "position", **payload})
+    if trip.fleet_org_id:
+        hub.publish(f"fleet:{trip.fleet_org_id}", {"type": "position", **payload})
+    return True
+
+
 def _on_stop(db: Session, trip: Trip, minutes: int) -> None:
     from agripulse_api.alerts import notify, trip_audience
 
+    # A phone that said it paused (screen off) is NOT evidence the vehicle stopped: say what we know.
+    kind = "tracking_paused" if trip.tracking_paused_at is not None else "unexpected_stop"
     for u in trip_audience(db, trip):
         if u.role in ("fleet_owner", "fpo"):
-            notify(db, u, "unexpected_stop", f"stop:{trip.id}:{trip.stopped_since.isoformat()}",
+            notify(db, u, kind, f"stop:{trip.id}:{trip.stopped_since.isoformat()}",
                    vehicle=trip.vehicle.registration, minutes=minutes)
 
 
@@ -212,6 +240,8 @@ def live_payload(trip: Trip) -> dict:
         "load_tons": trip.load_tons,
         "is_simulated": trip.is_simulated,
         "stopped_since": trip.stopped_since,
+        "tracking_paused_since": trip.tracking_paused_at,
+        "tracking_pause_reason": trip.tracking_pause_reason,
     }
 
 

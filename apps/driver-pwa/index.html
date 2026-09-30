@@ -23,6 +23,7 @@
   </div>
 
   <main>
+    <p id="notice" class="notice" role="status" hidden></p>  <!-- above every view: the driver may be on the trip list -->
     <section id="loginView" hidden>
       <h1>Sign in</h1>
       <form id="loginForm">
@@ -51,8 +52,25 @@
         <label class="row"><input type="checkbox" id="consent"> I agree to share my location for this trip only</label>
       </div>
 
+      <!-- Pre-V3 B-2: before-you-drive checklist. Browser and Android app differ (docs/driver-app-investigation.md) -->
+      <div id="checklist" class="card" hidden>
+        <p><b>Before you drive</b></p>
+        <ul id="checkWeb" class="check">
+          <li>Mount the phone where it can see the sky and plug it into the charger.</li>
+          <li><b>Keep this app on screen.</b> In a browser, location stops while the screen is off, during calls,
+            or while another app (like Maps) is in front. The farmer sees "location paused" until you come back.</li>
+          <li>Don't press the power button. The app keeps the screen on while tracking.</li>
+        </ul>
+        <ul id="checkNative" class="check" hidden>
+          <li>Allow location <b>While using the app</b> and allow <b>notifications</b>. The "AgriPulse: tracking on"
+            notification stays until you end the trip.</li>
+          <li>You can lock the phone or use Maps: location keeps being shared until you end the trip.</li>
+          <li>Set battery to <b>Unrestricted</b> for AgriPulse Driver (Settings → Apps → AgriPulse Driver → Battery).
+            On Xiaomi, Oppo, Vivo and Realme also turn on <b>Autostart</b>. <button id="openSettings" class="link" type="button">Open app settings</button></li>
+        </ul>
+      </div>
+
       <div class="actions" id="actions"></div>
-      <p id="notice" class="notice" role="status" hidden></p>
 
       <div id="scanBox" class="card" hidden>
         <p><b>Pickup QR</b> — scan the code on the farmer's / FPO's screen.</p>
@@ -77,11 +95,12 @@
         <div class="row between"><span>Last fix</span><b id="tFix">–</b></div>
         <div class="row between"><span>Points queued offline</span><b id="tQueued">0</b></div>
       </div>
-      <p class="meta">Keep this screen open during the trip. Browsers pause location in the background; the app holds a
-        screen wake lock while tracking and flushes anything recorded offline when the network returns.</p>
+      <p class="meta" id="footWeb">Keep this screen open during the trip. Browsers pause location in the background; the app
+        keeps the screen on while tracking and sends anything recorded offline when the network returns.</p>
     </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="config.js"></script>  <!-- empty for the browser app; the Android build writes the API address here -->
   <script src="app.js"></script>
 </body>
 </html>

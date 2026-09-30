@@ -7,7 +7,7 @@ Each item says where it came from and why it's deferred.
 
 | # | Item | Why it matters | Notes |
 |---|---|---|---|
-| 1 | **React Native driver app** | Browsers stop GPS when the screen locks or the driver switches app; the PWA can't fix that | Decide from field-test gap data (`docs/field-test.md` §4). Server API unchanged |
+| 1 | ~~React Native driver app~~ | Superseded by Pre-V3 B-2: Capacitor Android app around the same code (`docs/driver-android.md`) | iOS build (needs Mac + Apple account), Play Store release (signed build + foreground-service declaration), one-tap battery-optimisation prompt |
 | 2 | **Kannada native-speaker review** | Alert + UI strings are machine-drafted (`kn_reviewed: false` in both i18n files) | `services/api/agripulse_api/i18n/alerts.json`, `apps/web/lib/messages.json` |
 | 3 | **Mandi-map confirmation** | Seeded coordinates are town centroids (`coords_verified = false`); a wrong point means `reached_mandi` never fires | `PATCH /admin/mandis/{id}` per mandi. Graph distance edges in V2-3 use these points too |
 | 4 | Driver can end a trip before the delivery QR is scanned | Lots stay `in_transit` forever; lender reliability undercounts | Either block `end` until delivery scan, or let the trader close the lot later |
@@ -23,6 +23,8 @@ Each item says where it came from and why it's deferred.
 | 14 | Calendar features carry one annual harmonic only | V2-5: real NDVI helped synthetic prices only by supplying seasonal shape the single sin/cos pair misses | Add a second harmonic (sin/cos of 2·doy) to `features/store.py _calendar` and to V1 `features/legacy.py`; re-run the ablation |
 | 15 | Satellite district = 30 km circle, 2 districts only | V2-4 pilot approximation; tomato is ~8% of that cropland | Real district polygons, more districts, and a tomato-specific mask (field boundaries or crop classification) before expecting a tomato signal |
 | 16 | Calibration is global per horizon, not conditional | B-1: mean coverage on target, but 15 of 32 dataset-horizons still outside ±5; pinball 0.6–2.9% worse | Conditional calibration (by mandi, season or recent volatility) is new modelling; decide on REAL data. Also run `apply_to_predictions` on the ablation variants and TFT, and choose `track_record` vs `aci` on real data |
+| 17 | Delay alerts during a paused / silent phone | B-2: the monitor pushes the ETA forward while no fixes arrive, so a paused browser phone can still trigger a delay alert from a stale position | Mark such delay alerts as "estimated from last known position", or hold them while `tracking_paused_at` is set; decide after the field test |
+| 18 | New Kannada alert copy (`tracking_paused`) is machine-drafted | Same as the other Kannada strings | Include in the native-speaker review |
 
 ## V3 (by design)
 

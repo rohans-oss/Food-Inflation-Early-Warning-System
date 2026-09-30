@@ -1,0 +1,21 @@
+{
+  "name": "agripulse-driver-android",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Android wrapper (Capacitor) around apps/driver-pwa: background location via a foreground service (Pre-V3 B-2)",
+  "scripts": {
+    "www": "node scripts/prepare-www.mjs",
+    "sync": "node scripts/prepare-www.mjs && cap sync android",
+    "apk:debug": "npm run sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "1.2.26",
+    "@capacitor/android": "7.6.9",
+    "@capacitor/core": "7.6.9",
+    "@capacitor/local-notifications": "7.0.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.6.9"
+  },
+  "engines": { "node": ">=20" }
+}

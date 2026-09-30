@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tracking import routing
-from tracking.engine import TrackingNotActive, _local, add_event, live_payload, process_points, public_payload
+from tracking.engine import TrackingNotActive, _local, add_event, live_payload, pause_tracking, process_points, public_payload
 from tracking.hub import hub
 
 from ..alerts import mandi_traders, notify, trip_audience
@@ -174,6 +174,8 @@ def consent(trip_id: int, body: ConsentIn, db: Session = Depends(get_db), user: 
     if t.status not in ("accepted", "in_progress"):
         raise HTTPException(409, "Accept the trip first")
     t.consent_given_at = datetime.now(timezone.utc) if body.consent else None
+    if not body.consent:
+        t.tracking_paused_at = t.tracking_pause_reason = None
     db.commit()
     return trip_out(db, t, user)
 
@@ -253,6 +255,7 @@ def end(trip_id: int, db: Session = Depends(get_db), user: User = Depends(requir
     t = _driver_trip(db, user, trip_id)
     move(db, t, "completed", user.id)
     t.ended_at = datetime.now(timezone.utc)
+    t.tracking_paused_at = t.tracking_pause_reason = None
     t.share_expires_at = min(t.share_expires_at or t.ended_at, t.ended_at + timedelta(hours=2))
     db.commit()
     hub.publish(f"trip:{t.id}", {"type": "status", "trip_id": t.id, "status": t.status})
@@ -281,6 +284,30 @@ def post_points(trip_id: int, body: PointsIn, db: Session = Depends(get_db), use
         raise HTTPException(409, str(exc))
     db.commit()
     return {**out, "trip": live_payload(t)}
+
+
+class PauseIn(BaseModel):
+    reason: str = "screen_off"
+    at: datetime | None = None
+
+
+@router.post("/trips/{trip_id}/pause")
+def post_pause(trip_id: int, body: PauseIn, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
+    """Pre-V3 B-2: the browser app is about to be hidden and can't record location. The next fix resumes tracking.
+    Lets the monitor and the farmer's view say "location paused on the phone" instead of "vehicle stopped"."""
+    t = _driver_trip(db, user, trip_id)
+    now = datetime.now(timezone.utc)
+    at = min(body.at, now) if body.at else now
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    try:
+        changed = pause_tracking(db, t, body.reason, at)
+    except TrackingNotActive as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    db.commit()
+    return {"paused": True, "changed": changed, "trip": live_payload(t)}
 
 
 @router.post("/trips/{trip_id}/share")

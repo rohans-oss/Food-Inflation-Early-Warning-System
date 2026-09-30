@@ -29,6 +29,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "respx>=0.21"]
+# Pre-V3 B-2: tests/test_driver_app.py runs the driver app in headless Chromium (skips without it)
+browser = ["playwright>=1.40"]
 mlflow-ui = ["mlflow>=3.0"]
 # V2-2 TFT (CPU is enough; see docs/tft-results.md for timings). tests/test_tft.py skips without it.
 tft = ["pytorch-forecasting>=1.4", "lightning>=2.4", "torch>=2.4"]

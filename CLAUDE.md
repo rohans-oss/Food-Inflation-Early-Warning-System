@@ -182,5 +182,12 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   applied / not_yet_applicable / none. p50 is never moved. Every eval run reports coverage; `eval.coverage.assert_coverage`
   enforces the tolerance. Displays show `CalibrationBadge`. Re-run `python -m agripulse_ml.calibration_study` when the
   models change (tests guard the committed CSV).
+- Driver app (B-2): ONE codebase, `apps/driver-pwa`. `apps/driver-android` is a Capacitor 7 wrapper; its `www/` is a
+  generated copy (`scripts/prepare-www.mjs`, API address from `AGRIPULSE_API`), never edited by hand. app.js branches
+  on `NATIVE` (Capacitor): native location = background-geolocation foreground service; browser = watchPosition +
+  wake lock (re-requested on every return to visible) + `POST /trips/{id}/pause` when hidden. Any path that stops
+  tracking goes through `stopTracking()`. A 409 from the server stops GPS (`trackingRefused`). Pause state lives on
+  `trips.tracking_paused_at` and is cleared by the next fix recorded after it, by end, or by withdrawn consent. The
+  APK builds in CI (.github/workflows/driver-android.yml); this workspace can't reach the Android SDK.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).

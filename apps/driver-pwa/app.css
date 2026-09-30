@@ -6,6 +6,8 @@
   :root { --bg: #111410; --fg: #e8ece4; --muted: #9aa393; --card: #1a1e18; --line: #2d332a; --brand: #22c55e; --brand-fg: #06210f; }
 }
 * { box-sizing: border-box; }
+/* the hidden attribute must win over display:flex/grid rules (the TRACKING ON bar stayed visible after a trip ended) */
+[hidden] { display: none !important; }
 body { margin: 0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); }
 header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card); position: sticky; top: 0; z-index: 2; }
 header strong { flex: 1; }
@@ -37,3 +39,5 @@ button:disabled { opacity: .5; }
 video { width: 100%; border-radius: 12px; margin: 8px 0; }
 #qr img, #qr svg { width: 100%; max-width: 280px; height: auto; display: block; margin: 0 auto; background: #fff; padding: 10px; border-radius: 10px; }
 .notice { background: #dcfce7; color: #14532d; border-radius: 10px; padding: 10px 12px; font-weight: 600; }
+.check { margin: 4px 0 0; padding-left: 20px; } .check li { margin: 6px 0; font-size: .92rem; }
+.notice.warn { background: #fef3c7; color: #92400e; }

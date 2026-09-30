@@ -28,6 +28,7 @@ SEVERITY = {
     "price_spike": "warning",
     "vehicle_delay": "warning",
     "unexpected_stop": "warning",
+    "tracking_paused": "warning",
     "picked_up": "info",
     "vehicle_arrived": "info",
     "delivered": "info",

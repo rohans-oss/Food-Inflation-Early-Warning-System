@@ -31,6 +31,10 @@
     "incoming_vehicle": {
       "title": "Incoming: {vehicle}",
       "body": "{vehicle} with {tons} t tomato is heading to {mandi}, ETA {eta}."
+    },
+    "tracking_paused": {
+      "title": "Tracking paused: {vehicle}",
+      "body": "The driver's phone for {vehicle} stopped sharing location {minutes} min ago (app not on screen). The vehicle may still be moving; call the driver."
     }
   },
   "kn": {
@@ -61,6 +65,10 @@
     "incoming_vehicle": {
       "title": "ಬರುತ್ತಿರುವ ವಾಹನ: {vehicle}",
       "body": "{vehicle} {tons} ಟನ್ ಟೊಮೆಟೊ ಹೊತ್ತು {mandi}ಗೆ ಬರುತ್ತಿದೆ, ಅಂದಾಜು ಸಮಯ {eta}."
+    },
+    "tracking_paused": {
+      "title": "ಟ್ರ್ಯಾಕಿಂಗ್ ನಿಂತಿದೆ: {vehicle}",
+      "body": "{vehicle} ವಾಹನದ ಚಾಲಕರ ಫೋನ್ {minutes} ನಿಮಿಷಗಳ ಹಿಂದೆ ಸ್ಥಳ ಹಂಚಿಕೆಯನ್ನು ನಿಲ್ಲಿಸಿದೆ (ಆ್ಯಪ್ ಪರದೆಯ ಮೇಲೆ ಇಲ್ಲ). ವಾಹನ ಇನ್ನೂ ಚಲಿಸುತ್ತಿರಬಹುದು; ಚಾಲಕರಿಗೆ ಕರೆ ಮಾಡಿ."
     }
   }
 }
