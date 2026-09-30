@@ -83,6 +83,25 @@ class User(Base):
     org: Mapped[Organization | None] = relationship()
 
 
+class ScenarioRun(Base):
+    """V3-2: one scenario-simulator run. COUNTERFACTUAL ESTIMATE — kept apart from `forecasts`, which a run never
+    writes. Stores the parameters, the assumptions used (with sources), both channels' results and who ran it."""
+
+    __tablename__ = "scenario_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scenario: Mapped[str] = mapped_column(String(32), index=True)  # rainfall_failure | export_ban
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    model_name: Mapped[str] = mapped_column(String(64))
+    forecast_issue_date: Mapped[date | None] = mapped_column(Date)
+    data_provenance: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(120))  # "COUNTERFACTUAL ESTIMATE — not a validated causal model"
+    assumptions: Mapped[dict] = mapped_column(JSON, default=dict)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    results: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class LoadProposal(Base):
     """V3-1: an optimizer proposal a person accepts or rejects. kind = consolidation (FPO: shared truckloads) or
     return_load (fleet owner: a job for a truck's drive home). Accepting creates shipments / trips through the normal

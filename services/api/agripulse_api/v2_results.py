@@ -35,6 +35,11 @@ RESULTS = [
      "headline": "Better than V3-0 on 204/240 days, worse on 2, 0 violations: +2 to +13% in sparse/medium batches. Dense "
                  "+38-47% is mostly shipping twice the lots (unshipped lots scored at 0); per tonne: transport -11 to -18%.",
      "data_provenance": SYNTHETIC, "doc": "docs/optimizer-results.md"},
+    {"phase": "V3-2", "title": "Scenario simulator (COUNTERFACTUAL ESTIMATE)", "outcome": "finding",
+     "headline": "Assumption chain (sourced elasticity -0.72, FAO ky): 50% Jun-Jul rain deficit -> about +10% (range "
+                 "+0.6 to +49%); export ban -> -0.3% (exports are 0.47% of output). The synthetic-trained model gives "
+                 "wrong-sign or erratic answers for both: shown separately, never blended.",
+     "data_provenance": SYNTHETIC, "doc": "docs/scenario-assumptions.md"},
     {"phase": "V3-0", "title": "Decisions on real data", "outcome": "not enough real data",
      "headline": "No real lots with a known sale outcome yet; decisions can't be scored on real data until the field "
                  "pilot and ~13 months of real prices.",

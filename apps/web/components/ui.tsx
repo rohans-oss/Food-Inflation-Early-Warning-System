@@ -89,6 +89,15 @@ export function ProvenanceBadge({ p, compact = false }: { p: string | null | und
   );
 }
 
+/** V3-2 rule 22: every scenario-simulator output. As visible as the SYNTHETIC badge; the full text, never abbreviated. */
+export function CounterfactualBadge({ text = "COUNTERFACTUAL ESTIMATE — not a validated causal model" }: { text?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md border-2 border-dashed border-warn bg-warn/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-ink">
+      <span aria-hidden>⚠</span>{text}
+    </span>
+  );
+}
+
 /** Pre-V3 B-1: whether the p10-p90 range shown is calibrated on the model's own track record. Text, not colour. */
 export function CalibrationBadge({ c, title }: { c: string; title?: string }) {
   const text: Record<string, string> = {

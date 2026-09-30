@@ -473,6 +473,42 @@ option (b), is in [docs/driver-android.md](docs/driver-android.md).
   2. Go to FPO → "Plan loads". The shared loads and the saving are shown.
   3. Accept. The shipments appear.
 
+## V3-2: scenario simulator
+
+> **COUNTERFACTUAL ESTIMATE — not a validated causal model**, and SYNTHETIC for every result today.
+
+- **Scenarios:** rainfall failure (districts, rain lost, window) and a tomato export ban (start date, optional
+  regional share). Each is answered by **two separate channels**:
+  - **(B) Documented assumption chain.** Supply shock → price through a sourced elasticity: −0.721, from RBI WP
+    08/2024. Rain → yield uses FAO's ky of 1.05. Exports come from WITS (96.8 kt), against production from PIB
+    (208.19 lakh t). Results have low / central / high ranges. Two links are marked **UNSOURCED** with wide ranges.
+  - **(A) What the current model does.** Its rain and arrivals inputs are perturbed and it is re-run. This is a
+    sensitivity of a synthetic-trained model.
+- **Finding** ([docs/scenario-assumptions.md](docs/scenario-assumptions.md)):
+  - (B) A 50% Jun–Jul deficit gives about +10% (range +0.6% to +49%). An export ban gives −0.3%, because exports are
+    0.47% of output.
+  - (A) gives wrong-sign or erratic answers to both. The UI flags when the two channels disagree.
+- **Runs** are stored in `scenario_runs` (migration 0012). The `forecasts` table is never written.
+- **Policy** → "Scenario simulator": a map coloured by p50 shift, a baseline-vs-scenario table, and the
+  assumptions with their sources. The label appears on every output.
+- API: `GET /scenarios`, `POST /scenarios/run`, `GET /scenarios/runs[/{id}]` (Policy and Admin).
+
+**How to verify**
+- `pytest tests/test_scenarios.py`: 14 tests.
+  - The rule-22 label text is exact.
+  - No shock means no shift. Directions and ranges hold, and the band never narrows (p90/p10).
+  - Sources are recorded, and UNSOURCED is stated.
+  - The harvest-lag window is applied.
+  - Only the chosen districts move, and **the `forecasts` table is unchanged byte for byte**.
+  - Without a trained model, channel A says "not available".
+  - An export ban comes out at about −0.3%, and a user-set share is recorded.
+  - Bad parameters get 422; access is Policy and Admin only.
+  - With a trained model, a zero perturbation leaves the forecast identical, and a window outside the model's view
+    is flagged.
+- `alembic upgrade head` (0012).
+- Policy page → Scenario simulator → rainfall failure, Kolar + Chikkaballapur, 50%, a window about 2–4 months ago
+  → Run. Channel B shows about +10% in those mandis.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256 with 240k iterations and a per-user salt (`agripulse_api/security.py`).

@@ -1,0 +1,55 @@
+# V3-2 scenario simulator: every assumption, with its source. Override the path with SCENARIOS_CONFIG=/path.toml
+# Rule 22: every output carries [label] text. Values marked source = "UNSOURCED" are judgement calls with wide ranges:
+# replace them with field or literature numbers before anyone relies on a result (docs/scenario-assumptions.md).
+
+[label]
+text = "COUNTERFACTUAL ESTIMATE — not a validated causal model"
+
+[demand]
+# Channel B's price response: log(price) moves by elasticity x log(availability).
+# Long-run coefficient of log availability-usage ratio on log CPI-tomato, ARDL, monthly Jul 2012 - Jun 2022:
+# -0.721, standard error 0.364 (RBI WPS (DEPR) 08/2024, Roy, Gupta, Wardhan, Sarkar, Tewari, Bansal, Bhatia, Gulati,
+# "Vegetables Inflation in India: A Study of Tomato, Onion and Potato (TOP)", 3 Oct 2024).
+# Range = central +- 1 standard error. RETAIL CPI, not wholesale: mandi prices usually move more.
+elasticity_central = -0.721
+elasticity_low = -0.357          # central + 1 SE (weaker response)
+elasticity_high = -1.085         # central - 1 SE (stronger response)
+source = "https://www.rbi.org.in/Scripts/PublicationsView.aspx?id=22723"
+
+[rainfall_failure]
+# Yield loss = ky x (water deficit the crop actually suffers).
+# ky: FAO crop information, tomato: yield response factor 1.05 over the season; 0.4-1.1 across growth stages.
+ky_central = 1.05
+ky_low = 0.4
+ky_high = 1.1
+ky_source = "https://www.fao.org/land-water/databases-and-software/crop-information/tomato/en/"
+# Share of the crop's water need that comes from rain AND is not replaced by irrigation. Kolar/Chikkaballapur tomato is
+# largely borewell-irrigated, so a rain deficit becomes only a partial water deficit. UNSOURCED.
+unreplaced_rain_share_low = 0.2
+unreplaced_rain_share_central = 0.4
+unreplaced_rain_share_high = 0.7
+unreplaced_rain_share_source = "UNSOURCED"
+# Share of a mandi's arrivals that come from its own district (the rest comes from outside the scenario region). UNSOURCED.
+local_supply_share_low = 0.4
+local_supply_share_central = 0.6
+local_supply_share_high = 0.8
+local_supply_share_source = "UNSOURCED"
+# Which arrivals a deficit hits: crops in the field during the deficit are harvested later. FAO gives a 90-140 day
+# season (after transplanting); harvests from ~60 days. Affected arrival dates = [start + lag_min, end + lag_max].
+harvest_lag_min_days = 60
+harvest_lag_max_days = 140
+harvest_lag_source = "FAO season length (link above); the 60-day start of harvest is an assumption"
+# Channel A only sees rainfall inside the model's features (rain_7, rain_30, rain_30_anom): the last 30 days.
+
+[export_ban]
+# National export share = exports / production.
+# Exports: HS 070200 tomatoes, fresh or chilled, India 2023: 96,801,900 kg (World Bank WITS / UN Comtrade).
+# Production: 208.19 lakh tonnes, 2023-24 first advance estimate (PIB, Ministry of Agriculture, 2024-03-15).
+# -> about 0.47% of production. The RBI study above: "tomato exports account for less than 1 per cent of total
+# production". Main destinations (2023): Bangladesh, Nepal, UAE, Maldives, Bhutan.
+exports_tonnes = 96801.9
+exports_source = "https://wits.worldbank.org/trade/comtrade/en/country/IND/year/2023/tradeflow/Exports/partner/ALL/product/070200"
+production_tonnes = 20819000.0
+production_source = "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2012191"
+# A user may override the share for a region (e.g. a border state) - the run records it as a USER ASSUMPTION.
+max_user_share = 0.25

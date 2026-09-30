@@ -34,6 +34,9 @@ Each item says where it came from and why it's deferred.
 | 25 | Spoilage cap (8%) never binds in Karnataka | V3-0: no trip got close; the limit is inert | Set from measured tomato quality loss (field pilot) before relying on it |
 | 26 | Unshipped lots are scored at Rs 0 | V3-1: plans that ship more lots (dense batches) look better than they are; a lot left at the farm is really sold locally or later | Value unshipped lots at a local/next-day price (from real data) and re-run consolidation_study |
 | 27 | Same-day second sale for return loads | V3-1 assumes the second mandi pays the realised price late in the day | Check late-arrival prices at real mandis (trader data) before trusting return-load value |
+| 28 | Two scenario links are UNSOURCED | V3-2 rainfall chain: share of water need not replaced by irrigation; share of a mandi's arrivals from its own district | Irrigated tomato area / water use (district agriculture office, Minor Irrigation Census); arrival origins from APMC gate records or traders |
+| 29 | Scenario elasticity is RETAIL (RBI CPI) | Mandi (wholesale) prices usually move more, so channel B likely understates shifts | Estimate a wholesale price-arrivals elasticity from real Agmarknet prices + arrivals (also closes backlog 23) |
+| 30 | Scenario channel A is not credible yet | The synthetic-trained model gives wrong-sign / erratic answers to drought and supply shocks | Retrain on real data; even then it only knows shocks present in its history. Keep A and B separate |
 
 ## V3 (by design)
 

@@ -260,5 +260,9 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   results load-dependent). Proposals (`load_proposals`) are accepted only through `decisions.proposals.accept`, which
   reuses `routers.lots.make_shipment` / `routers.trips.make_trip`. `[consolidation]`/`[return_loads] enabled` must
   equal `consolidation_study.switch_decision()` on the committed CSV (test pins it).
+- Scenarios (V3-2): `agripulse_ml.scenarios` (config/scenarios.toml, every value with a source or "UNSOURCED").
+  Channel B `assumptions.py` (sourced chain, low/central/high) and channel A `model.py` (perturb the display model's
+  raw inputs, ratios) are NEVER blended. Runs live in `scenario_runs`; nothing writes `forecasts` (test compares it
+  byte for byte). Every output carries `label()` = the rule-22 text; UI uses `CounterfactualBadge`.
 - Synthetic generator `propagation="distance"` is a POSITIVE CONTROL ("PLANTED SIGNAL"); never report it as a result
   about prices. The pinned baseline is `propagation="random"` (the default).
