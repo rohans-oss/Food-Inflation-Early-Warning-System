@@ -229,3 +229,31 @@ def test_wrong_codes_lock_after_five_tries(client, as_role, db):
     for _ in range(5):
         assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": wrong}).status_code == 400
     assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": code}).status_code == 429
+
+
+def test_demo_traffic_gives_the_mandi_trucks_and_deliveries_to_pay(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+
+    plan = bk.make_demo_traffic(db)
+    assert [m for _, m in plan] == ["drive", "drive", "delivered", "delivered"]
+    assert bk.make_demo_traffic(db) == []  # not again within a few hours
+    for sid, mode in plan:
+        if mode == "delivered":
+            bk._deliver_now(db, sid)
+    tid, depot = bk._demo_prepare_shipment(db, plan[0][0])
+    bk._demo_approach(db, tid, depot, 1.0)
+    bk._demo_pickup(db, tid)  # background trucks: the driver scans the QR, nobody types a code
+    board = client.get("/trader/board", headers=as_role("trader")).json()
+    assert {x["farmer"] for x in board["delivered_last_24h"]} >= {"Krishnappa", "Yellamma"}
+    assert all(x["payout_status"] == "pending" for x in board["delivered_last_24h"] if x["farmer"] in {"Krishnappa", "Yellamma"})
+    assert any(i["trip_id"] == tid for i in board["incoming"])
+
+
+def test_persistent_demo_url_keeps_the_query_and_sets_the_schema():
+    import sys
+
+    sys.path.insert(0, "scripts")
+    from demo_start import with_search_path
+
+    u = with_search_path("postgresql://u:p@h/db?sslmode=require&channel_binding=require", "demo")
+    assert "sslmode=require" in u and "channel_binding=require" in u and "options=-csearch_path%3Ddemo%2Cpublic" in u

@@ -54,12 +54,48 @@ def prepare_live() -> None:
         print("[live] DATA_GOV_API_KEY is not set: no real prices will be fetched", flush=True)
 
 
+DEMO_SCHEMA = "demo"
+
+
+def with_search_path(url: str, schema: str) -> str:
+    """Same database, but every table goes to `schema` (public stays on the path for PostGIS types)."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    q = [(k, v) for k, v in parse_qsl(parts.query) if k != "options"] + [("options", f"-csearch_path={schema},public")]
+    return urlunsplit(parts._replace(query=urlencode(q)))
+
+
+def prepare_persistent_demo(url: str) -> None:
+    import secrets
+    import subprocess
+
+    from sqlalchemy import create_engine, text
+
+    driver_url = "postgresql+psycopg://" + url.split("://", 1)[1]
+    with create_engine(driver_url).begin() as c:
+        c.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DEMO_SCHEMA}"))
+    os.environ["DATABASE_URL"] = with_search_path(url, DEMO_SCHEMA)
+    os.environ["DB_SCHEMA"] = DEMO_SCHEMA
+    env = dict(os.environ)
+    env.setdefault("ADMIN_PASSWORD", secrets.token_urlsafe(32))
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+    subprocess.run(["python", "-m", "agripulse_api.seed", "--demo"], check=True, env=env)
+    os.environ["DEMO_REFRESH"] = "true"
+    os.environ["MODEL_DIR"] = "/app/demo/models"  # the sample-data model baked into the image
+    print("[demo] persistent demo: sample data in schema 'demo' of DATABASE_URL; accounts survive restarts", flush=True)
+
+
 def main():
     os.environ.setdefault("JWT_SECRET", "auto")
-    if os.environ.get("DATA_MODE", "").lower() == "demo":  # keep a configured Postgres for later, serve the baked demo
-        os.environ["DATABASE_URL"] = "sqlite:////app/demo/agripulse.db"
-        print("[demo] DATA_MODE=demo: serving the built-in sample-data database", flush=True)
-    if os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql")):
+    url = os.environ.get("DATABASE_URL", "")
+    if os.environ.get("DATA_MODE", "").lower() == "demo":
+        if url.startswith(("postgres://", "postgresql")):  # PERSISTENT demo: sample data in its own schema, accounts kept
+            prepare_persistent_demo(url)
+        else:  # the built-in sample database (resets on every restart)
+            os.environ["DATABASE_URL"] = "sqlite:////app/demo/agripulse.db"
+            print("[demo] DATA_MODE=demo: serving the built-in sample-data database", flush=True)
+    elif url.startswith(("postgres://", "postgresql")):
         print("[live] real-data mode", flush=True)
         prepare_live()
     print("[demo]", prepare_admin(), flush=True)

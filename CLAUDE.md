@@ -314,4 +314,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   pick a mandi in that district; drivers sign up ONLY against an invite (`POST /drivers`, inactive user with an
   `@invite.agripulse.local` email, matched by phone) and add their vehicle. Demo autopilot is per SHIPMENT
   (`bookings.start_demo_shipment`), used by farmer bookings and FPO bookings alike.
+- Persistent demo (2026-10-01): DATA_MODE=demo + Postgres DATABASE_URL → `scripts/demo_start.prepare_persistent_demo`:
+  schema `demo` (search_path demo,public; Alembic `version_table_schema` from DB_SCHEMA so it never touches the live
+  tables in public), seed, then `ingest.demo_refresh` extends sample data / forecasts with the baked model and starts
+  `bookings.start_demo_traffic` (trucks to the demo trader's mandi + weighed lots awaiting payment, at most every 3 h).
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

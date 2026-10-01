@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -26,7 +27,11 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=connection.dialect.name == "sqlite")
+        # DB_SCHEMA (persistent public demo): keep Alembic's version table in that schema too, or it would find another
+        # schema's alembic_version through the search_path and migrate the wrong tables.
+        context.configure(connection=connection, target_metadata=target_metadata,
+                          render_as_batch=connection.dialect.name == "sqlite",
+                          version_table_schema=os.environ.get("DB_SCHEMA") or None)
         with context.begin_transaction():
             context.run_migrations()
 

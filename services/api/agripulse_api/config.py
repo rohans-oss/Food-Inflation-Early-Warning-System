@@ -63,7 +63,8 @@ class Settings(BaseSettings):
 
     # --- jobs ---
     enable_scheduler: bool = False
-    live_catch_up: bool = False  # LIVE mode: run overdue ingest / backfill / retrain in the background at start
+    live_catch_up: bool = False
+    demo_refresh: bool = False  # persistent demo on Postgres: extend sample data + forecasts at start (ingest.demo_refresh)  # LIVE mode: run overdue ingest / backfill / retrain in the background at start
 
     # --- public demo only (infra/Dockerfile.demo): enables the SIMULATED "run demo trip" autopilot ---
     demo_mode: bool = False

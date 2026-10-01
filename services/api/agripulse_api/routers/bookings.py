@@ -301,14 +301,14 @@ def start_demo(lot_id: int, booking_id: int) -> bool:
     return start_demo_shipment(sid) if sid else False
 
 
-def start_demo_shipment(shipment_id: int) -> bool:
+def start_demo_shipment(shipment_id: int, auto_pickup: bool = False, start_delay: float = 0.0) -> bool:
     """PUBLIC DEMO ONLY: the booked demo fleet confirms this shipment (driver + truck), drives to the pickup point,
     waits there for the handover code (farmer or FPO), drives to the mandi, and the demo trader weighs and pays."""
     t = DEMO_TASKS.get(shipment_id)
     if t is not None and t.is_alive():
         return False
-    DEMO_TASKS[shipment_id] = threading.Thread(target=_autopilot, args=(shipment_id,), name=f"demo-sh-{shipment_id}",
-                                               daemon=True)
+    DEMO_TASKS[shipment_id] = threading.Thread(target=_autopilot, args=(shipment_id, auto_pickup, start_delay),
+                                               name=f"demo-sh-{shipment_id}", daemon=True)
     DEMO_TASKS[shipment_id].start()
     return True
 
@@ -325,9 +325,10 @@ def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Depends(r
     return {"status": "started" if start_demo(lot_id, b.id) else "running"}
 
 
-def _autopilot(shipment_id: int) -> None:
+def _autopilot(shipment_id: int, auto_pickup: bool = False, start_delay: float = 0.0) -> None:
     import time
 
+    time.sleep(start_delay)
     from .. import db as dbmod
 
     def run(fn, *a):
@@ -343,6 +344,9 @@ def _autopilot(shipment_id: int) -> None:
                 for i in range(1, DEMO_APPROACH_POINTS + 1):
                     run(_demo_approach, trip_id, depot, i / DEMO_APPROACH_POINTS)
                     time.sleep(DEMO_TICK_S)
+            if auto_pickup:  # background demo traffic: the driver scans the pickup QR
+                time.sleep(3)
+                run(_demo_pickup, trip_id)
             waited = 0.0
             while not run(_demo_picked_up, trip_id):  # farmer / FPO enters the driver's code
                 if waited > DEMO_WAIT_FOR_CODE_S:
@@ -527,7 +531,7 @@ def _demo_price(db: Session, mandi_id: int, crop: str) -> tuple[float, str]:
     return DEMO_ASSUMED_PRICE, "assumed demo price (no price reported)"
 
 
-def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
+def _demo_finish(db: Session, lot_id: int | None, trip_id: int, pay: bool = True) -> None:
     """The SIMULATED trader scans the delivery QR, weighs at the forecast p50 price, and records a simulated payment."""
     from tracking.engine import add_event
 
@@ -549,7 +553,8 @@ def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
             issue(db, x)
             notify(db, x.farmer, "delivered", f"delivered:{x.id}", lot=x.id, mandi=t.mandi.name,
                    kg=round(x.delivered_weight_kg), price=price, payout="pending")
-            _record_payment(db, x, None, "upi", f"DEMO-{secrets.token_hex(4).upper()}")
+            if pay:
+                _record_payment(db, x, None, "upi", f"DEMO-{secrets.token_hex(4).upper()}")
     sh = t.shipment
     if sh and sh.status == "in_transit" and all(x.status == "delivered" for x in sh.lots):
         move(db, sh, "delivered", None, via="demo_autopilot")
@@ -557,3 +562,101 @@ def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
         move(db, t, "completed", None, via="demo_autopilot")
         t.ended_at = now
     db.commit()
+
+
+# ------------------------------------------------------------------ public demo: background traffic into the demo mandi
+
+TRAFFIC_ORG = "Chintamani Growers FPO (demo)"
+TRAFFIC_LABEL = "(demo traffic)"
+# (farmer, lat, lon, crop, tonnes, fleet, what happens): two trucks drive in live, two lots are already weighed and wait
+# for the mandi to record payment. Invented names; points approximate.
+TRAFFIC = [
+    ("Muniyappa", 13.402, 78.061, "Tomato", 3.0, "Chintamani Goods Carriers (demo)", "drive"),
+    ("Gangamma", 13.338, 78.205, "Tomato", 2.0, "Mulbagal Fresh Movers (demo)", "drive"),
+    ("Krishnappa", 13.301, 78.104, "Beans", 1.5, "Kolar Krishi Transport (demo)", "delivered"),
+    ("Yellamma", 13.420, 77.981, "Tomato", 2.5, "Hosakote Cold Chain (demo)", "delivered"),
+]
+TRAFFIC_EVERY_H = 3
+
+
+def start_demo_traffic(delay_s: float = 20.0) -> threading.Thread:
+    t = threading.Thread(target=_traffic, args=(delay_s,), name="demo-traffic", daemon=True)
+    t.start()
+    return t
+
+
+def _traffic(delay_s: float) -> None:
+    import time
+
+    from .. import db as dbmod
+
+    time.sleep(delay_s)
+    try:
+        with dbmod.SessionLocal() as db:
+            plan = make_demo_traffic(db)
+        for i, (sid, mode) in enumerate(plan):
+            if mode == "drive":
+                start_demo_shipment(sid, auto_pickup=True, start_delay=i * 40)
+            else:
+                with dbmod.SessionLocal() as db:
+                    _deliver_now(db, sid)
+    except Exception:
+        log.exception("demo traffic failed")
+
+
+def make_demo_traffic(db: Session) -> list[tuple[int, str]]:
+    """PUBLIC DEMO ONLY: a second (demo) FPO sends lots to the demo trader's mandi, so the mandi page has trucks on the
+    way and deliveries to pay. At most once every few hours (persistent databases keep earlier traffic)."""
+    import secrets as _s
+
+    from ..security import hash_password
+
+    trader = db.scalar(select(User).where(User.email == "trader@demo.agripulse"))
+    if trader is None or not trader.mandi_id:
+        return []
+    since = datetime.now(timezone.utc) - timedelta(hours=TRAFFIC_EVERY_H)
+    if db.scalar(select(Lot.id).where(Lot.pickup_label.like(f"%{TRAFFIC_LABEL}"), Lot.created_at >= since)):
+        return []
+    org = db.scalar(select(Organization).where(Organization.name == TRAFFIC_ORG))
+    if org is None:
+        org = Organization(name=TRAFFIC_ORG, kind="fpo")
+        db.add(org)
+        db.flush()
+    h = hash_password(_s.token_urlsafe(16))
+    desk = db.scalar(select(User).where(User.role == "fpo", User.org_id == org.id))
+    if desk is None:
+        desk = User(email="chintamani-fpo@demo.agripulse", full_name="Chintamani FPO desk", role="fpo", org_id=org.id,
+                    password_hash=h)
+        db.add(desk)
+        db.flush()
+    plan = []
+    for name, lat, lon, crop, tons, fleet_name, mode in TRAFFIC:
+        fleet = db.scalar(select(Organization).where(Organization.name == fleet_name))
+        if fleet is None:
+            continue
+        farmer = db.scalar(select(User).where(User.full_name == name, User.org_id == org.id))
+        if farmer is None:
+            farmer = User(email=f"member-{_s.token_hex(5)}@members.agripulse.local", full_name=name, role="farmer",
+                          org_id=org.id, password_hash=h)
+            db.add(farmer)
+            db.flush()
+        lot = Lot(farmer_id=farmer.id, org_id=org.id, crop=crop, quantity_tons=tons, grade="Local",
+                  pickup_label=f"near Chintamani {TRAFFIC_LABEL}", pickup_lat=lat, pickup_lon=lon)
+        db.add(lot)
+        db.flush()
+        sh = make_shipment(db, desk, trader.mandi_id, [lot.id], via="demo_traffic")
+        sh.fleet_org_id, sh.booked_at, sh.is_simulated = fleet.id, datetime.now(timezone.utc), True
+        move(db, sh, "booked", desk.id, fleet_org_id=fleet.id, via="demo_traffic")
+        plan.append((sh.id, mode))
+    db.commit()
+    return plan
+
+
+def _deliver_now(db: Session, shipment_id: int) -> None:
+    """A demo lot that already arrived and was weighed this morning: trip done, payment left for the mandi to record."""
+    trip_id, depot = _demo_prepare_shipment(db, shipment_id)
+    _demo_approach(db, trip_id, depot, 1.0)
+    _demo_pickup(db, trip_id)
+    for f in (0.25, 0.5, 0.75, 1.0):
+        _demo_step(db, trip_id, f)
+    _demo_finish(db, None, trip_id, pay=False)

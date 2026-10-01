@@ -27,6 +27,15 @@ async def lifespan(app: FastAPI):
         from ingest.scheduler import start_scheduler
 
         scheduler = start_scheduler()
+    if settings.demo_mode and not settings.live_catch_up:  # public demo: trucks heading to the demo mandi
+        if settings.demo_refresh:
+            from ingest.demo_refresh import start as start_refresh
+
+            start_refresh()  # then starts the traffic
+        else:
+            from .routers.bookings import start_demo_traffic
+
+            start_demo_traffic()
     if settings.live_catch_up:  # LIVE mode on free hosting: do whatever the sleeping scheduler missed
         from ingest.live import start_catch_up
 

@@ -69,6 +69,12 @@ Same image (`infra/Dockerfile.demo`); the mode is picked at run time by `DATABAS
 Still simulated in LIVE mode: demo logins and the demo trucks / trips (labelled "Simulated"). Unset `DATABASE_URL` to go
 back to the synthetic demo, or set `DATA_MODE=demo` to keep the Postgres setting but serve the baked sample data.
 
+## Persistent demo (sample data, accounts kept)
+
+`DATA_MODE=demo` with a Postgres `DATABASE_URL` (e.g. Neon): the demo runs in schema `demo` of that database, so
+sign-ups survive restarts; sample prices are refreshed to today and sample forecasts written with the model baked into
+the image at every start; demo traffic keeps the demo mandi busy. Real data (LIVE mode) stays in `public`.
+
 ## Public demo (Render, $0)
 
 A shareable demo with **SYNTHETIC** data only. It is not the real system: nothing is collected, and it resets on every
