@@ -176,6 +176,35 @@ def redeem_ws_ticket(db: Session, ticket: str) -> tuple[User | None, str | None]
     return (u, sess.id) if u and u.is_active else (None, None)
 
 
+HANDOFF_SECONDS = 120
+
+
+def handoff_ticket(user: User, sid: str) -> str:
+    """Single-use, 2-minute ticket that lets the driver phone app sign in as the user who is signed in on the web
+    ("Drive in the app"), so they don't type the password again. It travels in the URL FRAGMENT (#handoff=...), which
+    browsers never send to a server, and redeeming it starts a NEW session for the phone (revocable on its own)."""
+    from .security import _encode
+
+    return _encode(user.id, "handoff", timedelta(seconds=HANDOFF_SECONDS), sid=sid)
+
+
+def redeem_handoff(db: Session, ticket: str) -> User | None:
+    try:
+        payload = decode_token(ticket, typ="handoff")
+        active_session(db, payload)  # the web session that made it must still be signed in
+    except Exception:
+        return None
+    now = _now()
+    for j, t in list(_used_tickets.items()):
+        if t < now:
+            del _used_tickets[j]
+    if payload["jti"] in _used_tickets:
+        return None
+    _used_tickets[payload["jti"]] = now + timedelta(seconds=HANDOFF_SECONDS)
+    u = db.get(User, int(payload["sub"]))
+    return u if u and u.is_active else None
+
+
 def sid_is_active(db: Session, sid: str | None) -> bool:
     s = db.get(UserSession, sid) if sid else None
     return s is not None and s.revoked_at is None

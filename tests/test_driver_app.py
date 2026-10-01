@@ -282,3 +282,64 @@ def test_driver_goes_online_and_a_request_pops_up_live_then_is_accepted(browser,
     page.click(".req button:has-text('Accept')")
     page.wait_for_selector("#tripView:not([hidden])")
     assert any(c["path"] == "/driver/requests/5/accept" and c["method"] == "POST" for c in calls)
+
+
+def test_drive_in_the_app_link_signs_in_and_shows_the_farm_on_a_map(browser, server):
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    calls = []
+    trip = {**TRIP, "id": 9, "status": "accepted", "consent_given_at": None, "pickup_scanned_at": None,
+            "pickup_code": "4821", "mandi_lat": 13.13, "mandi_lon": 78.13,
+            "pickups": [{"lot_id": 1, "farmer": "Suma", "phone": "9876500011", "village": "Munrandahalli",
+                         "crop": "Tomato", "tons": 2, "lat": 13.18, "lon": 78.15}]}
+
+    def api(route):
+        req = route.request
+        path = req.url.split("/api", 1)[1]
+        calls.append({"method": req.method, "path": path, "body": req.post_data, "auth": req.headers.get("authorization")})
+        if path == "/auth/handoff":
+            return route.fulfill(json={"access_token": "phone-tok", "refresh_token": "r", "user": {"role": "driver"}})
+        if path.startswith("/trips?"):
+            return route.fulfill(json=[trip])
+        if path == "/trips/9":
+            return route.fulfill(json=trip)
+        if path in ("/driver/requests", "/driver/bookings"):
+            return route.fulfill(json=[])
+        return route.fulfill(json={})
+
+    page.route("**/api/**", api)
+    page.add_init_script(BASE_INIT.replace("localStorage.setItem('ap_driver_token', 'tok');", "localStorage.clear();"))
+    page.goto(server + "/index.html#handoff=TICKET1&trip=9")
+    page.wait_for_selector("#tripView:not([hidden])")
+    h = next(c for c in calls if c["path"] == "/auth/handoff")
+    assert json.loads(h["body"]) == {"ticket": "TICKET1"}
+    assert page.evaluate("location.hash") == ""  # the ticket is not left in the address bar
+    assert any(c["auth"] == "Bearer phone-tok" for c in calls if c["path"] == "/trips/9")
+    box = page.inner_text("#mapBox")
+    assert "Go to the farm" in box and "Suma" in box and "Munrandahalli" in box
+    assert "marker=13.18,78.15" in page.get_attribute("#mapBox iframe", "src")
+    assert "destination=13.18,78.15" in page.get_attribute("#mapBox a.btn", "href")
+    assert page.inner_text("#pickupCode") == "4821"
+    # after pickup the map switches to the mandi
+    page.evaluate("current.pickup_scanned_at = '2026-10-01T05:00:00Z'; render()")
+    assert "Go to the mandi" in page.inner_text("#mapBox")
+    assert "destination=13.13,78.13" in page.get_attribute("#mapBox a.btn", "href")
+
+
+def test_a_wrong_password_says_so_instead_of_session_expired(browser, server):
+    ctx = browser.new_context()
+    page = ctx.new_page()
+
+    def api(route):
+        if route.request.url.endswith("/auth/login"):
+            return route.fulfill(status=401, json={"detail": "Wrong email or password"})
+        return route.fulfill(json={})
+
+    page.route("**/api/**", api)
+    page.add_init_script(BASE_INIT.replace("localStorage.setItem('ap_driver_token', 'tok');", "localStorage.clear();"))
+    page.goto(server + "/index.html")
+    page.fill("input[name=email]", "driver@x.in")
+    page.fill("input[name=password]", "nope-nope")
+    page.click("#loginForm button")
+    page.wait_for_function("document.getElementById('loginErr').textContent.length > 0")
+    assert page.inner_text("#loginErr") == "Wrong email or password"

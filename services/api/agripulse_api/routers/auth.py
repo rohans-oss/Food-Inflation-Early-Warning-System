@@ -274,6 +274,27 @@ def ws_ticket(user: User = Depends(get_current_user), sid: str | None = Depends(
     return {"ticket": sessions.ws_ticket(user, sid), "expires_in": sessions.WS_TICKET_SECONDS}
 
 
+@router.post("/handoff-ticket")
+def handoff_ticket(user: User = Depends(get_current_user), sid: str | None = Depends(current_session_id)):
+    """"Drive in the app": a 2-minute single-use ticket the web page puts in the app link's #fragment."""
+    if user.role != "driver":
+        raise HTTPException(403, "Only drivers use the driver app")
+    return {"ticket": sessions.handoff_ticket(user, sid), "expires_in": sessions.HANDOFF_SECONDS}
+
+
+class HandoffIn(BaseModel):
+    ticket: str = Field(max_length=2000)
+
+
+@router.post("/handoff", response_model=TokenOut)
+def handoff(body: HandoffIn, request: Request, db: Session = Depends(get_db)):
+    """The driver app redeems the ticket for its own new session."""
+    u = sessions.redeem_handoff(db, body.ticket)
+    if u is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This link has expired. Open the app from the website again, or sign in.")
+    return tokens_for(db, u, request)
+
+
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return user_out(user)

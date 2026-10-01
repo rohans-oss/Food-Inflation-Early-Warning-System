@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { DriverDirect } from "@/components/DriverDirect";
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
@@ -19,6 +21,17 @@ export default function Driver() {
     reqs.reload(); trips.reload(); s.reload();
   });
   const pwa = `${apiBase()}/driver/`;
+  // "Drive in the app": a 2-minute single-use ticket in the link's #fragment signs the app in as you (no password)
+  const openApp = (tripId?: number) => act.run(async () => {
+    const { ticket } = await api<{ ticket: string }>("/auth/handoff-ticket", { method: "POST" });
+    window.location.href = `${pwa}#handoff=${encodeURIComponent(ticket)}${tripId ? `&trip=${tripId}` : ""}`;
+  });
+  const [qrLink, setQrLink] = useState<string | null>(null);
+  const showQr = () => act.run(async () => {
+    const { ticket } = await api<{ ticket: string }>("/auth/handoff-ticket", { method: "POST" });
+    setQrLink(`${pwa}#handoff=${encodeURIComponent(ticket)}`);
+    setTimeout(() => setQrLink(null), 110000);
+  });
   const d = s.data;
   return (
     <Shell roles={["driver"]} title="Driver">
@@ -70,13 +83,15 @@ export default function Driver() {
               <div className="flex flex-wrap items-center gap-2">
                 <b>Trip #{t.id}</b> · {t.vehicle} → {t.mandi} · {num(t.load_tons, 1)} t <StatusBadge s={t.status} />
                 {t.eta_at && <span className="text-muted">ETA {time(t.eta_at)}</span>}
-                <a href={pwa} className="ml-auto rounded-lg bg-brand px-3 py-1.5 font-medium text-brand-ink">Drive in the app</a>
+                <button onClick={() => openApp(t.id)} disabled={act.busy} className="ml-auto rounded-lg bg-brand px-3 py-1.5 font-medium text-brand-ink">Drive in the app</button>
               </div>
               {t.pickups?.map((p: any) => (
                 <p key={p.lot_id} className="mt-2 text-ink2">
                   Pick up from <b className="text-ink">{p.farmer}</b>{p.village ? `, ${p.village}` : ""}{p.district ? ` (${p.district})` : ""}
                   {p.phone && <> · <a className="underline" href={`tel:${p.phone}`}>{p.phone}</a></>} · {p.crop} {num(p.tons, 1)} t
                   {p.pickup_at && <> · at {new Date(p.pickup_at).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })}</>}
+                  {p.lat != null && !t.pickup_scanned_at && <> · <a className="font-medium text-brand underline" target="_blank" rel="noreferrer"
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`}>Directions to the farm</a></>}
                 </p>
               ))}
             </div>
@@ -98,12 +113,15 @@ export default function Driver() {
 
       <Card title="Open the driver app on your phone">
         <div className="flex flex-wrap items-center gap-6">
-          <QR value={pwa} size={160} caption="Driver app" />
+          <QR value={qrLink ?? pwa} size={160} caption={qrLink ? "Scan within 2 minutes: opens signed in" : "Driver app"} />
           <div className="max-w-md space-y-2 text-sm">
             <p>Scan this with your phone camera, sign in with the same account, then <b>Add to Home Screen</b>.</p>
             <p>The app shares your location <b>only while a trip is in progress</b> and after you tick consent. A red <b>TRACKING ON</b> bar is shown the whole time. Ending the trip stops it.</p>
             <p>At the farm, tell the farmer your <b>4-digit pickup code</b> from the app.</p>
-            <a href={pwa} className="inline-block rounded-lg bg-brand px-3 py-2 font-medium text-brand-ink">Open driver app</a>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => openApp()} disabled={act.busy} className="rounded-lg bg-brand px-3 py-2 font-medium text-brand-ink">Open driver app</button>
+              <button onClick={showQr} disabled={act.busy} className="rounded-lg border border-line px-3 py-2 font-medium">QR that signs your phone in</button>
+            </div>
           </div>
         </div>
         <div className="mt-4">

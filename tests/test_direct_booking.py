@@ -275,3 +275,23 @@ def test_vapid_keys_are_generated_once_and_kept(db):
     k1 = webpush.vapid_keys(db)
     webpush.reset_cache()
     assert webpush.vapid_keys(db) == k1 and len(k1[1]) > 80  # uncompressed P-256 point, base64url
+
+
+def test_drive_in_the_app_signs_the_phone_in_without_a_password(client, world, as_role):
+    """Web "Drive in the app": a 2-minute single-use ticket -> the phone app gets its OWN session."""
+    w = world
+    t = client.post("/auth/handoff-ticket", headers=w["d1"])
+    assert t.status_code == 200 and t.json()["expires_in"] == 120
+    r = client.post("/auth/handoff", json={"ticket": t.json()["ticket"]})
+    assert r.status_code == 200 and r.json()["user"]["full_name"] == "Ravi Kumar"
+    phone = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    assert client.get("/driver/availability", headers=phone).status_code == 200
+    again = client.post("/auth/handoff", json={"ticket": t.json()["ticket"]})
+    assert again.status_code == 401 and "expired" in again.json()["detail"]  # single use
+    access = w["d1"]["Authorization"].split()[1]
+    assert client.post("/auth/handoff", json={"ticket": access}).status_code == 401  # an access token is not a ticket
+    assert client.post("/auth/handoff-ticket", headers=w["farmer"]).status_code == 403  # drivers only
+    # signing out on the web kills unused tickets of that session
+    t2 = client.post("/auth/handoff-ticket", headers=w["d1"]).json()["ticket"]
+    client.post("/auth/logout", headers=w["d1"])
+    assert client.post("/auth/handoff", json={"ticket": t2}).status_code == 401

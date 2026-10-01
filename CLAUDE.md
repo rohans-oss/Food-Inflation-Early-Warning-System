@@ -343,6 +343,10 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   trucks are refused, the autopilot skips `booking_channel == "direct"`. `trips.booking_channel` = fpo_fleet |
   farmer_company | direct | demo (Admin `/admin/booking-channels`). VAPID keys: env or generated once into
   app_settings (`webpush.vapid_keys`); tests replace `webpush.SENDER`. Requests expire lazily (`expire_due`).
+- Drive in the app (2026-10-01): web `POST /auth/handoff-ticket` (drivers, 2 min, single use) -> link
+  `/driver/#handoff=<ticket>&trip=<id>` (FRAGMENT, never sent to a server) -> app `POST /auth/handoff` = a NEW session
+  for the phone (`sessions.redeem_handoff`). The app's trip view shows the destination (farm until pickup, then the
+  mandi) as an OSM embed + Google Maps directions (`renderMap`, redrawn only when the destination changes).
 
 ## Update: direct farmer-to-driver booking for real-world field testing
 30. This flow must work with REAL accounts, REAL district/mandi selection, and REAL phone GPS — not the simulator.

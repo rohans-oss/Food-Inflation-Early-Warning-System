@@ -129,7 +129,7 @@ you start and wait until it loads.
 | 4 | A | Nothing: wait. | **Within 1–2 s** (app open): a red **New trip request** card with farmer, village, crop, tonnes, mandi, distance and your estimated pay; the phone vibrates. **Screen locked:** a system notification "New trip: …" usually within 1–5 s; tap it to open the app. |
 | 5 | A | Press **Accept** (or **Decline** to test that path: the farmer sees "Every driver who was asked said no"). | The trip opens with the farmer's name and phone and your **4-digit pickup code**. |
 | 6 | B | Nothing: wait. | **Within 1–2 s**: "Driver found · trip #N" with the driver's name, phone and truck number. |
-| 7 | A | Tick location sharing, **Start trip**, drive (or walk) to the farmer. Keep the app **on screen** (browser app) or use the Android app. | Red **TRACKING ON** bar on A. On B the truck moves on the live map with an ETA. |
+| 7 | A | (On the website, **Drive in the app** opens the phone app already signed in, on this trip; it shows the farm on a map and a **🧭 Directions to the farm** button.) Tick location sharing, **Start trip**, drive (or walk) to the farmer. Keep the app **on screen** (browser app) or use the Android app. | Red **TRACKING ON** bar on A. On B the truck moves on the live map with an ETA. |
 | 8 | A + B together | Driver tells the farmer the 4-digit code; the farmer types it under **Confirm pickup** (or the driver scans the pickup QR on the farmer's screen). | B: "✓ Load handed over"; the lot is in transit. |
 | 9 | — | From here it is the normal flow (geofence at the mandi, delivery QR, weighing, payment). | |
 

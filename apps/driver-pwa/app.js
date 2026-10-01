@@ -72,7 +72,11 @@ async function api(path, opts = {}, retried = false) {
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...(opts.headers || {}) },
   });
   if (r.status === 401 && !retried && !path.startsWith("/auth/") && await tryRefresh()) return api(path, opts, true);
-  if (r.status === 401) { logout(); throw new Error("Session expired"); }
+  if (r.status === 401 && path.startsWith("/auth/")) {  // sign-in / link: say what the server said
+    const b = await r.json().catch(() => ({}));
+    throw new Error(b.detail || "Wrong email or password");
+  }
+  if (r.status === 401) { logout(); throw new Error("Session expired, please sign in again"); }
   const body = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(body.detail || r.statusText); e.status = r.status; throw e; }
   return body;
@@ -176,6 +180,7 @@ function render() {
   $("pickupBox").innerHTML = (t.pickups || []).map((p) => `<p><b>Pick up:</b> ${esc(p.farmer)}${p.village ? `, ${esc(p.village)}` : ""}
     ${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}<br><span class="meta">${esc(p.crop)} ${esc(p.tons)} t ·
     <a target="_blank" rel="noreferrer" href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=15/${p.lat}/${p.lon}">farm on the map</a></span></p>`).join("");
+  renderMap(t);
   if (t.pickup_code) $("pickupCode").textContent = t.pickup_code;
   $("tMeta").textContent = `Status: ${t.status} · load ${t.load_tons} t · planned ${t.planned_distance_km ?? "?"} km`
     + (t.route_source === "haversine" ? " (approximate route)" : "");
@@ -213,6 +218,32 @@ function render() {
     await act("end");
     stopTracking();
   }, "danger");
+}
+
+
+// Where to drive now: the farm until the load is handed over, then the mandi. The map is redrawn only when the
+// destination changes (render() runs on every live update). Directions open Google Maps / the phone's maps app.
+let mapKey = null;
+function renderMap(t) {
+  const box = $("mapBox");
+  const p = (t.pickups || [])[0];
+  const toFarm = !t.pickup_scanned_at && p && p.lat != null;
+  const dest = toFarm ? { lat: p.lat, lon: p.lon, name: `${p.farmer}'s farm${p.village ? `, ${p.village}` : ""}` }
+    : t.mandi_lat != null ? { lat: t.mandi_lat, lon: t.mandi_lon, name: t.mandi } : null;
+  const open = ["assigned", "accepted", "in_progress"].includes(t.status);
+  if (!dest || !open) { box.hidden = true; mapKey = null; return; }
+  const key = `${t.id}:${dest.lat}:${dest.lon}`;
+  box.hidden = false;
+  if (key === mapKey) return;
+  mapKey = key;
+  const d = 0.012;
+  const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${dest.lon - d * 1.6},${dest.lat - d},${dest.lon + d * 1.6},${dest.lat + d}&layer=mapnik&marker=${dest.lat},${dest.lon}`;
+  const nav = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lon}&travelmode=driving`;
+  box.innerHTML = `<p><b>${toFarm ? "Go to the farm" : "Go to the mandi"}:</b> ${esc(dest.name)}</p>
+    <iframe class="map" title="Destination map" loading="lazy" src="${embed}"></iframe>
+    <a class="btn" target="_blank" rel="noreferrer" href="${nav}">🧭 Directions to ${toFarm ? "the farm" : esc(dest.name)}</a>
+    <p class="meta">${esc(dest.lat.toFixed(5))}, ${esc(dest.lon.toFixed(5))}${toFarm && p.phone ? ` · call the farmer: <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}</p>
+    ${NATIVE ? "" : '<p class="meta">In the browser app, location sharing pauses while Maps is in front. Check the route, then come back here and keep this screen open while driving.</p>'}`;
 }
 
 async function act(action) {
@@ -691,4 +722,24 @@ $("footWeb").hidden = NATIVE;
 // The Android app serves these files itself; a service worker would only get in the way there.
 if (!NATIVE && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 netState();
-if (token) { loadTrips().catch(() => show("loginView")); enablePush(false); } else show("loginView");
+async function boot() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const ticket = h.get("handoff");
+  const tripId = h.get("trip");
+  if (ticket || tripId) history.replaceState(null, "", location.pathname + location.search); // drop it from the address bar
+  if (ticket) {
+    try {
+      const r = await api("/auth/handoff", { method: "POST", body: JSON.stringify({ ticket }) });
+      if (r.user.role !== "driver") throw new Error("This app is for drivers.");
+      if (token && tracking !== null) stopTracking();
+      saveTokens(r);
+    } catch (e) { if (!token) $("loginErr").textContent = e.message; }
+  }
+  if (!token) { show("loginView"); return; }
+  try {
+    await loadTrips();
+    enablePush(false);
+    if (tripId) await openTrip(+tripId);
+  } catch { if (!token) show("loginView"); }
+}
+boot();
