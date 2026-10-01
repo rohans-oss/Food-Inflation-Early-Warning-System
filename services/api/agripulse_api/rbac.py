@@ -41,6 +41,7 @@ P = {
     "lots:create": {"farmer"},
     "lots:read": {"farmer", "fpo", "trader", "lender", "admin"},
     "shipments:manage": {"fpo", "admin"},
+    "members:manage": {"fpo"},  # an FPO adds member farmers and registers lots on their behalf
     "vehicles:manage": {"fleet_owner", "admin"},
     "trips:assign": {"fleet_owner", "fpo", "admin"},
     "trips:drive": {"driver"},

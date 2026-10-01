@@ -135,6 +135,46 @@ def seed_demo_fleets(db: Session, password: str) -> None:
     db.flush()
 
 
+# DEMO members of the Kolar FPO (invented names; village points are approximate) with harvests waiting to ship,
+# so the FPO desk has something to group. (name, phone, village, lat, lon, crop, tonnes, grade, preferred mandi)
+DEMO_MEMBERS = [
+    ("Lakshmamma", "9000000101", "Vemagal", 13.177, 78.045, "Tomato", 2.5, "Medium", "Kolar APMC"),
+    ("Ramappa", "9000000102", "Narasapura", 13.143, 78.230, "Tomato", 3.0, "Large", "Kolar APMC"),
+    ("Venkatesh Gowda", "9000000103", "Malur", 13.003, 77.938, "Tomato", 1.5, "Local", None),
+    ("Shivanna", "9000000104", "Srinivaspur", 13.338, 78.213, "Beans", 1.0, "FAQ", "Chintamani APMC"),
+    ("Narayanaswamy", "9000000105", "Bangarapet", 12.991, 78.178, "Tomato", 4.0, "Medium", None),
+    ("Sarojamma", "9000000106", "Mulbagal", 13.164, 78.392, "Cabbage", 2.0, "FAQ", None),
+]
+
+
+def seed_demo_members(db: Session) -> int:
+    """Idempotent: each demo member exists once, with one registered lot the first time (not in tests' seed_demo)."""
+    from .models import AuditLog, Lot
+
+    fpo = db.scalar(select(Organization).where(Organization.name == "Kolar Tomato Growers FPO (demo)"))
+    if fpo is None:
+        return 0
+    made = 0
+    h = hash_password(os.urandom(16).hex())  # members have no usable password: the FPO acts for them
+    for name, phone, village, lat, lon, crop, tons, grade, pref in DEMO_MEMBERS:
+        u = db.scalar(select(User).where(User.phone == phone, User.role == "farmer"))
+        if u is not None:
+            continue
+        u = _user(db, f"member-{phone}@members.agripulse.local", name, "farmer", "", password_hash=h, org_id=fpo.id,
+                  phone=phone)
+        m = db.scalar(select(Mandi).where(Mandi.name == pref)) if pref else None
+        lot = Lot(farmer_id=u.id, org_id=fpo.id, crop=crop, quantity_tons=tons, grade=grade,
+                  pickup_label=f"{village} (approx.)", pickup_lat=lat, pickup_lon=lon,
+                  preferred_mandi_id=m.id if m else None)
+        db.add(lot)
+        db.flush()
+        db.add(AuditLog(entity="lot", entity_id=lot.id, from_state=None, to_state="registered",
+                        details={"tons": tons, "registered_by": "demo_seed"}))
+        made += 1
+    db.flush()
+    return made
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
@@ -144,6 +184,7 @@ def main() -> None:
         seed_admin(db)
         if args.demo:
             seed_demo(db)
+            seed_demo_members(db)
         db.commit()
     print("seeded" + (" (with demo users)" if args.demo else ""))
 

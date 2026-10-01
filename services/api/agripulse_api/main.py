@@ -10,7 +10,8 @@ from .config import get_settings
 from .db import get_db
 from tracking.hub import hub
 
-from .routers import admin, auth, bookings, graph, lots, mandis, prices, proposals, receipts, roles, scenarios, trips
+from .routers import (admin, auth, bookings, graph, lots, mandis, members, prices, proposals, receipts, roles, scenarios,
+                      trips)
 
 
 @asynccontextmanager
@@ -45,7 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, admin, mandis, prices, lots, bookings, receipts, trips, roles, graph, proposals, scenarios):
+for r in (auth, admin, mandis, prices, lots, members, bookings, receipts, trips, roles, graph, proposals, scenarios):
     app.include_router(r.router)
 
 

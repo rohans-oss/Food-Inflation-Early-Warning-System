@@ -59,7 +59,7 @@ def plan_fpo_loads(db: Session, user: User, weeks: int = 1) -> LoadProposal:
         raise HTTPException(400, "Plan loads from an FPO account")
     rows = db.scalars(select(LotRow).where(lot_filter(user), LotRow.status == "registered", LotRow.shipment_id.is_(None))).all()
     if not rows:
-        raise HTTPException(409, "No registered lots waiting to be grouped")
+        raise HTTPException(409, "No lots are waiting yet. Add a lot for a member above, or ask members to register theirs with this FPO.")
     lots = [Lot(r.id, r.pickup_lat, r.pickup_lon, r.quantity_tons, r.crop) for r in rows]
     mandis = mandi_options(db, weeks, near=[(x.lat, x.lon) for x in lots])
     if not mandis:

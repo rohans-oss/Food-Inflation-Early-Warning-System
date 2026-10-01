@@ -744,3 +744,14 @@ driver, so the demo driver's code is shown under the input.
 
 How to verify: farmer → lot → Sell here → Choose time → Book → wait for "Confirmed" → when the truck reaches the farm,
 enter the code shown → the truck heads to the mandi.
+
+## FPO members
+
+The FPO desk can add member farmers (name, phone) and register harvest lots on their behalf ("+ Add lot for a
+member": member, vegetable, quantity, grade, village, pickup point on the map). Many members don't use apps; the FPO
+acts for them, and every lot it registers is audited with the FPO user as the actor. Endpoints: `GET/POST /fpo/members`,
+`POST /fpo/lots` (permission `members:manage`). The public demo seeds six members of the Kolar FPO with lots waiting
+(`seed.seed_demo_members`, only from `python -m agripulse_api.seed --demo`, not the test fixture).
+
+How to verify: FPO login → Members' lots shows six waiting lots → "+ Add member" → "+ Add lot for a member" → tick lots →
+create a shipment, or "Plan loads".

@@ -307,4 +307,7 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - Public-demo wording (2026-10-01, user decision): no per-item "Simulated" tag in the web UI (`SimBadge` renders only
   with an explicit label); the banner says transporters/drivers/accounts are for demonstration; demo receipts say "Demo
   receipt · not a real sale". `is_simulated` flags in data and APIs are unchanged and still drive every report.
+- FPO members (2026-10-01): a member = farmer whose `org_id` is the FPO (or who registered a lot with it). FPO adds
+  members / lots via `routers/members.py` (`members:manage`); members added there get an unusable password. Demo members
+  come from `seed.seed_demo_members` (CLI `--demo` only, never the test fixture).
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

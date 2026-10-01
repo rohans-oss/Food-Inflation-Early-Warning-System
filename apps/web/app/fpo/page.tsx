@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { BestMandi } from "@/components/BestMandi";
+import { AddMemberLot, MembersCard } from "@/components/FpoMembers";
 import { SharedLoadsCard } from "@/components/LoadProposals";
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
 import { TripLive } from "@/components/TripLive";
-import { Button, Card, ErrorNote, Field, inputCls, SimBadge, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { Button, Card, ErrorNote, Field, inputCls, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ago, dateTime, inr, num, time, tons } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -21,6 +22,8 @@ export default function Fpo() {
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [mandiId, setMandiId] = useState("");
   const [open, setOpen] = useState<number | null>(null);
+  const [addingLot, setAddingLot] = useState(false);
+  const [membersKey, setMembersKey] = useState(0);
   const act = useAction();
 
   useEffect(() => {
@@ -51,13 +54,17 @@ export default function Fpo() {
   return (
     <Shell roles={["fpo"]} title="FPO dispatch">
       <ErrorNote error={act.error} />
-      <Card title={`Members' lots ready to ship`}>
-        <Table head={["", "Lot", "Farmer", t("quantityTons"), t("grade"), t("pickupPoint"), "Farmer's choice"]} empty="No registered lots from your members.">
+      <Card title={`Members' lots ready to ship`}
+        action={<Button variant={addingLot ? "secondary" : "primary"} onClick={() => setAddingLot(!addingLot)}>{addingLot ? "Close" : "+ Add lot for a member"}</Button>}>
+        {addingLot && <AddMemberLot onDone={() => { setAddingLot(false); lots.reload(); setMembersKey((k) => k + 1); }} />}
+        <Table head={["", "Lot", "Farmer", "Vegetable", t("quantityTons"), t("grade"), t("pickupPoint"), "Farmer's choice"]}
+          empty="No lots waiting. Use “Add lot for a member”, or members can register their own harvest and pick this FPO.">
           {lots.data?.map((l) => (
             <tr key={l.id} className={picked.has(l.id) ? "bg-page" : ""}>
               <Td><input type="checkbox" aria-label={`Select lot ${l.id}`} checked={picked.has(l.id)} onChange={() => toggle(l.id)} /></Td>
-              <Td>#{l.id} <SimBadge on={l.is_simulated} /></Td>
+              <Td>#{l.id}</Td>
               <Td>{l.farmer.name}</Td>
+              <Td>{l.crop}</Td>
               <Td>{tons(l.quantity_tons)}</Td>
               <Td>{l.grade}</Td>
               <Td className="text-ink2">{l.pickup_label || `${num(l.pickup_lat, 3)}, ${num(l.pickup_lon, 3)}`}</Td>
@@ -68,6 +75,9 @@ export default function Fpo() {
             </tr>
           ))}
         </Table>
+        {picked.size === 0 && (lots.data?.length ?? 0) > 0 && (
+          <p className="mt-3 text-xs text-muted">Tick lots going to the same mandi to make one shipment, or let “Plan shared truckloads” suggest the loads.</p>
+        )}
         {picked.size > 0 && (
           <div className="mt-4 space-y-3 rounded-xl border border-line p-3">
             <div className="flex flex-wrap items-end gap-3">
@@ -92,14 +102,15 @@ export default function Fpo() {
 
       <SharedLoadsCard onChanged={() => { lots.reload(); shipments.reload(); }} />
 
+      <MembersCard key={membersKey} onChanged={() => lots.reload()} />
+
       <Card title={t("shipments")}>
         <div className="space-y-3">
-          {shipments.data?.length === 0 && <p className="text-sm text-muted">No shipments yet.</p>}
+          {shipments.data?.length === 0 && <p className="text-sm text-muted">No shipments yet. Group waiting lots above into a shipment, then book a transporter for it.</p>}
           {shipments.data?.map((s) => (
             <div key={s.id} className="rounded-xl border border-line p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <b>Shipment #{s.id}</b> → {s.mandi} · {tons(s.total_tons)} <StatusBadge s={s.status} />
-                <SimBadge on={s.is_simulated} />
                 <span className="text-xs text-muted">{dateTime(s.created_at)}</span>
                 <button className="ml-auto text-sm underline" onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "Hide" : "Details"}</button>
               </div>
@@ -111,7 +122,7 @@ export default function Fpo() {
                     {fleets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                 )}
-                {s.trip && <span>Vehicle <b>{s.trip.vehicle}</b> <StatusBadge s={s.trip.status} /> {s.trip.eta_at && `ETA ${time(s.trip.eta_at)}`} <SimBadge on={s.trip.is_simulated} /></span>}
+                {s.trip && <span>Vehicle <b>{s.trip.vehicle}</b> <StatusBadge s={s.trip.status} /> {s.trip.eta_at && `ETA ${time(s.trip.eta_at)}`}</span>}
                 {s.status === "booked" && !s.trip && <span className="text-xs text-muted">Waiting for the fleet owner to assign a vehicle and driver.</span>}
               </div>
               {open === s.id && (
