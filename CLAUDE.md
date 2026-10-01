@@ -318,4 +318,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   schema `demo` (search_path demo,public; Alembic `version_table_schema` from DB_SCHEMA so it never touches the live
   tables in public), seed, then `ingest.demo_refresh` extends sample data / forecasts with the baked model and starts
   `bookings.start_demo_traffic` (trucks to the demo trader's mandi + weighed lots awaiting payment, at most every 3 h).
+- Payments (2026-10-01): `PaymentIn` + `bookings.payment_details` validate per method (bank: holder, account no.,
+  IFSC, bank, branch; upi: UPI ID). `lots.payment_details` keeps the account number ONLY as `account_last4`.
+- No site-wide banner (owner's request 2026-10-01): sample data is still labelled per item ("Sample" ProvenanceBadge),
+  demo receipts still say so. Landing copy is vegetable-general.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

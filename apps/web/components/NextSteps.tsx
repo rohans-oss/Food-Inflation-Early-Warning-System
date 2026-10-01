@@ -193,7 +193,9 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
               {l.payout_status !== "paid" && <p className="mt-1 text-sm text-ink2">Waiting for the trader to record the payment.</p>}
               {l.payout_status === "paid" && (
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                  <span><b className="text-brand">✓ Paid</b> by {l.payment?.method?.toUpperCase?.()} · ref {l.payment?.reference ?? "–"} · {dateTime(l.payment?.paid_at)}</span>
+                  <span><b className="text-brand">✓ Paid</b> by {({ bank: "bank transfer", upi: "UPI", cash: "cash", other: "other" } as Record<string, string>)[l.payment?.method] ?? l.payment?.method}
+                    {l.payment?.details?.bank_name ? ` to ${l.payment.details.bank_name} a/c ••••${l.payment.details.account_last4}` : ""}
+                    {l.payment?.details?.upi_id ? ` to ${l.payment.details.upi_id}` : ""} · ref {l.payment?.reference || "–"} · {dateTime(l.payment?.paid_at)}</span>
                   {l.payment?.received_at
                     ? <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">You confirmed receipt {ago(l.payment.received_at)}</span>
                     : <Button disabled={act.busy} onClick={() => post(`/lots/${lotId}/payment-received`)}>I received it</Button>}

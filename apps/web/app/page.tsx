@@ -48,7 +48,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; 
 
 const STEPS = [
   { n: "01", title: "Collect", body: "Daily mandi prices from Agmarknet, weather from Open-Meteo and NASA POWER, Sentinel-2 crop imagery, and GPS from trucks on active trips." },
-  { n: "02", title: "Forecast", body: "Tomato prices 1–4 weeks ahead as a p10–p50–p90 range with a spike probability, checked walk-forward against a simple baseline." },
+  { n: "02", title: "Forecast", body: "Mandi prices 1–4 weeks ahead as a p10–p50–p90 range with a spike probability, checked walk-forward against a simple baseline, plus the latest mandi price for every vegetable." },
   { n: "03", title: "Track", body: "Lots move farm → truck → mandi with QR checkpoints and live ETA. Tracking runs only during a trip, with the driver's consent." },
   { n: "04", title: "Decide", body: "An optimizer weighs price, transport, spoilage and mandi capacity to suggest where to sell, and which loads to share." },
 ];
@@ -91,10 +91,10 @@ function Landing() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-14 md:grid-cols-[1.05fr_1fr] md:pb-24 md:pt-20">
           <div>
             <p className="fade-up mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink2">
-              <span className="live-dot h-2 w-2 rounded-full bg-brand" /> Tomato · Karnataka and neighbouring states
+              <span className="live-dot h-2 w-2 rounded-full bg-brand" /> Vegetables · Karnataka and neighbouring states
             </p>
             <h1 className="fade-up text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl" style={{ animationDelay: "80ms" }}>
-              See tomato supply moving <span className="text-brand">before the price moves.</span>
+              See vegetable supply moving <span className="text-brand">before the price moves.</span>
             </h1>
             <p className="fade-up mt-5 max-w-xl text-lg leading-relaxed text-ink2" style={{ animationDelay: "160ms" }}>
               AgriPulse forecasts mandi prices 1–4 weeks ahead as honest ranges, tracks produce live from farm to mandi,

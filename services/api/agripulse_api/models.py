@@ -361,6 +361,8 @@ class Lot(Base):
     # payment is RECORDED here (who paid, how, reference); no money moves through AgriPulse
     payment_method: Mapped[str | None] = mapped_column(String(20))  # upi|cash|bank|other (+ " (simulated)" in the demo)
     payment_ref: Mapped[str | None] = mapped_column(String(80))
+    # bank: holder, bank, branch, IFSC and the account number MASKED to its last 4 digits; upi: the UPI ID
+    payment_details: Mapped[dict | None] = mapped_column(JSON)
     paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     payment_received_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # farmer confirmed receipt
     # proof of delivery & sale: issued at weighing; the token is the unguessable public verification link

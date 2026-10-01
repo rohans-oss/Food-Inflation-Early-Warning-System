@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { MapMarker, MapView } from "@/components/MapView";
 import { QRScanner } from "@/components/QR";
+import { PaymentForm } from "@/components/PaymentForm";
 import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, ErrorNote, inputCls, Note, ProvenanceBadge, SimBadge, Stat, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -11,13 +12,15 @@ import { inr, num, time, tons } from "@/lib/format";
 import { useLiveFeed } from "@/lib/live";
 import { useSession } from "@/lib/session";
 
+const PAY_LABEL: Record<string, string> = { bank: "Bank transfer", upi: "UPI", cash: "Cash", other: "Other" };
+
 export default function Trader() {
   const { t } = useSession();
   const board = useApi<any>("/trader/board", { poll: 20000 });
   const [live, setLive] = useState<Record<number, any>>({});
   const [scanFor, setScanFor] = useState<number | null>(null);
   const [weigh, setWeigh] = useState<Record<number, { kg: string; price: string }>>({});
-  const [pay, setPay] = useState<Record<number, { method: string; reference: string }>>({});
+  const [paying, setPaying] = useState<{ lot_id: number; farmer: string; amount: number } | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const act = useAction();
 
@@ -117,24 +120,19 @@ export default function Trader() {
               <Td>{inr((l.kg / 100) * l.price_per_quintal)}</Td>
               <Td>
                 {l.payout_status === "paid" ? (
-                  <span className="text-sm"><b className="text-good">✓ Paid</b> · {l.payment_method}{l.payment_ref ? ` · ${l.payment_ref}` : ""}</span>
+                  <span className="text-sm"><b className="text-good">✓ Paid</b> · {PAY_LABEL[l.payment_method] ?? l.payment_method}
+                    {l.payment_details?.bank_name ? ` · ${l.payment_details.bank_name} ••${l.payment_details.account_last4}` : ""}
+                    {l.payment_details?.upi_id ? ` · ${l.payment_details.upi_id}` : ""}{l.payment_ref ? ` · ref ${l.payment_ref}` : ""}</span>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select aria-label="Payment method" className={`${inputCls} w-auto`} value={pay[l.lot_id]?.method ?? "upi"}
-                      onChange={(e) => setPay({ ...pay, [l.lot_id]: { reference: pay[l.lot_id]?.reference ?? "", method: e.target.value } })}>
-                      <option value="upi">UPI</option><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="other">Other</option>
-                    </select>
-                    <input aria-label="Payment reference" placeholder="UTR / ref (optional)" className={`${inputCls} w-40`} value={pay[l.lot_id]?.reference ?? ""}
-                      onChange={(e) => setPay({ ...pay, [l.lot_id]: { method: pay[l.lot_id]?.method ?? "upi", reference: e.target.value } })} />
-                    <Button disabled={act.busy} onClick={() => act.run(async () => {
-                      await api(`/trader/lots/${l.lot_id}/payment`, { method: "POST", body: { method: pay[l.lot_id]?.method ?? "upi", reference: pay[l.lot_id]?.reference ?? "" } });
-                      board.reload();
-                    })}>Record payment</Button>
-                  </div>
+                  <Button variant={paying?.lot_id === l.lot_id ? "secondary" : "primary"}
+                    onClick={() => setPaying(paying?.lot_id === l.lot_id ? null : { lot_id: l.lot_id, farmer: l.farmer, amount: (l.kg / 100) * l.price_per_quintal })}>
+                    {paying?.lot_id === l.lot_id ? "Close" : "Record payment"}
+                  </Button>
                 )}
               </Td></tr>
           ))}
         </Table>
+        {paying && <PaymentForm lot={paying} onCancel={() => setPaying(null)} onDone={() => { setPaying(null); board.reload(); }} />}
         <p className="mt-2 text-xs text-muted">Recording a payment tells the farmer how and when they were paid. The money itself moves outside AgriPulse.</p>
         <p className="mt-2 text-xs text-muted">Weighed tonnage is added to this mandi&apos;s arrivals as <Badge>trader confirmed</Badge>, kept separate from Agmarknet figures.</p>
       </Card>

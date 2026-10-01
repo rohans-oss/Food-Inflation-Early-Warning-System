@@ -94,7 +94,7 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
                                "grade": lot.grade, "shipment_id": lot.shipment_id} for lot in at_gate],
         "delivered_last_24h": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "kg": lot.delivered_weight_kg,
                                 "price_per_quintal": lot.sale_price_per_quintal, "payout_status": lot.payout_status,
-                                "payment_method": lot.payment_method, "payment_ref": lot.payment_ref,
+                                "payment_method": lot.payment_method, "payment_ref": lot.payment_ref, "payment_details": lot.payment_details,
                                 "receipt_token": lot.receipt_token}
                                for lot in delivered_today],
         "date": today,

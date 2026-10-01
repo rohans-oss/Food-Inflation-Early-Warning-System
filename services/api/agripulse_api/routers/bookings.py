@@ -246,14 +246,50 @@ PAY_METHODS = {"upi": "UPI", "cash": "Cash", "bank": "Bank transfer", "other": "
 
 class PaymentIn(BaseModel):
     method: str = Field(pattern="^(upi|cash|bank|other)$")
-    reference: str = Field(default="", max_length=80)
+    reference: str = Field(default="", max_length=80)  # UTR / UPI transaction id / cash receipt no.
+    # bank transfer
+    account_holder: str | None = Field(default=None, max_length=120)
+    account_number: str | None = Field(default=None, max_length=24)
+    ifsc: str | None = Field(default=None, max_length=11)
+    bank_name: str | None = Field(default=None, max_length=120)
+    branch: str | None = Field(default=None, max_length=120)
+    # upi
+    upi_id: str | None = Field(default=None, max_length=100)
+    note: str | None = Field(default=None, max_length=200)
 
 
-def _record_payment(db: Session, lot: Lot, actor_id: int | None, method: str, reference: str) -> None:
+def payment_details(body: PaymentIn) -> dict | None:
+    """Validate the method's fields. The full account number is never stored: only its last 4 digits."""
+    import re
+
+    if body.method == "bank":
+        acct = re.sub(r"\s", "", body.account_number or "")
+        ifsc = (body.ifsc or "").strip().upper()
+        missing = [n for n, v in (("account holder name", body.account_holder), ("account number", acct), ("IFSC code", ifsc),
+                                  ("bank name", body.bank_name), ("branch", body.branch)) if not (v or "").strip()]
+        if missing:
+            raise HTTPException(400, "Bank transfer needs: " + ", ".join(missing))
+        if not re.fullmatch(r"\d{9,18}", acct):
+            raise HTTPException(400, "Account number should be 9 to 18 digits")
+        if not re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", ifsc):
+            raise HTTPException(400, "IFSC code looks wrong (11 characters, like SBIN0001234)")
+        return {"account_holder": body.account_holder.strip(), "account_last4": acct[-4:], "ifsc": ifsc,
+                "bank_name": body.bank_name.strip(), "branch": body.branch.strip()}
+    if body.method == "upi":
+        upi = (body.upi_id or "").strip()
+        if not re.fullmatch(r"[\w.\-]{2,64}@[A-Za-z][\w.\-]{1,63}", upi):
+            raise HTTPException(400, "Enter the farmer's UPI ID (like name@bank)")
+        return {"upi_id": upi}
+    return {"note": body.note.strip()} if body.note and body.note.strip() else None
+
+
+def _record_payment(db: Session, lot: Lot, actor_id: int | None, method: str, reference: str,
+                    details: dict | None = None) -> None:
     if lot.status != "delivered":
         raise HTTPException(409, "Weigh the lot first; payment is recorded for delivered lots")
     move(db, lot, "paid", actor_id, field="payout_status", method=method, reference=reference or None)
     lot.payment_method, lot.payment_ref, lot.paid_at = method, reference or None, datetime.now(timezone.utc)
+    lot.payment_details = details
     amount = round((lot.delivered_weight_kg or 0) / 100 * (lot.sale_price_per_quintal or 0))
     notify(db, lot.farmer, "payment_recorded", f"paid:{lot.id}", lot=lot.id, amount=f"{amount:,}",
            method=PAY_METHODS.get(method.split(" ")[0], method), ref=reference or "-")
@@ -263,7 +299,7 @@ def _record_payment(db: Session, lot: Lot, actor_id: int | None, method: str, re
 def trader_payment(lot_id: int, body: PaymentIn, db: Session = Depends(get_db), user: User = Depends(require("arrivals:confirm"))):
     """The trader records how the farmer was paid for a delivered lot at their mandi."""
     lot = get_scoped_lot(db, user, lot_id)
-    _record_payment(db, lot, user.id, body.method, body.reference)
+    _record_payment(db, lot, user.id, body.method, body.reference.strip(), payment_details(body))
     db.commit()
     return lot_out(db, lot, user)
 

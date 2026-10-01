@@ -76,9 +76,14 @@ export default function Receipt() {
           </table>
           <p className="mt-3 text-sm">
             Payment: {paid
-              ? <b className="text-good">Paid · {String(r.payment.method).toUpperCase()}{r.payment.reference ? ` · ref ${r.payment.reference}` : ""} · {r.payment.paid_local}</b>
+              ? <b className="text-good">Paid · {({ bank: "Bank transfer", upi: "UPI", cash: "Cash", other: "Other" } as Record<string, string>)[r.payment.method] ?? r.payment.method}{r.payment.reference ? ` · ref ${r.payment.reference}` : ""} · {r.payment.paid_local}</b>
               : <b className="text-critical">Due from the buyer</b>}
             {r.payment?.received_local && <span className="text-[#555]"> · farmer confirmed receipt {r.payment.received_local}</span>}
+            {r.payment?.details?.bank_name && (
+              <span className="block text-[#555]">To {r.payment.details.account_holder} · {r.payment.details.bank_name}, {r.payment.details.branch} ·
+                A/c ••••{r.payment.details.account_last4} · IFSC {r.payment.details.ifsc}</span>
+            )}
+            {r.payment?.details?.upi_id && <span className="block text-[#555]">To UPI ID {r.payment.details.upi_id}</span>}
           </p>
         </section>
 

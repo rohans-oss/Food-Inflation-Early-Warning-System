@@ -62,7 +62,7 @@ def lot_out(db: Session, lot: Lot, viewer: User) -> dict:
         "receipt_no": lot.receipt_no,
         "receipt_token": lot.receipt_token,
         "payment": {"method": lot.payment_method, "reference": lot.payment_ref, "paid_at": lot.paid_at,
-                    "received_at": lot.payment_received_at,
+                    "received_at": lot.payment_received_at, "details": lot.payment_details,
                     "amount": round(lot.delivered_weight_kg / 100 * lot.sale_price_per_quintal)
                     if lot.delivered_weight_kg and lot.sale_price_per_quintal else None},
         "delivered_weight_kg": lot.delivered_weight_kg,

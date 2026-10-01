@@ -3,15 +3,13 @@ import "./globals.css";
 
 import type { Metadata, Viewport } from "next";
 
-import { DataBanner } from "@/components/DataBanner";
 import { SessionProvider } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "AgriPulse",
-  description: "Tomato price early warning and farm-to-mandi tracking",
+  description: "Vegetable price early warning and farm-to-mandi tracking",
 };
-// Public demo builds set NEXT_PUBLIC_DEMO_NOTICE (docs/deployment.md "Public demo"); a real deployment leaves it empty.
-const DEMO_NOTICE = process.env.NEXT_PUBLIC_DEMO_NOTICE ?? "";
+// The site-wide banner was removed at the owner's request (2026-10-01); sample data keeps its "Sample" badges.
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, colorScheme: "light" };
 
@@ -19,7 +17,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="font-sans antialiased">
-        <DataBanner fallback={DEMO_NOTICE} />
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

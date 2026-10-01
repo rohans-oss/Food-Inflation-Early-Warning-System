@@ -64,7 +64,7 @@ def test_trader_records_payment_and_farmer_confirms(client, as_role, db):
     L.delivered_weight_kg, L.sale_price_per_quintal = 1970, 2100
     db.commit()
     assert client.post(f"/trader/lots/{lot['id']}/payment", headers=as_role("trader"), json={"method": "crypto"}).status_code == 422
-    r = client.post(f"/trader/lots/{lot['id']}/payment", headers=as_role("trader"), json={"method": "upi", "reference": "UTR123"})
+    r = client.post(f"/trader/lots/{lot['id']}/payment", headers=as_role("trader"), json={"method": "upi", "upi_id": "farmer@upi", "reference": "UTR123"})
     assert r.status_code == 200 and r.json()["payout_status"] == "paid" and r.json()["payment"]["amount"] == 41370
     assert any(a["kind"] == "payment_recorded" and "41,370" in a["body"] for a in client.get("/alerts", headers=as_role("farmer")).json())
     assert client.post(f"/lots/{lot['id']}/payment-received", headers=as_role("farmer")).json()["payment"]["received_at"]
@@ -257,3 +257,36 @@ def test_persistent_demo_url_keeps_the_query_and_sets_the_schema():
 
     u = with_search_path("postgresql://u:p@h/db?sslmode=require&channel_binding=require", "demo")
     assert "sslmode=require" in u and "channel_binding=require" in u and "options=-csearch_path%3Ddemo%2Cpublic" in u
+
+
+def test_bank_payment_needs_full_details_and_keeps_only_the_last_four_digits(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+
+    plan = bk.make_demo_traffic(db)
+    sid = next(s for s, m in plan if m == "delivered")
+    bk._deliver_now(db, sid)
+    lot = db.scalar(select(Lot).where(Lot.shipment_id == sid))
+    T = as_role("trader")
+    url = f"/trader/lots/{lot.id}/payment"
+    r = client.post(url, headers=T, json={"method": "bank", "account_number": "123456789012"})
+    assert r.status_code == 400 and "account holder name" in r.json()["detail"]
+    bad = {"method": "bank", "account_holder": "Krishnappa", "account_number": "1234 5678 9012", "ifsc": "sbin001234",
+           "bank_name": "State Bank of India", "branch": "Chintamani"}
+    assert "IFSC" in client.post(url, headers=T, json=bad).json()["detail"]
+    ok = client.post(url, headers=T, json={**bad, "ifsc": "SBIN0001234", "reference": "UTR123456"}).json()
+    d = ok["payment"]["details"]
+    assert ok["payout_status"] == "paid" and d["account_last4"] == "9012" and d["ifsc"] == "SBIN0001234"
+    assert "123456789012" not in str(ok) and "account_number" not in d  # the full number is never stored
+
+
+def test_upi_payment_needs_a_upi_id(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+
+    plan = bk.make_demo_traffic(db)
+    sid = [s for s, m in plan if m == "delivered"][1]
+    bk._deliver_now(db, sid)
+    lot = db.scalar(select(Lot).where(Lot.shipment_id == sid))
+    url = f"/trader/lots/{lot.id}/payment"
+    assert client.post(url, headers=as_role("trader"), json={"method": "upi", "upi_id": "nope"}).status_code == 400
+    ok = client.post(url, headers=as_role("trader"), json={"method": "upi", "upi_id": "yellamma@okaxis"}).json()
+    assert ok["payment"]["details"] == {"upi_id": "yellamma@okaxis"}
