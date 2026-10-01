@@ -625,6 +625,7 @@ TRAFFIC = [
     ("Gangamma", 13.338, 78.205, "Tomato", 2.0, "Mulbagal Fresh Movers (demo)", "drive"),
     ("Krishnappa", 13.301, 78.104, "Beans", 1.5, "Kolar Krishi Transport (demo)", "delivered"),
     ("Yellamma", 13.420, 77.981, "Tomato", 2.5, "Hosakote Cold Chain (demo)", "delivered"),
+    ("Venkatamma", 13.250, 78.010, "Tomato", 2.0, "Hebbal Haulage (demo)", "drive"),  # the demo driver's live trip
 ]
 TRAFFIC_EVERY_H = 3
 
@@ -642,6 +643,8 @@ def _traffic(delay_s: float) -> None:
 
     time.sleep(delay_s)
     try:
+        with dbmod.SessionLocal() as db:
+            seed_driver_history(db)
         with dbmod.SessionLocal() as db:
             plan = make_demo_traffic(db)
         for i, (sid, mode) in enumerate(plan):
@@ -667,6 +670,22 @@ def make_demo_traffic(db: Session) -> list[tuple[int, str]]:
     since = datetime.now(timezone.utc) - timedelta(hours=TRAFFIC_EVERY_H)
     if db.scalar(select(Lot.id).where(Lot.pickup_label.like(f"%{TRAFFIC_LABEL}"), Lot.created_at >= since)):
         return []
+    plan = []
+    for name, lat, lon, crop, tons, fleet_name, mode in TRAFFIC:
+        fleet = db.scalar(select(Organization).where(Organization.name == fleet_name))
+        if fleet is None:
+            continue
+        sh = _traffic_shipment(db, name, lat, lon, crop, tons, trader.mandi_id, fleet, "near Chintamani")
+        plan.append((sh.id, mode))
+    db.commit()
+    return plan
+
+
+def _traffic_org(db: Session) -> tuple[Organization, User, str]:
+    import secrets as _s
+
+    from ..security import hash_password
+
     org = db.scalar(select(Organization).where(Organization.name == TRAFFIC_ORG))
     if org is None:
         org = Organization(name=TRAFFIC_ORG, kind="fpo")
@@ -679,27 +698,75 @@ def make_demo_traffic(db: Session) -> list[tuple[int, str]]:
                     password_hash=h)
         db.add(desk)
         db.flush()
-    plan = []
-    for name, lat, lon, crop, tons, fleet_name, mode in TRAFFIC:
-        fleet = db.scalar(select(Organization).where(Organization.name == fleet_name))
-        if fleet is None:
-            continue
-        farmer = db.scalar(select(User).where(User.full_name == name, User.org_id == org.id))
-        if farmer is None:
-            farmer = User(email=f"member-{_s.token_hex(5)}@members.agripulse.local", full_name=name, role="farmer",
-                          org_id=org.id, password_hash=h)
-            db.add(farmer)
-            db.flush()
-        lot = Lot(farmer_id=farmer.id, org_id=org.id, crop=crop, quantity_tons=tons, grade="Local",
-                  pickup_label=f"near Chintamani {TRAFFIC_LABEL}", pickup_lat=lat, pickup_lon=lon)
-        db.add(lot)
+    return org, desk, h
+
+
+def _traffic_shipment(db: Session, name: str, lat: float, lon: float, crop: str, tons: float, mandi_id: int,
+                      fleet: Organization, place: str) -> Shipment:
+    import secrets as _s
+
+    org, desk, h = _traffic_org(db)
+    farmer = db.scalar(select(User).where(User.full_name == name, User.org_id == org.id))
+    if farmer is None:
+        farmer = User(email=f"member-{_s.token_hex(5)}@members.agripulse.local", full_name=name, role="farmer",
+                      org_id=org.id, password_hash=h)
+        db.add(farmer)
         db.flush()
-        sh = make_shipment(db, desk, trader.mandi_id, [lot.id], via="demo_traffic")
-        sh.fleet_org_id, sh.booked_at, sh.is_simulated = fleet.id, datetime.now(timezone.utc), True
-        move(db, sh, "booked", desk.id, fleet_org_id=fleet.id, via="demo_traffic")
-        plan.append((sh.id, mode))
-    db.commit()
-    return plan
+    lot = Lot(farmer_id=farmer.id, org_id=org.id, crop=crop, quantity_tons=tons, grade="Local",
+              pickup_label=f"{place} {TRAFFIC_LABEL}", pickup_lat=lat, pickup_lon=lon)
+    db.add(lot)
+    db.flush()
+    sh = make_shipment(db, desk, mandi_id, [lot.id], via="demo_traffic")
+    sh.fleet_org_id, sh.booked_at, sh.is_simulated = fleet.id, datetime.now(timezone.utc), True
+    move(db, sh, "booked", desk.id, fleet_org_id=fleet.id, via="demo_traffic")
+    return sh
+
+
+# the demo driver's past work (days ago, farmer, lat, lon, crop, tonnes, mandi, place)
+DRIVER_HISTORY = [
+    (2, "Muniyappa", 13.402, 78.061, "Tomato", 3.0, "Kolar APMC", "near Chintamani"),
+    (4, "Gangamma", 13.338, 78.205, "Tomato", 2.0, "Chintamani APMC", "Srinivaspur"),
+    (6, "Krishnappa", 13.301, 78.104, "Beans", 1.5, "Binny Mill (FF&V) Bengaluru APMC", "near Kolar"),
+    (9, "Yellamma", 13.420, 77.981, "Tomato", 2.5, "Kolar APMC", "Sidlaghatta"),
+    (13, "Muniyappa", 13.402, 78.061, "Cabbage", 2.0, "Doddaballapur APMC", "near Chintamani"),
+    (17, "Gangamma", 13.338, 78.205, "Tomato", 4.0, "Bangarpet APMC", "Srinivaspur"),
+    (22, "Krishnappa", 13.301, 78.104, "Tomato", 2.5, "Kolar APMC", "near Kolar"),
+    (27, "Yellamma", 13.420, 77.981, "Onion", 3.0, "Binny Mill (FF&V) Bengaluru APMC", "Sidlaghatta"),
+]
+
+
+def seed_driver_history(db: Session) -> int:
+    """PUBLIC DEMO ONLY, once: completed trips for the demo driver (Ravi), dated over the last weeks, so the driver page
+    shows trips done, distance and estimated earnings. Same trip pipeline as live trips; only the dates are set back."""
+    from ..models import Mandi
+
+    ravi = db.scalar(select(User).where(User.email == "driver@demo.agripulse"))
+    if ravi is None or db.scalar(select(Trip.id).where(Trip.driver_id == ravi.id, Trip.status == "completed")):
+        return 0
+    fleet = db.get(Organization, ravi.org_id)
+    now = datetime.now(timezone.utc)
+    made = 0
+    for days, name, lat, lon, crop, tons, mandi_name, place in DRIVER_HISTORY:
+        mandi = db.scalar(select(Mandi).where(Mandi.name == mandi_name))
+        if mandi is None or fleet is None:
+            continue
+        sh = _traffic_shipment(db, name, lat, lon, crop, tons, mandi.id, fleet, place)
+        db.commit()
+        trip_id, depot = _demo_prepare_shipment(db, sh.id)
+        t = db.get(Trip, trip_id)
+        if t.driver_id != ravi.id:  # Ravi was on a road already; leave the rest for next time
+            break
+        _deliver_now(db, sh.id)
+        start = now - timedelta(days=days, hours=5)
+        t = db.get(Trip, trip_id)
+        t.created_at, t.started_at, t.ended_at = start - timedelta(hours=12), start, start + timedelta(hours=3)
+        sh = db.get(Shipment, sh.id)
+        sh.created_at = sh.booked_at = start - timedelta(hours=14)
+        for x in sh.lots:
+            x.created_at, x.delivered_at = start - timedelta(hours=20), start + timedelta(hours=3)
+        db.commit()
+        made += 1
+    return made
 
 
 def _deliver_now(db: Session, shipment_id: int) -> None:

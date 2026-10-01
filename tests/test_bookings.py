@@ -235,7 +235,7 @@ def test_demo_traffic_gives_the_mandi_trucks_and_deliveries_to_pay(client, as_ro
     from agripulse_api.routers import bookings as bk
 
     plan = bk.make_demo_traffic(db)
-    assert [m for _, m in plan] == ["drive", "drive", "delivered", "delivered"]
+    assert [m for _, m in plan] == ["drive", "drive", "delivered", "delivered", "drive"]
     assert bk.make_demo_traffic(db) == []  # not again within a few hours
     for sid, mode in plan:
         if mode == "delivered":
@@ -338,3 +338,19 @@ def test_the_demo_never_confirms_for_a_real_transport_company(client, db):
     db.add(sh)
     db.commit()
     assert bk.start_demo_shipment(sh.id) is False
+
+
+def test_driver_page_shows_trips_done_distance_and_estimated_earnings(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+    from agripulse_api.routers.trips import driver_pay_config
+
+    assert bk.seed_driver_history(db) == len(bk.DRIVER_HISTORY)
+    assert bk.seed_driver_history(db) == 0  # once
+    s = client.get("/driver/summary", headers=as_role("driver")).json()
+    cfg = driver_pay_config()
+    assert s["completed"] == len(bk.DRIVER_HISTORY) and s["km"] > 0 and s["tons"] == sum(h[5] for h in bk.DRIVER_HISTORY)
+    assert s["earnings"] == round(cfg["trip_allowance"] * s["completed"] + cfg["per_km"] * s["km"], -1) or abs(
+        s["earnings"] - (cfg["trip_allowance"] * s["completed"] + cfg["per_km"] * s["km"])) < s["completed"]
+    assert s["completed_month"] <= s["completed"] and len(s["history"]) == s["completed"]
+    assert all(h["pay"] for h in s["history"]) and s["history"][0]["date"] >= s["history"][-1]["date"]
+    assert client.get("/driver/summary", headers=as_role("farmer")).status_code == 403

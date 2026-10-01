@@ -1,0 +1,6 @@
+# Driver earnings shown on the driver's page are ESTIMATES from these rates (assumptions, UNSOURCED: a fleet sets its
+# own; replace with yours). Pay for a completed trip = trip_allowance + per_km x the trip's road distance.
+# Override the file location with DRIVER_PAY_CONFIG=/path/file.toml
+[pay]
+trip_allowance = 400   # Rs per completed trip (bhatta)
+per_km = 6             # Rs per km driven on the trip

@@ -589,3 +589,55 @@ def _jsonable(d):
     import json
 
     return json.loads(json.dumps(d, default=str))
+
+
+# ------------------------------------------------------------------ driver: trips done + estimated earnings
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def driver_pay_config() -> dict:
+    import os
+    import tomllib
+    from pathlib import Path
+
+    p = Path(os.environ.get("DRIVER_PAY_CONFIG", Path(__file__).resolve().parents[4] / "config" / "driver_pay.toml"))
+    with open(p, "rb") as f:
+        return tomllib.load(f)["pay"]
+
+
+@router.get("/driver/summary")
+def driver_summary(db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
+    """The driver's own record: trips done, distance, tonnes delivered and ESTIMATED earnings (rates in
+    config/driver_pay.toml), this month and in total, plus the trip history."""
+    cfg = driver_pay_config()
+    trips = db.scalars(select(Trip).where(Trip.driver_id == user.id).order_by(Trip.created_at.desc())).all()
+    now = datetime.now(timezone.utc)
+    month_start = now.astimezone(IST).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    def when(t):
+        d = t.ended_at or t.started_at or t.created_at
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+    def pay(t):
+        return round(cfg["trip_allowance"] + cfg["per_km"] * (t.planned_distance_km or 0))
+
+    done = [t for t in trips if t.status == "completed"]
+    month = [t for t in done if when(t) >= month_start]
+    hist = []
+    for t in trips[:50]:
+        lots = list(t.shipment.lots) if t.shipment else []
+        hist.append({"id": t.id, "date": when(t), "status": t.status, "mandi": t.mandi.name, "vehicle": t.vehicle.registration,
+                     "from": ", ".join(sorted({(lot.pickup_label or "farm").replace(" (demo traffic)", "") for lot in lots})) or "farm",
+                     "crops": sorted({lot.crop for lot in lots}), "km": round(t.planned_distance_km or 0, 1),
+                     "tons": t.load_tons, "pay": pay(t) if t.status == "completed" else None})
+    return {
+        "rates": {"trip_allowance": cfg["trip_allowance"], "per_km": cfg["per_km"]},
+        "active": sum(1 for t in trips if t.status in ("assigned", "accepted", "in_progress")),
+        "completed": len(done), "completed_month": len(month),
+        "km": round(sum(t.planned_distance_km or 0 for t in done), 1),
+        "km_month": round(sum(t.planned_distance_km or 0 for t in month), 1),
+        "tons": round(sum(t.load_tons or 0 for t in done), 1),
+        "earnings": sum(pay(t) for t in done), "earnings_month": sum(pay(t) for t in month),
+        "history": hist,
+    }

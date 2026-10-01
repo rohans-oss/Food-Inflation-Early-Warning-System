@@ -326,4 +326,7 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   companies (name ends "(demo)") from real ones. The autopilot runs ONLY for demo fleets, stops at the gate at mandis
   with a real manager (`real_managers`), and auto-pays only demo farmers. JWT_SECRET=auto on Postgres is generated
   once and kept in `app_settings` (`demo_start.stable_jwt_secret`).
+- Driver page (2026-10-01): `GET /driver/summary` (trips, km, tonnes, ESTIMATED earnings from config/driver_pay.toml,
+  history). Demo driver history from `bookings.seed_driver_history` (once, dates set back); demo traffic includes a
+  Hebbal truck so the demo driver has a live trip.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.
