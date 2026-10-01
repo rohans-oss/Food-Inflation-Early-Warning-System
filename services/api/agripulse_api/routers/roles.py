@@ -88,10 +88,11 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
                                           "expected_vs_normal", "note")},
         "incoming": [{"trip_id": t.id, "vehicle": t.vehicle.registration, "tons": t.load_tons, "status": t.status,
                       "eta_at": t.eta_at, "remaining_km": t.remaining_km, "is_simulated": t.is_simulated,
-                      "lat": t.last_lat, "lon": t.last_lon, "pickup_scanned": t.pickup_scanned_at is not None}
+                      "lat": t.last_lat, "lon": t.last_lon, "pickup_scanned": t.pickup_scanned_at is not None,
+                      "arrived": t.delivery_scanned_at is not None, "driver": _driver_name(db, t),
+                      "farmers": sorted({x.farmer.full_name for x in t.shipment.lots}) if t.shipment else []}
                      for t in incoming],
-        "awaiting_weighing": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "declared_tons": lot.quantity_tons,
-                               "grade": lot.grade, "shipment_id": lot.shipment_id} for lot in at_gate],
+        "awaiting_weighing": [_gate_lot(db, lot) for lot in at_gate],
         "delivered_last_24h": [{"lot_id": lot.id, "farmer": lot.farmer.full_name, "kg": lot.delivered_weight_kg,
                                 "price_per_quintal": lot.sale_price_per_quintal, "payout_status": lot.payout_status,
                                 "payment_method": lot.payment_method, "payment_ref": lot.payment_ref, "payment_details": lot.payment_details,
@@ -99,6 +100,54 @@ def trader_board(db: Session = Depends(get_db), user: User = Depends(require("ar
                                for lot in delivered_today],
         "date": today,
     }
+
+
+def _driver_name(db: Session, t: Trip) -> str | None:
+    d = db.get(User, t.driver_id) if t.driver_id else None
+    return d.full_name if d else None
+
+
+def _gate_lot(db: Session, lot: Lot) -> dict:
+    """A lot at the gate, with what the weighing form needs: crop, declared tonnes, the truck, and today's price at this
+    mandi for this crop if one was reported (a hint for the trader, never filled in for them)."""
+    from ..supply import latest_crop_prices
+
+    sh = lot.shipment
+    trip = db.scalar(select(Trip).where(Trip.shipment_id == sh.id, Trip.status.not_in(["declined", "cancelled"]))
+                     .order_by(Trip.id.desc())) if sh else None
+    price = latest_crop_prices(db, lot.crop).get(sh.mandi_id) if sh else None
+    return {"lot_id": lot.id, "farmer": lot.farmer.full_name, "farmer_phone": lot.farmer.phone, "crop": lot.crop,
+            "declared_tons": lot.quantity_tons, "grade": lot.grade, "shipment_id": lot.shipment_id,
+            "trip_id": trip.id if trip else None, "vehicle": trip.vehicle.registration if trip else None,
+            "price_hint": {"modal": price["modal"], "date": price["date"], "data_provenance": price["data_provenance"]}
+            if price else None}
+
+
+class GateScanIn(BaseModel):
+    token: str = Field(min_length=4, max_length=500)
+
+
+@router.post("/trader/scan")
+def gate_scan(body: GateScanIn, db: Session = Depends(get_db), user: User = Depends(require("arrivals:confirm"))):
+    """The mandi manager scans whichever truck is at the gate: the delivery QR on the driver's phone identifies the trip
+    (no need to pick the row first). Confirms arrival and returns the lots to weigh."""
+    from .trips import _qr_token, confirm_delivery
+
+    if not user.mandi_id:
+        raise HTTPException(400, "Your account is not linked to a mandi")
+    tok = _qr_token(body.token)
+    t = db.scalar(select(Trip).where(Trip.delivery_qr_token == tok))
+    if t is None:
+        raise HTTPException(404, "This QR is not a driver's delivery code. Ask the driver to open the trip in the "
+                                 "AgriPulse Driver app and show the Delivery QR.")
+    if t.mandi_id != user.mandi_id:
+        raise HTTPException(409, f"This truck is booked for {t.mandi.name}, not your mandi.")
+    first = t.delivery_scanned_at is None
+    confirm_delivery(db, t, user)
+    db.commit()
+    lots = db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)).all() if t.shipment_id else []
+    return {"trip_id": t.id, "vehicle": t.vehicle.registration, "driver": _driver_name(db, t), "first_scan": first,
+            "lots": [{**_gate_lot(db, x), "status": x.status} for x in lots]}
 
 
 class WeighIn(BaseModel):

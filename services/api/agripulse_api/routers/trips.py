@@ -277,10 +277,24 @@ def scan_delivery(trip_id: int, body: ScanIn, db: Session = Depends(get_db), use
     t = db.get(Trip, trip_id)
     if t is None or t.mandi_id != user.mandi_id:
         raise forbid()
-    if body.token != t.delivery_qr_token:
+    if _qr_token(body.token) != t.delivery_qr_token:
         raise HTTPException(400, "QR code does not match this trip")
+    confirm_delivery(db, t, user)
+    db.commit()
+    return trip_out(db, t, user)
+
+
+def _qr_token(raw: str) -> str:
+    """What a scanner (or a person typing) gives: the bare token, maybe with spaces / newlines, or a link ending in it."""
+    s = "".join((raw or "").split())  # scanners add newlines; the app shows the code in groups of 4
+    return s.rstrip("/").rsplit("/", 1)[-1].rsplit("=", 1)[-1] if ("/" in s or "=" in s) else s
+
+
+def confirm_delivery(db: Session, t: Trip, user: User) -> None:
+    """The truck is at the mandi gate (delivery QR scanned): delivered + reached_mandi events, lots at_mandi. Idempotent."""
     if t.status != "in_progress":
-        raise HTTPException(409, f"Trip is {t.status}")
+        raise HTTPException(409, f"Trip is {t.status}: the driver must start the trip in the app first"
+                            if t.status == "accepted" else f"Trip is {t.status}")
     if t.delivery_scanned_at is None:
         now = datetime.now(timezone.utc)
         t.delivery_scanned_at = now
@@ -292,9 +306,10 @@ def scan_delivery(trip_id: int, body: ScanIn, db: Session = Depends(get_db), use
                 notify(db, u, "vehicle_arrived", f"arrived:{t.id}", vehicle=t.vehicle.registration, mandi=t.mandi.name,
                        time=_local(now))
         for lot in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
-            move(db, lot, "at_mandi", user.id, trip_id=t.id, via="delivery_qr")
-    db.commit()
-    return trip_out(db, t, user)
+            if lot.status == "grouped":  # loaded without a pickup scan/code: the gate scan proves it arrived
+                move(db, lot, "in_transit", user.id, trip_id=t.id, via="delivery_qr_no_pickup_scan")
+            if lot.status == "in_transit":
+                move(db, lot, "at_mandi", user.id, trip_id=t.id, via="delivery_qr")
 
 
 @router.post("/trips/{trip_id}/end")

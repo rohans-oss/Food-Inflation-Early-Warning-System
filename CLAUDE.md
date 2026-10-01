@@ -347,6 +347,11 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   `/driver/#handoff=<ticket>&trip=<id>` (FRAGMENT, never sent to a server) -> app `POST /auth/handoff` = a NEW session
   for the phone (`sessions.redeem_handoff`). The app's trip view shows the destination (farm until pickup, then the
   mandi) as an OSM embed + Google Maps directions (`renderMap`, redrawn only when the destination changes).
+- Mandi gate (2026-10-01): `POST /trader/scan {token}` finds the trip by its delivery QR (any truck, no row to pick),
+  runs `trips.confirm_delivery` (the one place arrival is confirmed; also used by `/trips/{id}/scan/delivery`) and
+  returns the lots to weigh. `_qr_token` ignores whitespace (the app shows the code in groups of 4) and link prefixes.
+  Web `QRScanner` = BarcodeDetector where present, else jsQR on video frames; `onCode` via a ref (re-renders must not
+  restart the camera). Trader page: scan -> weigh -> PaymentForm opens for that lot.
 
 ## Update: direct farmer-to-driver booking for real-world field testing
 30. This flow must work with REAL accounts, REAL district/mandi selection, and REAL phone GPS — not the simulator.

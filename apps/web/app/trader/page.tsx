@@ -34,20 +34,43 @@ export default function Trader() {
     popup: `${i.vehicle} · ${i.tons} t · ETA ${time(i.eta_at)}`,
   })), [incoming]);
 
-  const scanned = (tripId: number) => async (code: string) => {
-    await act.run(async () => {
-      await api(`/trips/${tripId}/scan/delivery`, { method: "POST", body: { token: code } });
+  // Gate: scan whichever truck is here (the driver's delivery QR identifies the trip), then weigh, then pay.
+  const [gate, setGate] = useState<any | null>(null);
+  const [gateErr, setGateErr] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const scanned = async (code: string) => {
+    setGateErr(null);
+    try {
+      const r = await api<any>("/trader/scan", { method: "POST", body: { token: code } });
+      setGate(r);
+      setScanning(false);
       setScanFor(null);
-      setOk(`Arrival confirmed for trip #${tripId}. Weigh the lots below.`);
+      setOk(r.first_scan ? `✓ ${r.vehicle} has arrived. Weigh the load below.` : `${r.vehicle} was already checked in. Weigh the load below.`);
       board.reload();
-    });
+    } catch (e: any) { setGateErr(e.message); }
   };
-  const record = (lotId: number) => act.run(async () => {
-    const w = weigh[lotId];
-    await api(`/trader/lots/${lotId}/weigh`, { method: "POST", body: { weight_kg: Number(w.kg), price_per_quintal: Number(w.price) } });
-    setOk(`Lot #${lotId} recorded. The farmer has been notified.`);
+  const record = (lot: { lot_id: number; farmer: string }) => act.run(async () => {
+    const w = weigh[lot.lot_id];
+    await api(`/trader/lots/${lot.lot_id}/weigh`, { method: "POST", body: { weight_kg: Number(w.kg), price_per_quintal: Number(w.price) } });
+    setOk(`Lot #${lot.lot_id} weighed: ${num(Number(w.kg), 0)} kg at ${inr(Number(w.price))}/quintal. Now record how ${lot.farmer} is paid.`);
+    setPaying({ lot_id: lot.lot_id, farmer: lot.farmer, amount: (Number(w.kg) / 100) * Number(w.price) });
+    setGate((g: any) => g && { ...g, lots: g.lots.filter((x: any) => x.lot_id !== lot.lot_id) });
     board.reload();
+    setTimeout(() => document.getElementById("pay-form")?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
   });
+  const weighRow = (l: any) => (
+    <tr key={l.lot_id}>
+      <Td>#{l.lot_id}{l.vehicle && <div className="text-xs text-muted">{l.vehicle}</div>}</Td>
+      <Td>{l.farmer}{l.farmer_phone && <div className="text-xs"><a className="underline" href={`tel:${l.farmer_phone}`}>{l.farmer_phone}</a></div>}</Td>
+      <Td>{l.crop} · {tons(l.declared_tons)}{l.grade ? ` · ${l.grade}` : ""}</Td>
+      <Td><input aria-label="Weight in kg" className={`${inputCls} w-28`} type="number" min="1" placeholder={String(Math.round(l.declared_tons * 1000))}
+        value={weigh[l.lot_id]?.kg ?? ""} onChange={(e) => setWeigh({ ...weigh, [l.lot_id]: { price: weigh[l.lot_id]?.price ?? "", kg: e.target.value } })} /></Td>
+      <Td><input aria-label="Price per quintal" className={`${inputCls} w-28`} type="number" min="1" placeholder={l.price_hint ? String(l.price_hint.modal) : ""}
+        value={weigh[l.lot_id]?.price ?? ""} onChange={(e) => setWeigh({ ...weigh, [l.lot_id]: { kg: weigh[l.lot_id]?.kg ?? "", price: e.target.value } })} />
+        {l.price_hint && <div className="mt-1 text-[11px] text-muted">today {inr(l.price_hint.modal)} <ProvenanceBadge p={l.price_hint.data_provenance} compact /></div>}</Td>
+      <Td><Button disabled={!weigh[l.lot_id]?.kg || !weigh[l.lot_id]?.price || act.busy} onClick={() => record(l)}>Weigh &amp; continue to payment</Button></Td>
+    </tr>
+  );
 
   const s = b?.summary;
   const ratio = s?.expected_vs_normal;
@@ -73,43 +96,56 @@ export default function Trader() {
       )}
       {s?.note && <Note>{s.note}</Note>}
 
+      <Card title="Truck at the gate">
+        {!scanning && !scanFor && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => { setScanning(true); setGateErr(null); }}>📷 Scan the driver&apos;s delivery QR</Button>
+            <p className="text-sm text-ink2">Ask the driver to open the trip in the AgriPulse Driver app and show the <b>Delivery QR</b>.</p>
+          </div>
+        )}
+        {(scanning || scanFor) && (
+          <div className="space-y-2">
+            <QRScanner onCode={scanned} label="Scan" autoStart />
+            <button className="text-sm underline" onClick={() => { setScanning(false); setScanFor(null); }}>Close scanner</button>
+          </div>
+        )}
+        {gateErr && <p className="mt-3 rounded-lg border border-critical/40 px-3 py-2 text-sm text-critical">{gateErr}</p>}
+        {gate && gate.lots.some((x: any) => x.status === "at_mandi") && (
+          <div className="mt-4">
+            <p className="mb-2 font-semibold">✓ {gate.vehicle}{gate.driver ? ` · ${gate.driver}` : ""} · weigh the load</p>
+            <Table head={["Lot", "Farmer", "Produce", "Weight (kg)", "Price (₹/quintal)", ""]}>
+              {gate.lots.filter((x: any) => x.status === "at_mandi").map(weighRow)}
+            </Table>
+          </div>
+        )}
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
         <Card title={t("incoming")}>
           <Table head={["Vehicle", "Tons", "Status", t("eta"), t("remaining"), ""]} empty="No vehicles heading here right now.">
             {incoming.map((i) => (
               <tr key={i.trip_id}>
-                <Td>{i.vehicle} <SimBadge on={i.is_simulated} />{!i.pickup_scanned && <div className="text-xs text-muted">not loaded yet</div>}</Td>
+                <Td>{i.vehicle} <SimBadge on={i.is_simulated} />
+                  {(i.driver || i.farmers?.length > 0) && <div className="text-xs text-ink2">{[i.driver, i.farmers?.join(", ")].filter(Boolean).join(" · ")}</div>}
+                  {!i.pickup_scanned && <div className="text-xs text-muted">not loaded yet</div>}</Td>
                 <Td>{num(i.tons, 1)}</Td>
                 <Td><StatusBadge s={i.status} /></Td>
                 <Td>{time(i.eta_at)}</Td>
                 <Td>{i.remaining_km != null ? `${num(i.remaining_km, 0)} km` : "–"}</Td>
-                <Td>{i.status === "in_progress" && !i.is_simulated && (
-                  <Button variant="secondary" onClick={() => setScanFor(scanFor === i.trip_id ? null : i.trip_id)}>{t("scanDelivery")}</Button>)}</Td>
+                <Td>{i.arrived ? <span className="text-sm font-semibold text-good">✓ At the gate</span>
+                  : i.status === "in_progress" && !i.is_simulated ? (
+                  <Button variant="secondary" onClick={() => { setScanFor(i.trip_id); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("scanDelivery")}</Button>)
+                  : i.status === "accepted" ? <span className="text-xs text-muted">driver hasn&apos;t started</span> : null}</Td>
               </tr>
             ))}
           </Table>
-          {scanFor && (
-            <div className="mt-3 rounded-xl border border-line p-3">
-              <p className="mb-2 text-sm">Scan the <b>delivery QR on the driver&apos;s phone</b> for trip #{scanFor}.</p>
-              <QRScanner onCode={scanned(scanFor)} label="Scan" />
-            </div>
-          )}
         </Card>
         <Card title="Map"><MapView height="h-80" markers={markers} fitKey={markers.length} /></Card>
       </div>
 
       <Card title={t("awaitingWeighing")}>
-        <Table head={["Lot", "Farmer", "Declared", t("grade"), "Weight (kg)", "Price (₹/quintal)", ""]} empty="Nothing waiting at the gate.">
-          {b?.awaiting_weighing?.map((l: any) => (
-            <tr key={l.lot_id}>
-              <Td>#{l.lot_id}</Td><Td>{l.farmer}</Td><Td>{tons(l.declared_tons)}</Td><Td>{l.grade}</Td>
-              <Td><input aria-label="Weight in kg" className={`${inputCls} w-28`} type="number" min="1" value={weigh[l.lot_id]?.kg ?? ""}
-                onChange={(e) => setWeigh({ ...weigh, [l.lot_id]: { price: weigh[l.lot_id]?.price ?? "", kg: e.target.value } })} /></Td>
-              <Td><input aria-label="Price per quintal" className={`${inputCls} w-28`} type="number" min="1" value={weigh[l.lot_id]?.price ?? ""}
-                onChange={(e) => setWeigh({ ...weigh, [l.lot_id]: { kg: weigh[l.lot_id]?.kg ?? "", price: e.target.value } })} /></Td>
-              <Td><Button disabled={!weigh[l.lot_id]?.kg || !weigh[l.lot_id]?.price || act.busy} onClick={() => record(l.lot_id)}>{t("recordWeighing")}</Button></Td>
-            </tr>
-          ))}
+        <Table head={["Lot", "Farmer", "Produce", "Weight (kg)", "Price (₹/quintal)", ""]} empty="Nothing waiting at the gate. Scan a truck's delivery QR when it arrives.">
+          {b?.awaiting_weighing?.filter((l: any) => !gate?.lots.some((x: any) => x.lot_id === l.lot_id && x.status === "at_mandi")).map(weighRow)}
         </Table>
       </Card>
 
@@ -132,7 +168,8 @@ export default function Trader() {
               </Td></tr>
           ))}
         </Table>
-        {paying && <PaymentForm lot={paying} onCancel={() => setPaying(null)} onDone={() => { setPaying(null); board.reload(); }} />}
+        {paying && <div id="pay-form"><PaymentForm lot={paying} onCancel={() => setPaying(null)}
+          onDone={() => { setOk(`Payment to ${paying.farmer} recorded. The farmer has been notified.`); setPaying(null); board.reload(); }} /></div>}
         <p className="mt-2 text-xs text-muted">Recording a payment tells the farmer how and when they were paid. The money itself moves outside AgriPulse.</p>
         <p className="mt-2 text-xs text-muted">Weighed tonnage is added to this mandi&apos;s arrivals as <Badge>trader confirmed</Badge>, kept separate from Agmarknet figures.</p>
       </Card>

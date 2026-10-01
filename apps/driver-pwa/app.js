@@ -267,11 +267,11 @@ function notice(text, warn = false) {
 // ------------------------------------------------------------ QR
 function drawQR(text) {
   if (!window.qrcode) { $("qr").textContent = ""; $("qrText").textContent = text; return; }
-  const q = qrcode(0, "M");
+  const q = qrcode(0, "L"); // fewer, bigger squares: easier for a laptop camera at the gate
   q.addData(text);
   q.make();
-  $("qr").innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
-  $("qrText").textContent = text;
+  $("qr").innerHTML = q.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
+  $("qrText").textContent = text.match(/.{1,4}/g).join(" "); // typed by hand if the camera can't read it (spaces are ignored)
 }
 
 async function submitPickup(tokenText) {

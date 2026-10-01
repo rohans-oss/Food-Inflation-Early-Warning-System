@@ -295,3 +295,66 @@ def test_drive_in_the_app_signs_the_phone_in_without_a_password(client, world, a
     t2 = client.post("/auth/handoff-ticket", headers=w["d1"]).json()["ticket"]
     client.post("/auth/logout", headers=w["d1"])
     assert client.post("/auth/handoff", json={"ticket": t2}).status_code == 401
+
+
+def test_mandi_manager_scans_the_truck_at_the_gate_then_weighs_and_records_payment(client, world, db):
+    """Real flow end to end at the gate: the manager scans whatever truck is there (no row to pick), the lots come
+    back ready to weigh, then payment with bank details (only the last 4 digits kept)."""
+    w = world
+    go_online(client, w["d1"], w["kolar"].id)
+    req = client.post(f"/lots/{w['lot']['id']}/driver-request", headers=w["farmer"], json={"mandi_id": w["kolar"].id}).json()
+    trip = client.post(f"/driver/requests/{req['id']}/accept", headers=w["d1"]).json()
+    M = _auth(client.post("/auth/register", json={"email": "manager@kolarapmc.in", "password": "longenough",
+                                                  "full_name": "Kolar Manager", "role": "trader", "district": "Kolar",
+                                                  "mandi_id": w["kolar"].id}))
+    token = client.get(f"/trips/{trip['id']}", headers=w["d1"]).json()["delivery_qr_token"]
+    # not started yet -> a clear reason, nothing changes
+    r = client.post("/trader/scan", headers=M, json={"token": token})
+    assert r.status_code == 409 and "start the trip" in r.json()["detail"]
+    client.post(f"/trips/{trip['id']}/consent", headers=w["d1"], json={"consent": True})
+    client.post(f"/trips/{trip['id']}/start", headers=w["d1"])
+    code = client.get(f"/trips/{trip['id']}", headers=w["d1"]).json()["pickup_code"]
+    client.post(f"/lots/{w['lot']['id']}/confirm-pickup", headers=w["farmer"], json={"code": code})
+    board = client.get("/trader/board", headers=M).json()
+    row = next(i for i in board["incoming"] if i["trip_id"] == trip["id"])
+    assert row["driver"] == "Ravi Kumar" and row["farmers"] == ["Suma"] and row["arrived"] is False
+    # a random QR / another mandi's truck are refused with a reason
+    bad = client.post("/trader/scan", headers=M, json={"token": "https://example.com/not-ours"})
+    assert bad.status_code == 404 and "Delivery QR" in bad.json()["detail"]
+    # the real scan: whitespace from a scanner is fine
+    ok = client.post("/trader/scan", headers=M, json={"token": f"  {token}\n"})
+    assert ok.status_code == 200, ok.text
+    g = ok.json()
+    assert g["first_scan"] and g["vehicle"] == "KA07AB1234" and g["driver"] == "Ravi Kumar"
+    assert [(x["lot_id"], x["status"], x["farmer"], x["crop"]) for x in g["lots"]] == [(w["lot"]["id"], "at_mandi", "Suma", "Tomato")]
+    typed = " ".join(token[i:i + 4] for i in range(0, len(token), 4))  # as the app shows it under the QR
+    again = client.post("/trader/scan", headers=M, json={"token": typed}).json()
+    assert again["first_scan"] is False  # idempotent
+    board = client.get("/trader/board", headers=M).json()
+    assert next(i for i in board["incoming"] if i["trip_id"] == trip["id"])["arrived"] is True
+    assert [x["lot_id"] for x in board["awaiting_weighing"]] == [w["lot"]["id"]]
+    # weigh, then pay by bank transfer
+    assert client.post(f"/trader/lots/{w['lot']['id']}/weigh", headers=M,
+                       json={"weight_kg": 1980, "price_per_quintal": 2100}).status_code == 200
+    pay = client.post(f"/trader/lots/{w['lot']['id']}/payment", headers=M, json={
+        "method": "bank", "account_holder": "Suma", "account_number": "123456789012", "ifsc": "SBIN0001234",
+        "bank_name": "State Bank of India", "branch": "Kolar", "reference": "UTR123"})
+    assert pay.status_code == 200, pay.text
+    lot = client.get(f"/lots/{w['lot']['id']}", headers=w["farmer"]).json()
+    assert lot["payout_status"] == "paid" and lot["payment"]["details"]["account_last4"] == "9012"
+    assert "123456789012" not in str(lot)
+    # the driver can now end the trip
+    assert client.post(f"/trips/{trip['id']}/end", headers=w["d1"]).status_code == 200
+
+
+def test_gate_scan_refuses_another_mandis_truck(client, world, db):
+    w = world
+    go_online(client, w["d1"], w["kolar"].id)
+    req = client.post(f"/lots/{w['lot']['id']}/driver-request", headers=w["farmer"], json={"mandi_id": w["kolar"].id}).json()
+    trip = client.post(f"/driver/requests/{req['id']}/accept", headers=w["d1"]).json()
+    other = db.scalar(select(Mandi).where(Mandi.district == "Kolar", Mandi.id != w["kolar"].id))
+    M2 = _auth(client.post("/auth/register", json={"email": "m2@apmc.in", "password": "longenough", "full_name": "Other",
+                                                   "role": "trader", "district": "Kolar", "mandi_id": other.id}))
+    token = client.get(f"/trips/{trip['id']}", headers=w["d1"]).json()["delivery_qr_token"]
+    r = client.post("/trader/scan", headers=M2, json={"token": token})
+    assert r.status_code == 409 and "Kolar APMC" in r.json()["detail"]
