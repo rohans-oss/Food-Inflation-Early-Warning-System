@@ -290,3 +290,51 @@ def test_upi_payment_needs_a_upi_id(client, as_role, db):
     assert client.post(url, headers=as_role("trader"), json={"method": "upi", "upi_id": "nope"}).status_code == 400
     ok = client.post(url, headers=as_role("trader"), json={"method": "upi", "upi_id": "yellamma@okaxis"}).json()
     assert ok["payment"]["details"] == {"upi_id": "yellamma@okaxis"}
+
+
+def test_a_real_mandi_manager_weighs_and_pays_never_the_demo(client, as_role, db):
+    """Real farmer -> demo transporter -> a mandi with a REAL manager: the demo truck stops at the gate; the real
+    manager sees the lot, weighs it and records the payment."""
+    from agripulse_api.routers import bookings as bk
+
+    kolar = db.scalar(select(Mandi).where(Mandi.name == "Kolar APMC"))
+    reg = client.post("/auth/register", json={"email": "ravi@farm.in", "password": "longenough", "full_name": "Ravi Kumar",
+                                              "role": "farmer"}).json()
+    F = {"Authorization": f"Bearer {reg['access_token']}"}
+    mgr = client.post("/auth/register", json={"email": "manager@kolarapmc.in", "password": "longenough", "full_name": "Kolar manager",
+                                              "role": "trader", "district": kolar.district, "mandi_id": kolar.id}).json()
+    M = {"Authorization": f"Bearer {mgr['access_token']}"}
+    lot = client.post("/lots", headers=F, json={"crop": "Tomato", "quantity_tons": 2, "pickup_lat": FARM[0], "pickup_lon": FARM[1]}).json()
+    client.post(f"/lots/{lot['id']}/preferred-mandi", headers=F, json={"mandi_id": kolar.id})
+    fleet = next(f for f in client.get(f"/lots/{lot['id']}/next-steps", headers=F).json()["fleets"] if f["name"].endswith("(demo)"))
+    slot = next(s for s in fleet["slots"] if s["free_trucks"] > 0)
+    b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": fleet["org_id"], "pickup_at": slot["pickup_at"]}).json()
+    trip_id, depot = bk._demo_prepare(db, lot["id"], b["id"])
+    bk._demo_approach(db, trip_id, depot, 1.0)
+    code = db.get(Trip, trip_id).pickup_code
+    assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": code}).json()["status"] == "in_transit"
+    assert any(i["trip_id"] == trip_id for i in client.get("/trader/board", headers=M).json()["incoming"])
+    bk._demo_step(db, trip_id, 1.0)
+    bk._demo_finish(db, None, trip_id)
+    assert client.get(f"/lots/{lot['id']}", headers=F).json()["status"] == "at_mandi"  # left for the real manager
+    waiting = client.get("/trader/board", headers=M).json()["awaiting_weighing"]
+    assert lot["id"] in [x["lot_id"] for x in waiting]
+    w = client.post(f"/trader/lots/{lot['id']}/weigh", headers=M, json={"weight_kg": 1985, "price_per_quintal": 2200})
+    assert w.status_code == 200
+    p = client.post(f"/trader/lots/{lot['id']}/payment", headers=M, json={"method": "upi", "upi_id": "ravi@okicici", "reference": "T1"})
+    out = client.get(f"/lots/{lot['id']}", headers=F).json()
+    assert p.status_code == 200 and out["payout_status"] == "paid" and out["payment"]["details"]["upi_id"] == "ravi@okicici"
+
+
+def test_the_demo_never_confirms_for_a_real_transport_company(client, db):
+    from agripulse_api.models import Organization, Shipment
+    from agripulse_api.routers import bookings as bk
+
+    r = client.post("/auth/register", json={"email": "owner@realfleet.in", "password": "longenough", "full_name": "Owner",
+                                            "role": "fleet_owner", "org_name": "Real Roadways", "district": "Kolar"})
+    org = db.scalar(select(Organization).where(Organization.name == "Real Roadways"))
+    assert r.status_code == 201 and org.base_label  # base from the district
+    sh = Shipment(org_id=None, mandi_id=1, created_by=1, fleet_org_id=org.id, status="booked")
+    db.add(sh)
+    db.commit()
+    assert bk.start_demo_shipment(sh.id) is False

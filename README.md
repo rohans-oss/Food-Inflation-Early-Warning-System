@@ -766,3 +766,14 @@ create a shipment, or "Plan loads".
   owner's district becomes the base its trucks start from.
 - Public lookup: `GET /auth/districts`. FPO bookings now get the same confirm → driver + truck → pickup-code flow as
   farmers (`POST /shipments/{id}/confirm-pickup`).
+
+## Real accounts alongside the demo
+
+Accounts are stored in the database (Neon), so they persist. A real farmer's lot reaches real people: a real transport
+company confirms its own bookings (Fleet page), and at a mandi with a real manager the lot waits under "Awaiting
+weighing" for that manager to weigh it and record the payment. The demo companies and the demo mandi manager only act
+for bookings made with demo companies / at mandis without a real manager. Sign-ins survive restarts (signing key kept in
+`app_settings`).
+
+How to verify: register a farmer and a mandi manager for Kolar APMC → farmer books a demo transporter to Kolar APMC →
+enter the pickup code → when the truck reaches the gate the manager weighs and records payment → the farmer sees it.

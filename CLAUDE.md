@@ -322,4 +322,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   IFSC, bank, branch; upi: UPI ID). `lots.payment_details` keeps the account number ONLY as `account_last4`.
 - No site-wide banner (owner's request 2026-10-01): sample data is still labelled per item ("Sample" ProvenanceBadge),
   demo receipts still say so. Landing copy is vegetable-general.
+- Real users in the persistent demo (2026-10-01): `agripulse_api.demo` tells demo accounts (@demo.agripulse) and demo
+  companies (name ends "(demo)") from real ones. The autopilot runs ONLY for demo fleets, stops at the gate at mandis
+  with a real manager (`real_managers`), and auto-pays only demo farmers. JWT_SECRET=auto on Postgres is generated
+  once and kept in `app_settings` (`demo_start.stable_jwt_secret`).
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

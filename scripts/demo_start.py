@@ -86,6 +86,28 @@ def prepare_persistent_demo(url: str) -> None:
     print("[demo] persistent demo: sample data in schema 'demo' of DATABASE_URL; accounts survive restarts", flush=True)
 
 
+def stable_jwt_secret() -> None:
+    """JWT_SECRET=auto on a PERSISTENT database: generate the signing key once and keep it in app_settings, so a
+    restart (free hosts restart often) doesn't sign everyone out. An explicit JWT_SECRET always wins."""
+    if os.environ.get("JWT_SECRET", "auto") != "auto":
+        return
+    import secrets
+
+    from sqlalchemy import create_engine, select
+
+    from agripulse_api.config import Settings
+    from agripulse_api.models import AppSetting
+    from sqlalchemy.orm import Session
+
+    with Session(create_engine(Settings(jwt_secret="x").database_url)) as db:
+        row = db.scalar(select(AppSetting).where(AppSetting.key == "jwt_secret"))
+        if row is None:
+            row = AppSetting(key="jwt_secret", value=secrets.token_urlsafe(48))
+            db.add(row)
+            db.commit()
+        os.environ["JWT_SECRET"] = row.value
+
+
 def main():
     os.environ.setdefault("JWT_SECRET", "auto")
     url = os.environ.get("DATABASE_URL", "")
@@ -98,6 +120,8 @@ def main():
     elif url.startswith(("postgres://", "postgresql")):
         print("[live] real-data mode", flush=True)
         prepare_live()
+    if os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql")):
+        stable_jwt_secret()
     print("[demo]", prepare_admin(), flush=True)
     port = os.environ.get("PORT", "8000")
     os.execvp("uvicorn", ["uvicorn", "agripulse_api.main:app", "--app-dir", "services/api", "--host", "0.0.0.0",

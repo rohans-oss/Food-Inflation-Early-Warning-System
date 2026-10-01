@@ -571,3 +571,11 @@ class FeedCommodity(Base):
     first_seen: Mapped[date] = mapped_column(Date)
     last_seen: Mapped[date] = mapped_column(Date)
     last_rows: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AppSetting(Base):
+    """Server-generated values that must survive restarts (e.g. `jwt_secret` when JWT_SECRET=auto on a persistent DB)."""
+
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)

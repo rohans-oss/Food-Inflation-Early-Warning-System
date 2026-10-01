@@ -343,6 +343,13 @@ def start_demo_shipment(shipment_id: int, auto_pickup: bool = False, start_delay
     t = DEMO_TASKS.get(shipment_id)
     if t is not None and t.is_alive():
         return False
+    from .. import db as dbmod
+    from ..demo import is_demo_org
+
+    with dbmod.SessionLocal() as db:  # a REAL transport company confirms its own bookings; never the autopilot
+        sh = db.get(Shipment, shipment_id)
+        if sh is None or not is_demo_org(db.get(Organization, sh.fleet_org_id) if sh.fleet_org_id else None):
+            return False
     DEMO_TASKS[shipment_id] = threading.Thread(target=_autopilot, args=(shipment_id, auto_pickup, start_delay),
                                                name=f"demo-sh-{shipment_id}", daemon=True)
     DEMO_TASKS[shipment_id].start()
@@ -576,10 +583,17 @@ def _demo_finish(db: Session, lot_id: int | None, trip_id: int, pay: bool = True
     if t.delivery_scanned_at is None:
         t.delivery_scanned_at = now
         add_event(db, t, "delivered", now, t.last_lat, t.last_lon, source="demo_autopilot")
+    from ..demo import is_demo_user, real_managers
+
+    manned = bool(real_managers(db, t.mandi_id))  # a real mandi manager weighs and pays at their own mandi
     for x in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
         if x.status == "in_transit":
             move(db, x, "at_mandi", None, trip_id=t.id, via="demo_autopilot")
-        if x.status == "at_mandi":
+            if manned:
+                for m in real_managers(db, t.mandi_id):
+                    notify(db, m, "incoming_vehicle", f"atgate:{t.id}:{m.id}", vehicle=t.vehicle.registration,
+                           tons=t.load_tons, mandi=t.mandi.name, eta="at the gate now")
+        if x.status == "at_mandi" and not manned:
             price, price_source = _demo_price(db, t.mandi_id, x.crop)
             x.delivered_weight_kg, x.sale_price_per_quintal, x.delivered_at = round(x.quantity_tons * 985), price, now
             move(db, x, "delivered", None, weight_kg=x.delivered_weight_kg, price_per_quintal=price, via="demo_autopilot",
@@ -589,7 +603,7 @@ def _demo_finish(db: Session, lot_id: int | None, trip_id: int, pay: bool = True
             issue(db, x)
             notify(db, x.farmer, "delivered", f"delivered:{x.id}", lot=x.id, mandi=t.mandi.name,
                    kg=round(x.delivered_weight_kg), price=price, payout="pending")
-            if pay:
+            if pay and is_demo_user(x.farmer):  # a real farmer's payment is recorded by a person, never by the demo
                 _record_payment(db, x, None, "upi", f"DEMO-{secrets.token_hex(4).upper()}")
     sh = t.shipment
     if sh and sh.status == "in_transit" and all(x.status == "delivered" for x in sh.lots):
