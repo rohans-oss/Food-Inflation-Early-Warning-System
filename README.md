@@ -755,3 +755,14 @@ acts for them, and every lot it registers is audited with the FPO user as the ac
 
 How to verify: FPO login → Members' lots shows six waiting lots → "+ Add member" → "+ Add lot for a member" → tick lots →
 create a shipment, or "Plan loads".
+
+## Sign-up rules per role
+
+- Farmer, bulk buyer: anyone can sign up.
+- Mandi manager / trader: chooses the district, then their mandi in that district.
+- Driver: only phone numbers a fleet owner added (Fleet page → Drivers → Add driver) can sign up; on that first sign-up
+  the driver enters the vehicle number (added to the fleet if new) and the district they join.
+- Fleet owner, FPO, lender / insurer, policy analyst: organisation name + district (policy may choose state-wide). A fleet
+  owner's district becomes the base its trucks start from.
+- Public lookup: `GET /auth/districts`. FPO bookings now get the same confirm → driver + truck → pickup-code flow as
+  farmers (`POST /shipments/{id}/confirm-pickup`).

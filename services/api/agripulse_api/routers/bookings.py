@@ -291,13 +291,25 @@ DEMO_WAIT_FOR_CODE_S = 3 * 3600  # the truck waits at the farm until the farmer 
 
 
 def start_demo(lot_id: int, booking_id: int) -> bool:
-    """PUBLIC DEMO ONLY: the demo transporter + driver + trader handle this booking like real ones would, except that
-    the farmer still confirms the handover with the driver's pickup code. Returns False if already running."""
-    t = DEMO_TASKS.get(lot_id)
+    """PUBLIC DEMO ONLY: the demo transporter + driver + trader handle a farmer's booking like real ones would, except
+    that the farmer still confirms the handover with the driver's pickup code. Returns False if already running."""
+    from .. import db as dbmod
+
+    with dbmod.SessionLocal() as db:
+        b = db.get(TransportBooking, booking_id)
+        sid = b.shipment_id if b else None
+    return start_demo_shipment(sid) if sid else False
+
+
+def start_demo_shipment(shipment_id: int) -> bool:
+    """PUBLIC DEMO ONLY: the booked demo fleet confirms this shipment (driver + truck), drives to the pickup point,
+    waits there for the handover code (farmer or FPO), drives to the mandi, and the demo trader weighs and pays."""
+    t = DEMO_TASKS.get(shipment_id)
     if t is not None and t.is_alive():
         return False
-    DEMO_TASKS[lot_id] = threading.Thread(target=_autopilot, args=(lot_id, booking_id), name=f"demo-{lot_id}", daemon=True)
-    DEMO_TASKS[lot_id].start()
+    DEMO_TASKS[shipment_id] = threading.Thread(target=_autopilot, args=(shipment_id,), name=f"demo-sh-{shipment_id}",
+                                               daemon=True)
+    DEMO_TASKS[shipment_id].start()
     return True
 
 
@@ -313,7 +325,7 @@ def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Depends(r
     return {"status": "started" if start_demo(lot_id, b.id) else "running"}
 
 
-def _autopilot(lot_id: int, booking_id: int) -> None:
+def _autopilot(shipment_id: int) -> None:
     import time
 
     from .. import db as dbmod
@@ -323,16 +335,16 @@ def _autopilot(lot_id: int, booking_id: int) -> None:
             return fn(db, *a)
 
     try:
-        if run(_demo_trip_id, booking_id) is None:
+        if run(_demo_trip_id, shipment_id) is None:
             time.sleep(DEMO_CONFIRM_S)
-        trip_id, depot = run(_demo_prepare, lot_id, booking_id)
+        trip_id, depot = run(_demo_prepare_shipment, shipment_id)
         if not run(_demo_picked_up, trip_id):
             if not run(_demo_at_farm, trip_id):
                 for i in range(1, DEMO_APPROACH_POINTS + 1):
                     run(_demo_approach, trip_id, depot, i / DEMO_APPROACH_POINTS)
                     time.sleep(DEMO_TICK_S)
             waited = 0.0
-            while not run(_demo_picked_up, trip_id):  # the farmer enters the driver's code (POST /lots/{id}/confirm-pickup)
+            while not run(_demo_picked_up, trip_id):  # farmer / FPO enters the driver's code
                 if waited > DEMO_WAIT_FOR_CODE_S:
                     return
                 time.sleep(2)
@@ -342,14 +354,13 @@ def _autopilot(lot_id: int, booking_id: int) -> None:
             run(_demo_step, trip_id, i / DEMO_POINTS)
             time.sleep(DEMO_TICK_S)
         time.sleep(3)
-        run(_demo_finish, lot_id, trip_id)
+        run(_demo_finish, None, trip_id)
     except Exception:  # never take the API down; the visitor sees the trip stop
-        log.exception("demo autopilot failed for lot %s", lot_id)
+        log.exception("demo autopilot failed for shipment %s", shipment_id)
 
 
-def _demo_trip_id(db: Session, booking_id: int) -> int | None:
-    b = db.get(TransportBooking, booking_id)
-    return db.scalar(select(Trip.id).where(Trip.shipment_id == b.shipment_id, Trip.status.not_in(["declined", "cancelled"])))
+def _demo_trip_id(db: Session, shipment_id: int) -> int | None:
+    return db.scalar(select(Trip.id).where(Trip.shipment_id == shipment_id, Trip.status.not_in(["declined", "cancelled"])))
 
 
 def _demo_picked_up(db: Session, trip_id: int) -> bool:
@@ -364,34 +375,38 @@ def _demo_at_farm(db: Session, trip_id: int) -> bool:
 
 
 def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple[float, float]]:
-    """Confirm (simulated truck), accept, consent, start. The truck starts at a depot ~9 km from the farm, on the
-    side away from the mandi, so the farmer sees it come to the farm before it heads to the mandi."""
+    return _demo_prepare_shipment(db, db.get(TransportBooking, booking_id).shipment_id)
+
+
+def _demo_prepare_shipment(db: Session, shipment_id: int) -> tuple[int, tuple[float, float]]:
+    """The demo fleet confirms (its own free truck that fits + a free driver), the driver accepts, consents and starts.
+    The truck starts at the fleet's base (else ~9 km from the pickup, away from the mandi)."""
     from .trips import make_trip
 
-    b = db.get(TransportBooking, booking_id)
-    lot = db.get(Lot, lot_id)
+    sh = db.get(Shipment, shipment_id)
+    load = sum(x.quantity_tons for x in sh.lots)
     now = datetime.now(timezone.utc)
-    trip = db.scalar(select(Trip).where(Trip.shipment_id == b.shipment_id, Trip.status.not_in(["declined", "cancelled"])))
-    if trip is None:  # the SIMULATED transporter confirms with a SIMULATED truck
-        owner = db.scalar(select(User).where(User.role == "fleet_owner", User.org_id == b.fleet_org_id))
+    trip = db.scalar(select(Trip).where(Trip.shipment_id == sh.id, Trip.status.not_in(["declined", "cancelled"])))
+    if trip is None:  # the demo transporter confirms with one of its demo trucks
+        owner = db.scalar(select(User).where(User.role == "fleet_owner", User.org_id == sh.fleet_org_id))
         busy = set(db.scalars(select(Trip.driver_id).where(Trip.status.in_(ACTIVE_TRIP))))
         busy_v = set(db.scalars(select(Trip.vehicle_id).where(Trip.status.in_(ACTIVE_TRIP))))
-        drivers = db.scalars(select(User).where(User.role == "driver", User.org_id == b.fleet_org_id,
+        drivers = db.scalars(select(User).where(User.role == "driver", User.org_id == sh.fleet_org_id,
                                                 User.is_active.is_(True)).order_by(User.id)).all()
         driver = next((d for d in drivers if d.id not in busy), drivers[0] if drivers else None)
         if owner is None or driver is None:
             raise RuntimeError("demo fleet needs an owner and a driver")
-        # the fleet's own SIMULATED truck that fits (smallest first), else a new simulated one
-        v = db.scalar(select(Vehicle).where(Vehicle.org_id == b.fleet_org_id, Vehicle.is_simulated.is_(True),
-                                            Vehicle.capacity_tons >= lot.quantity_tons, Vehicle.id.not_in(busy_v or {-1}))
+        # the fleet's own demo truck that fits (smallest first), else a new demo truck big enough
+        v = db.scalar(select(Vehicle).where(Vehicle.org_id == sh.fleet_org_id, Vehicle.is_simulated.is_(True),
+                                            Vehicle.capacity_tons >= load, Vehicle.id.not_in(busy_v or {-1}))
                       .order_by(Vehicle.capacity_tons))
         if v is None:
-            reg = f"SIM-KA-{secrets.randbelow(90) + 10}-{secrets.randbelow(9000) + 1000}"
-            v = Vehicle(org_id=b.fleet_org_id, registration=reg, capacity_tons=max(5.0, lot.quantity_tons), is_simulated=True)
+            reg = f"KA-DEMO-{secrets.token_hex(3).upper()}"
+            v = Vehicle(org_id=sh.fleet_org_id, registration=reg, capacity_tons=max(5.0, float(-(-load // 1))), is_simulated=True)
             db.add(v)
             db.flush()
-        db.get(Shipment, b.shipment_id).is_simulated = True
-        trip = make_trip(db, owner, b.shipment_id, v.id, driver.id, via="demo_autopilot")
+        sh.is_simulated = True
+        trip = make_trip(db, owner, sh.id, v.id, driver.id, via="demo_autopilot")
     trip.is_simulated = True
     if trip.status == "assigned":
         move(db, trip, "accepted", trip.driver_id, via="demo_autopilot")
@@ -404,7 +419,7 @@ def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple
         if trip.shipment and trip.shipment.status == "booked":
             move(db, trip.shipment, "in_transit", trip.driver_id, trip_id=trip.id, via="demo_autopilot")
     m = trip.mandi
-    org = db.get(Organization, b.fleet_org_id)
+    org = db.get(Organization, sh.fleet_org_id)
     if org.base_lat is not None:  # the truck comes from the transporter's own base
         depot = (org.base_lat, org.base_lon)
     else:
@@ -449,27 +464,32 @@ class CodeIn(BaseModel):
 def confirm_pickup(lot_id: int, body: CodeIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
     """At the farm the driver tells the farmer the trip's 4-digit pickup code; the farmer enters it here. A match proves
     the right truck is at the farm and hands over the load (same effects as the driver scanning the pickup QR)."""
-    from .trips import record_pickup
-
     lot = get_scoped_lot(db, user, lot_id)
     trip = db.scalar(select(Trip).where(Trip.shipment_id == lot.shipment_id, Trip.status.not_in(["declined", "cancelled"]))
                      .order_by(Trip.id.desc())) if lot.shipment_id else None
+    check_code_and_pickup(db, trip, body.code, user.id)
+    db.commit()
+    return lot_out(db, lot, user)
+
+
+def check_code_and_pickup(db: Session, trip: Trip | None, code: str, actor_id: int) -> None:
+    """Shared by the farmer and the FPO desk: the driver's pickup code proves the right truck is at the pickup."""
+    from .trips import record_pickup
+
     if trip is None:
         raise HTTPException(409, "No truck has been assigned yet")
     if trip.pickup_scanned_at is not None:
-        return lot_out(db, lot, user)
+        return
     if trip.status != "in_progress":
         raise HTTPException(409, "The driver has not started the trip yet")
     if (trip.pickup_code_failures or 0) >= MAX_CODE_FAILURES:
-        raise HTTPException(429, "Too many wrong codes. Ask the driver to scan your pickup QR instead.")
-    if not trip.pickup_code or not secrets.compare_digest(body.code.strip(), trip.pickup_code):
+        raise HTTPException(429, "Too many wrong codes. Ask the driver to scan the pickup QR instead.")
+    if not trip.pickup_code or not secrets.compare_digest(code.strip(), trip.pickup_code):
         trip.pickup_code_failures = (trip.pickup_code_failures or 0) + 1
         db.commit()
         left = MAX_CODE_FAILURES - trip.pickup_code_failures
         raise HTTPException(400, f"That code does not match this truck. {left} tr{'y' if left == 1 else 'ies'} left.")
-    record_pickup(db, trip, user.id, via="pickup_code")
-    db.commit()
-    return lot_out(db, lot, user)
+    record_pickup(db, trip, actor_id, via="pickup_code")
 
 
 def _demo_step(db: Session, trip_id: int, frac: float) -> None:
@@ -529,7 +549,7 @@ def _demo_finish(db: Session, lot_id: int, trip_id: int) -> None:
             issue(db, x)
             notify(db, x.farmer, "delivered", f"delivered:{x.id}", lot=x.id, mandi=t.mandi.name,
                    kg=round(x.delivered_weight_kg), price=price, payout="pending")
-            _record_payment(db, x, None, "upi (simulated)", f"SIM-{secrets.token_hex(4).upper()}")
+            _record_payment(db, x, None, "upi", f"DEMO-{secrets.token_hex(4).upper()}")
     sh = t.shipment
     if sh and sh.status == "in_transit" and all(x.status == "delivered" for x in sh.lots):
         move(db, sh, "delivered", None, via="demo_autopilot")

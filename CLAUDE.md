@@ -310,4 +310,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - FPO members (2026-10-01): a member = farmer whose `org_id` is the FPO (or who registered a lot with it). FPO adds
   members / lots via `routers/members.py` (`members:manage`); members added there get an unusable password. Demo members
   come from `seed.seed_demo_members` (CLI `--demo` only, never the test fixture).
+- Sign-up (2026-10-01): `auth.register` requires `district` for trader/driver/fleet_owner/fpo/lender/policy; traders
+  pick a mandi in that district; drivers sign up ONLY against an invite (`POST /drivers`, inactive user with an
+  `@invite.agripulse.local` email, matched by phone) and add their vehicle. Demo autopilot is per SHIPMENT
+  (`bookings.start_demo_shipment`), used by farmer bookings and FPO bookings alike.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

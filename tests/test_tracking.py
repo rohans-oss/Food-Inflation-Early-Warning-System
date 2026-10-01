@@ -142,12 +142,12 @@ def test_tenant_isolation(client, as_role, db, journey):
     assert client.get(f"/lots/{lot_id}", headers=oh).status_code == 404
     assert client.get(f"/trips/{trip_id}", headers=oh).status_code == 404
     fpo2 = client.post("/auth/register", json={"email": "fpo2@x.in", "password": "longenough", "full_name": "F2",
-                                                "role": "fpo", "org_name": "Another FPO"})
+                                                "role": "fpo", "org_name": "Another FPO", "district": "Kolar"})
     fh = {"Authorization": f"Bearer {fpo2.json()['access_token']}"}
     assert client.get("/lots", headers=fh).json() == []
     assert client.get(f"/shipments/{journey['shipment']['id']}", headers=fh).status_code == 404
     l2 = client.post("/auth/register", json={"email": "l2@x.in", "password": "longenough", "full_name": "L2",
-                                              "role": "lender", "org_name": "Other Bank"})
+                                              "role": "lender", "org_name": "Other Bank", "district": "Kolar"})
     assert client.get("/lender/lots", headers={"Authorization": f"Bearer {l2.json()['access_token']}"}).json()["lots"] == []
     # driver can't drive someone else's trip; buyer/policy can't see raw trips
     assert client.get(f"/trips/{trip_id}", headers=as_role("buyer")).status_code == 403

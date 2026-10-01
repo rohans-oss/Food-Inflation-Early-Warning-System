@@ -82,12 +82,24 @@ def test_buyer_policy_fleet_views(client, as_role, db):
     assert client.post("/vehicles", headers=as_role("fleet_owner"), json={"registration": "ka 05 ab 1111", "capacity_tons": 3}).json()["registration"] == "KA-05-AB-1111"
 
 
-def test_driver_join_needs_fleet_approval(client, as_role, db):
-    fleet_org = client.get("/auth/me", headers=as_role("fleet_owner")).json()["org_id"]
-    r = client.post("/auth/register", json={"email": "d2@x.in", "password": "longenough", "full_name": "D2", "role": "driver",
-                                              "org_id": fleet_org})
-    assert r.status_code == 202
-    assert client.post("/auth/login", json={"email": "d2@x.in", "password": "longenough"}).status_code == 403
-    d2 = next(d for d in client.get("/drivers", headers=as_role("fleet_owner")).json() if d["name"] == "D2")
-    assert client.post(f"/drivers/{d2['id']}/approve", headers=as_role("fleet_owner")).status_code == 200
+def test_only_drivers_a_fleet_owner_added_can_sign_up(client, as_role, db):
+    O = as_role("fleet_owner")
+    base = {"email": "d2@x.in", "password": "longenough", "full_name": "D2", "role": "driver", "district": "Kolar",
+            "vehicle_registration": "ka 07 zz 4321"}
+    r = client.post("/auth/register", json={**base, "phone": "98450 11111"})
+    assert r.status_code == 403 and "fleet owner" in r.json()["detail"]  # not added yet
+    inv = client.post("/drivers", headers=O, json={"name": "Dinesh", "phone": "+91 98450 11111"}).json()
+    assert inv["invited"] and not inv["is_active"]
+    assert client.post("/drivers", headers=O, json={"name": "Again", "phone": "9845011111"}).status_code == 409
+    assert client.post(f"/drivers/{inv['id']}/approve", headers=O).status_code == 409  # nothing to approve yet
+    no_truck = client.post("/auth/register", json={**base, "phone": "9845011111", "vehicle_registration": None})
+    assert no_truck.status_code == 400
+    ok = client.post("/auth/register", json={**base, "phone": "9845011111"})
+    assert ok.status_code == 201
+    me = ok.json()["user"]
+    assert me["role"] == "driver" and me["district"] == "Kolar" and me["org_id"] == client.get("/auth/me", headers=O).json()["org_id"]
+    regs = [v["registration"] for v in client.get("/vehicles", headers=O).json()]
+    assert "KA-07-ZZ-4321" in regs  # the driver's truck joined the fleet
     assert client.post("/auth/login", json={"email": "d2@x.in", "password": "longenough"}).status_code == 200
+    d = next(x for x in client.get("/drivers", headers=O).json() if x["id"] == inv["id"])
+    assert d["is_active"] and not d["invited"] and d["name"] == "D2"

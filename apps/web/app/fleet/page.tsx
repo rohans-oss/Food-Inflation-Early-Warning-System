@@ -16,6 +16,7 @@ export default function Fleet() {
   const { t } = useSession();
   const ov = useApi<any>("/fleet/overview", { poll: 30000 });
   const drivers = useApi<any[]>("/drivers");
+  const [nd, setNd] = useState({ name: "", phone: "" });
   const [live, setLive] = useState<Record<number, any>>({}); // trip_id -> latest position
   const [assign, setAssign] = useState<Record<number, { vehicle: string; driver: string }>>({});
   const [nv, setNv] = useState({ registration: "", capacity_tons: "5" });
@@ -132,13 +133,20 @@ export default function Fleet() {
           </form>
         </Card>
         <Card title={t("drivers")}>
-          <p className="mb-2 text-xs text-muted">Drivers register themselves and pick your fleet; approve them here.</p>
-          <Table head={["Name", "Phone", "Status", ""]}>
+          <p className="mb-2 text-xs text-muted">Add a driver by mobile number. Only drivers you add can sign up; on their first
+            sign-in they enter their vehicle number and district.</p>
+          <form className="mb-3 flex flex-wrap items-end gap-2"
+            onSubmit={(e) => { e.preventDefault(); act.run(async () => { await api("/drivers", { method: "POST", body: nd }); setNd({ name: "", phone: "" }); drivers.reload(); }); }}>
+            <Field label="Driver's name"><input className={inputCls} required minLength={2} value={nd.name} onChange={(e) => setNd({ ...nd, name: e.target.value })} /></Field>
+            <Field label="Mobile number"><input className={inputCls} required inputMode="tel" minLength={10} value={nd.phone} onChange={(e) => setNd({ ...nd, phone: e.target.value })} /></Field>
+            <Button type="submit" disabled={act.busy}>Add driver</Button>
+          </form>
+          <Table head={["Name", "Phone", "District", "Status", ""]}>
             {drivers.data?.map((d) => (
               <tr key={d.id}>
-                <Td>{d.name}</Td><Td>{d.phone ?? "–"}</Td>
-                <Td>{d.is_active ? "active" : "awaiting approval"}</Td>
-                <Td>{!d.is_active && <Button variant="secondary" onClick={() => approve(d.id)}>Approve</Button>}</Td>
+                <Td>{d.name}</Td><Td>{d.phone ?? "–"}</Td><Td>{d.district ?? "–"}</Td>
+                <Td>{d.invited ? <span className="text-ink2">added · waiting for first sign-in</span> : d.is_active ? "active" : "awaiting approval"}</Td>
+                <Td>{!d.is_active && !d.invited && <Button variant="secondary" onClick={() => approve(d.id)}>Approve</Button>}</Td>
               </tr>
             ))}
           </Table>

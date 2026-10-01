@@ -1,10 +1,12 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Mandi, Organization, User
+from ..models import Mandi, Organization, User, Vehicle
 from .. import sessions
 from ..rbac import ROLE_ORG_KIND, ROLES, current_session_id, get_current_user
 from ..security import decode_token, hash_password, verify_password
@@ -22,6 +24,34 @@ class RegisterIn(BaseModel):
     org_id: int | None = None  # join an existing org...
     org_name: str | None = None  # ...or create one (first member of an FPO / fleet / ...)
     mandi_id: int | None = None  # traders
+    district: str | None = None  # where they work; required for every role except farmer / buyer
+    vehicle_registration: str | None = None  # drivers: the truck they drive (added to their fleet if new)
+    vehicle_capacity_tons: float | None = Field(default=None, gt=0, le=60)
+
+
+# Who must say where they work at sign-up (user request 2026-10-01). Drivers can only sign up if a fleet owner has
+# added their phone number first (see POST /drivers); farmers and buyers sign up freely.
+DISTRICT_REQUIRED = {"trader", "driver", "fleet_owner", "fpo", "lender", "policy"}
+INVITE_DOMAIN = "@invite.agripulse.local"
+
+
+def norm_phone(p: str | None) -> str | None:
+    digits = re.sub(r"\D", "", p or "")
+    return digits[-10:] if len(digits) >= 10 else (digits or None)
+
+
+def norm_reg(r: str) -> str:
+    return re.sub(r"[\s_]+", "-", r.strip().upper())
+
+
+def known_districts(db: Session) -> list[str]:
+    return sorted({d for d in db.scalars(select(Mandi.district).where(Mandi.district.is_not(None))) if d})
+
+
+@router.get("/districts")
+def districts(db: Session = Depends(get_db)):
+    """Public: districts that have mandis (sign-up dropdowns)."""
+    return known_districts(db)
 
 
 class LoginIn(BaseModel):
@@ -38,6 +68,8 @@ class UserOut(BaseModel):
     org_id: int | None
     org_name: str | None
     mandi_id: int | None
+    district: str | None = None
+    phone: str | None = None
     preferred_lang: str
     watch_mandi_ids: list[int]
     is_active: bool = True
@@ -67,6 +99,8 @@ def user_out(u: User) -> UserOut:
         org_id=u.org_id,
         org_name=u.org.name if u.org else None,
         mandi_id=u.mandi_id,
+        district=u.district,
+        phone=u.phone,
         preferred_lang=u.preferred_lang,
         watch_mandi_ids=u.watch_mandi_ids or [],
         is_active=u.is_active,
@@ -81,47 +115,80 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(403, "Admins are created with the seed script, not self-registration")
     if db.scalar(select(User).where(User.email == body.email.lower())):
         raise HTTPException(409, "Email already registered")
+    if body.org_id and body.role != "driver":
+        # Joining an existing tenant needs an invite from inside it (drivers: the fleet owner adds them).
+        raise HTTPException(403, "Ask someone in that organization to add you")
+    district = (body.district or "").strip() or None
+    if body.role in DISTRICT_REQUIRED:
+        if not district:
+            raise HTTPException(400, "Choose the district you work in")
+        if body.role != "policy" and district not in known_districts(db):
+            raise HTTPException(400, f"Unknown district '{district}'")
+    if body.role == "driver":
+        return _register_driver(body, district, request, db)
 
     org_id = None
     needed_kind = ROLE_ORG_KIND.get(body.role)
     if needed_kind:
         if body.org_id:
-            org = db.get(Organization, body.org_id)
-            if org is None or org.kind != needed_kind:
-                raise HTTPException(400, f"Role '{body.role}' must join an organization of kind '{needed_kind}'")
-            if body.role != "driver":
-                # Joining an existing tenant other than as a driver needs an invite flow (V3).
-                raise HTTPException(403, "Ask an admin to add you to an existing organization")
-        elif body.org_name:
-            org = Organization(name=body.org_name, kind=needed_kind)
-            db.add(org)
-            db.flush()
-        else:
-            raise HTTPException(400, f"Role '{body.role}' needs org_name (new) or org_id (existing)")
+            # Joining an existing tenant needs an invite from inside it (drivers: the fleet owner adds them).
+            raise HTTPException(403, "Ask someone in that organization to add you")
+        if not body.org_name or not body.org_name.strip():
+            raise HTTPException(400, f"Role '{body.role}' needs the organization's name (org_name)")
+        org = Organization(name=body.org_name.strip(), kind=needed_kind)
+        if body.role == "fleet_owner":  # the district is the fleet's base: its trucks start there
+            pts = db.execute(select(Mandi.lat, Mandi.lon).where(Mandi.district == district, Mandi.lat.is_not(None))).all()
+            if pts:
+                org.base_label = f"{district} (district)"
+                org.base_lat = sum(p[0] for p in pts) / len(pts)
+                org.base_lon = sum(p[1] for p in pts) / len(pts)
+        db.add(org)
+        db.flush()
         org_id = org.id
 
     if body.role == "trader":
-        if not body.mandi_id or db.get(Mandi, body.mandi_id) is None:
-            raise HTTPException(400, "Traders must pick their mandi (mandi_id)")
+        m = db.get(Mandi, body.mandi_id) if body.mandi_id else None
+        if m is None:
+            raise HTTPException(400, "Mandi managers / traders must pick their mandi (mandi_id)")
+        if m.district != district:
+            raise HTTPException(400, f"{m.name} is in {m.district}, not {district}")
 
     user = User(
-        email=body.email.lower(),
-        full_name=body.full_name,
-        phone=body.phone,
-        password_hash=hash_password(body.password),
-        role=body.role,
-        org_id=org_id,
-        mandi_id=body.mandi_id if body.role == "trader" else None,
-        preferred_lang=body.preferred_lang,
-        # A driver joining an existing fleet waits for the fleet owner's approval.
-        is_active=not (body.role == "driver" and body.org_id),
+        email=body.email.lower(), full_name=body.full_name, phone=norm_phone(body.phone) if body.phone else None,
+        district=district, password_hash=hash_password(body.password), role=body.role, org_id=org_id,
+        mandi_id=body.mandi_id if body.role == "trader" else None, preferred_lang=body.preferred_lang,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    if not user.is_active:
-        raise HTTPException(202, "Registered. Your fleet owner must approve you before you can log in.")
     return tokens_for(db, user, request)
+
+
+def _register_driver(body: RegisterIn, district: str, request: Request, db: Session) -> TokenOut:
+    """A driver's first sign-in: only phone numbers a fleet owner added (POST /drivers) can sign up. The driver adds
+    the truck they drive and the district they join; the invite becomes their account."""
+    phone = norm_phone(body.phone)
+    if not phone:
+        raise HTTPException(400, "Enter the phone number your fleet owner registered for you")
+    invite = next((u for u in db.scalars(select(User).where(User.role == "driver", User.is_active.is_(False)))
+                   if u.email.endswith(INVITE_DOMAIN) and norm_phone(u.phone) == phone), None)
+    if invite is None:
+        raise HTTPException(403, "Only drivers added by a fleet owner can sign up. Ask your fleet owner to add your phone number.")
+    if not body.vehicle_registration:
+        raise HTTPException(400, "Enter your vehicle number")
+    reg = norm_reg(body.vehicle_registration)
+    v = db.scalar(select(Vehicle).where(Vehicle.registration == reg))
+    if v is not None and v.org_id != invite.org_id:
+        raise HTTPException(409, "That vehicle is registered with another fleet")
+    if v is None:
+        v = Vehicle(org_id=invite.org_id, registration=reg, capacity_tons=body.vehicle_capacity_tons or 5.0)
+        db.add(v)
+    invite.email, invite.full_name = body.email.lower(), body.full_name or invite.full_name
+    invite.password_hash, invite.preferred_lang = hash_password(body.password), body.preferred_lang
+    invite.district, invite.phone, invite.is_active = district, phone, True
+    db.commit()
+    db.refresh(invite)
+    return tokens_for(db, invite, request)
 
 
 @router.post("/login", response_model=TokenOut)

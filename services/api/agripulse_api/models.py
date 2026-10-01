@@ -74,6 +74,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(20))
+    district: Mapped[str | None] = mapped_column(String(80))  # where they work (mandi district, fleet base, ...)
     full_name: Mapped[str] = mapped_column(String(200))
     password_hash: Mapped[str] = mapped_column(String(300))
     role: Mapped[str] = mapped_column(ForeignKey("roles.name"))

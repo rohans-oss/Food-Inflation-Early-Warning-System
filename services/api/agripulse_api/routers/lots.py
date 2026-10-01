@@ -300,7 +300,7 @@ def _pickup_state(db: Session, lot: Lot, trip: Trip | None) -> dict | None:
     from .bookings import OPEN, open_booking, start_demo
 
     s = get_settings()
-    if s.demo_mode and lot.status in ("grouped", "in_transit", "at_mandi"):
+    if s.demo_mode and lot is not None and lot.status in ("grouped", "in_transit", "at_mandi"):
         b = open_booking(db, lot.id)
         if b is not None and b.status in OPEN and b.shipment_id == lot.shipment_id:
             start_demo(lot.id, b.id)  # resumes after a server restart; no-op while running
@@ -402,6 +402,7 @@ def shipment_out(db: Session, sh: Shipment) -> dict:
         "trip": {"id": trip.id, "status": trip.status, "vehicle": trip.vehicle.registration,
                  "pickup_qr_token": trip.pickup_qr_token if trip.pickup_scanned_at is None else None,
                  "eta_at": trip.eta_at, "is_simulated": trip.is_simulated} if trip else None,
+        "pickup": _pickup_state(db, None, trip) if trip else None,
         "is_simulated": sh.is_simulated,
         "created_at": sh.created_at,
     }
@@ -483,6 +484,30 @@ def book_vehicle(shipment_id: int, body: BookIn, db: Session = Depends(get_db), 
     move(db, sh, "booked", user.id, fleet_org_id=fleet.id)
     sh.fleet_org_id, sh.booked_at = fleet.id, datetime.now(timezone.utc)
     db.commit()
+    if get_settings().demo_mode:  # the demo transporter confirms on its own, like for a farmer's booking
+        from .bookings import start_demo_shipment
+
+        start_demo_shipment(sh.id)
+    return shipment_out(db, sh)
+
+
+class HandoverIn(BaseModel):
+    code: str = Field(min_length=4, max_length=6)
+
+
+@router.post("/shipments/{shipment_id}/confirm-pickup")
+def confirm_shipment_pickup(shipment_id: int, body: HandoverIn, db: Session = Depends(get_db),
+                            user: User = Depends(require("shipments:manage"))):
+    """The FPO desk enters the driver's 4-digit pickup code at loading (same check as the farmer's)."""
+    from .bookings import check_code_and_pickup
+
+    sh = _scoped_shipment(db, user, shipment_id)
+    check_code_and_pickup(db, _trip_for_shipment(db, sh.id), body.code, user.id)
+    db.commit()
+    if get_settings().demo_mode:  # resume the demo truck after a restart
+        from .bookings import start_demo_shipment
+
+        start_demo_shipment(sh.id)
     return shipment_out(db, sh)
 
 
@@ -522,10 +547,42 @@ def list_vehicles(db: Session = Depends(get_db), user: User = Depends(require("v
 
 @router.get("/drivers")
 def list_drivers(db: Session = Depends(get_db), user: User = Depends(require("vehicles:manage"))):
+    from .auth import INVITE_DOMAIN
+
     q = select(User).where(User.role == "driver")
     if user.role != "admin":
         q = q.where(User.org_id == user.org_id)
-    return [{"id": u.id, "name": u.full_name, "phone": u.phone, "is_active": u.is_active} for u in db.scalars(q)]
+    return [{"id": u.id, "name": u.full_name, "phone": u.phone, "district": u.district, "is_active": u.is_active,
+             "invited": u.email.endswith(INVITE_DOMAIN)} for u in db.scalars(q.order_by(User.full_name))]
+
+
+class DriverInviteIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=10, max_length=20)
+
+
+@router.post("/drivers", status_code=201)
+def invite_driver(body: DriverInviteIn, db: Session = Depends(get_db), user: User = Depends(require("vehicles:manage"))):
+    """The fleet owner adds a driver by phone number. Only added drivers can sign up (first sign-in: their vehicle
+    number and district); until then the driver cannot log in."""
+    import secrets
+
+    from ..security import hash_password
+    from .auth import INVITE_DOMAIN, norm_phone
+
+    phone = norm_phone(body.phone)
+    if not phone or len(phone) < 10:
+        raise HTTPException(400, "Enter a 10-digit mobile number")
+    if any(norm_phone(u.phone) == phone for u in db.scalars(select(User).where(User.role == "driver"))):
+        raise HTTPException(409, "A driver with this phone number is already added")
+    u = User(email=f"driver-{secrets.token_hex(6)}{INVITE_DOMAIN}", full_name=body.name.strip(), phone=phone,
+             role="driver", org_id=user.org_id, is_active=False, password_hash=hash_password(secrets.token_urlsafe(24)))
+    db.add(u)
+    db.flush()
+    db.add(AuditLog(entity="user", entity_id=u.id, field="membership", from_state=None, to_state="invited",
+                    actor_id=user.id, details={"org_id": user.org_id}))
+    db.commit()
+    return {"id": u.id, "name": u.full_name, "phone": u.phone, "district": None, "is_active": False, "invited": True}
 
 
 @router.post("/drivers/{driver_id}/approve")
@@ -533,6 +590,10 @@ def approve_driver(driver_id: int, db: Session = Depends(get_db), user: User = D
     d = db.get(User, driver_id)
     if d is None or d.role != "driver" or (user.role != "admin" and d.org_id != user.org_id):
         raise forbid()
+    from .auth import INVITE_DOMAIN
+
+    if d.email.endswith(INVITE_DOMAIN):
+        raise HTTPException(409, "This driver has not signed up yet; they sign up with the phone number you added")
     d.is_active = True
     db.commit()
     return {"id": d.id, "is_active": True}

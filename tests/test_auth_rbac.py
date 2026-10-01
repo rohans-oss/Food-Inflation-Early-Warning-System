@@ -42,11 +42,30 @@ def test_register_rules(client):
         "/auth/register",
         json={"email": "f@x.in", "password": "longenough", "full_name": "F", "role": "fpo", "org_name": "New FPO"},
     )
+    assert fpo.status_code == 400 and "district" in fpo.json()["detail"]  # every non-farmer role says where it works
+    fpo = client.post(
+        "/auth/register",
+        json={"email": "f@x.in", "password": "longenough", "full_name": "F", "role": "fpo", "org_name": "New FPO",
+              "district": "Kolar"},
+    )
     assert fpo.status_code == 201 and fpo.json()["user"]["org_name"] == "New FPO"
     trader_no_mandi = client.post(
         "/auth/register", json={"email": "t@x.in", "password": "longenough", "full_name": "T", "role": "trader"}
     )
     assert trader_no_mandi.status_code == 400
+
+
+def test_mandi_manager_picks_district_then_a_mandi_in_it(client):
+    ms = client.get("/mandis").json()
+    kolar = next(m for m in ms if m["name"] == "Kolar APMC")
+    other = next(m for m in ms if m["district"] != kolar["district"])
+    base = {"password": "longenough", "full_name": "M", "role": "trader"}
+    assert client.post("/auth/register", json={**base, "email": "m1@x.in", "mandi_id": kolar["id"]}).status_code == 400
+    wrong = client.post("/auth/register", json={**base, "email": "m1@x.in", "district": kolar["district"], "mandi_id": other["id"]})
+    assert wrong.status_code == 400 and "is in" in wrong.json()["detail"]
+    ok = client.post("/auth/register", json={**base, "email": "m1@x.in", "district": kolar["district"], "mandi_id": kolar["id"]})
+    assert ok.status_code == 201 and ok.json()["user"]["district"] == kolar["district"]
+    assert kolar["district"] in client.get("/auth/districts").json()
 
 
 def test_joining_someone_elses_fpo_is_blocked(client, as_role):

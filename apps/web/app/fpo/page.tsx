@@ -16,7 +16,7 @@ import { useSession } from "@/lib/session";
 export default function Fpo() {
   const { t } = useSession();
   const lots = useApi<any[]>("/lots", { query: { status: "registered" }, poll: 30000 });
-  const shipments = useApi<any[]>("/shipments", { poll: 20000 });
+  const shipments = useApi<any[]>("/shipments", { poll: 5000 });
   const [mandis, setMandis] = useState<any[]>([]);
   const [fleets, setFleets] = useState<{ id: number; name: string }[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
@@ -123,8 +123,14 @@ export default function Fpo() {
                   </select>
                 )}
                 {s.trip && <span>Vehicle <b>{s.trip.vehicle}</b> <StatusBadge s={s.trip.status} /> {s.trip.eta_at && `ETA ${time(s.trip.eta_at)}`}</span>}
-                {s.status === "booked" && !s.trip && <span className="text-xs text-muted">Waiting for the fleet owner to assign a vehicle and driver.</span>}
+                {s.status === "booked" && !s.trip && (
+                  <span className="flex items-center gap-2 text-xs text-ink2">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                    Waiting for {s.fleet?.name ?? "the transporter"} to confirm and assign a driver…
+                  </span>
+                )}
               </div>
+              {s.pickup && <Handover s={s} onDone={() => shipments.reload()} />}
               {open === s.id && (
                 <div className="mt-3 space-y-3">
                   <h3 className="text-sm font-semibold">{t("farmerTonnage")}</h3>
@@ -160,5 +166,35 @@ export default function Fpo() {
         </div>
       </Card>
     </Shell>
+  );
+}
+
+
+/** Confirmed driver + truck, then the handover: the driver tells the FPO desk the 4-digit pickup code at loading. */
+function Handover({ s, onDone }: { s: any; onDone: () => void }) {
+  const p = s.pickup;
+  const [code, setCode] = useState("");
+  const act = useAction();
+  return (
+    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
+      <p><b className="text-brand">✓ Confirmed</b> · driver <b>{p.driver ?? "–"}</b>{p.driver_phone ? ` (${p.driver_phone})` : ""} · truck <b>{p.vehicle}</b> ({num(p.capacity_tons, 1)} t)</p>
+      {!p.picked_up ? (
+        <div className="mt-2">
+          <p className="text-ink2">{p.arrived ? `${p.driver ?? "The driver"} has reached the pickup point. Ask for the 4-digit pickup code.`
+            : p.started ? "The truck is on the way to the pickup point. At loading, ask the driver for the 4-digit pickup code." : "The driver will start the trip soon."}</p>
+          {p.started && (
+            <form className="mt-2 flex flex-wrap items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); act.run(async () => { await api(`/shipments/${s.id}/confirm-pickup`, { method: "POST", body: { code } }); setCode(""); onDone(); }); }}>
+              <input className={`${inputCls} w-28 text-center font-mono tracking-[0.4em]`} inputMode="numeric" maxLength={4} placeholder="••••"
+                value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} aria-label="Pickup code" />
+              <Button type="submit" disabled={act.busy || code.length !== 4}>Confirm loading</Button>
+              {p.code_tries_left < 5 && <span className="text-xs text-muted">{p.code_tries_left} tries left</span>}
+            </form>
+          )}
+          {p.demo_code && p.started && <p className="mt-2 text-xs text-muted">Demo: the driver tells you the code <b className="font-mono text-ink">{p.demo_code}</b></p>}
+          <ErrorNote error={act.error} />
+        </div>
+      ) : <p className="mt-1 text-ink2">✓ Loaded · on the way to {s.mandi}. Open Details to follow it on the map.</p>}
+    </div>
   );
 }

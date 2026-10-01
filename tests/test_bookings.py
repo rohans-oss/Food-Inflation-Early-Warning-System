@@ -96,7 +96,7 @@ def test_demo_autopilot_runs_a_simulated_trip_end_to_end(client, as_role, db, mo
     assert "left_pickup_zone" in events and "reached_mandi" in events
     bk._demo_finish(db, lot["id"], trip_id)
     out = client.get(f"/lots/{lot['id']}", headers=F).json()
-    assert out["status"] == "delivered" and out["payout_status"] == "paid" and "simulated" in out["payment"]["method"]
+    assert out["status"] == "delivered" and out["payout_status"] == "paid" and out["payment"]["reference"].startswith("DEMO-")
     assert db.get(TransportBooking, b["id"]).status == "confirmed"
     # proof of delivery & sale: public, verifiable, and it says SIMULATED
     rc = client.get(f"/public/receipts/{out['receipt_token']}").json()
