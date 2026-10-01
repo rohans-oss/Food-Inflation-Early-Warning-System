@@ -402,6 +402,9 @@ class Trip(Base):
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     pickup_qr_token: Mapped[str] = mapped_column(String(64), unique=True)
+    # 4-digit code the DRIVER tells the farmer at the farm; the farmer enters it to hand over the load
+    pickup_code: Mapped[str | None] = mapped_column(String(6))
+    pickup_code_failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     delivery_qr_token: Mapped[str] = mapped_column(String(64), unique=True)
     pickup_scanned_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     delivery_scanned_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

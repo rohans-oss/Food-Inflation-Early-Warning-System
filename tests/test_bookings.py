@@ -184,3 +184,48 @@ def test_several_transporters_near_the_farm_cheapest_first_and_the_demo_truck_co
     assert t.fleet_org_id == org.id and t.vehicle.registration.startswith("KA-DEMO-") and t.vehicle.capacity_tons >= 2
     assert db.get(User, t.driver_id).org_id == org.id
     assert depot == (org.base_lat, org.base_lon)  # the truck comes from the transporter's own base
+
+
+def test_driver_tells_the_farmer_a_code_and_the_farmer_confirms_the_handover(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+
+    lot, _ = _chosen_lot(client, as_role, db)
+    F = as_role("farmer")
+    fleet = _fleet(client, as_role, lot)
+    slot = next(s for s in fleet["slots"] if s["free_trucks"] > 0)
+    b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": fleet["org_id"], "pickup_at": slot["pickup_at"]}).json()
+    assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": "0000"}).status_code == 409  # no truck yet
+    trip_id, _ = bk._demo_prepare(db, lot["id"], b["id"])  # transporter confirms, driver starts
+    t = db.get(Trip, trip_id)
+    assert t.pickup_code and len(t.pickup_code) == 4
+    p = client.get(f"/lots/{lot['id']}/next-steps", headers=F).json()["pickup"]
+    assert p["driver"] and p["vehicle"] == t.vehicle.registration and p["started"] and not p["picked_up"]
+    assert "demo_code" not in p  # outside the public demo the farmer only learns it from the driver
+    assert "pickup_code" not in client.get(f"/trips/{trip_id}", headers=F).json()
+    driver = db.get(User, t.driver_id)
+    from tests.conftest import login
+
+    assert client.get(f"/trips/{trip_id}", headers=login(client, driver.email)).json()["pickup_code"] == t.pickup_code
+    wrong = "1111" if t.pickup_code != "1111" else "2222"
+    r = client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": wrong})
+    assert r.status_code == 400 and "4 tries left" in r.json()["detail"]
+    ok = client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": t.pickup_code}).json()
+    assert ok["status"] == "in_transit"
+    ev = [e["event"] for e in client.get(f"/trips/{trip_id}", headers=F).json()["events"]]
+    assert "picked_up" in ev
+
+
+def test_wrong_codes_lock_after_five_tries(client, as_role, db):
+    from agripulse_api.routers import bookings as bk
+
+    lot, _ = _chosen_lot(client, as_role, db)
+    F = as_role("farmer")
+    fleet = _fleet(client, as_role, lot)
+    slot = next(s for s in fleet["slots"] if s["free_trucks"] > 0)
+    b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": fleet["org_id"], "pickup_at": slot["pickup_at"]}).json()
+    trip_id, _ = bk._demo_prepare(db, lot["id"], b["id"])
+    code = db.get(Trip, trip_id).pickup_code
+    wrong = "1111" if code != "1111" else "2222"
+    for _ in range(5):
+        assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": wrong}).status_code == 400
+    assert client.post(f"/lots/{lot['id']}/confirm-pickup", headers=F, json={"code": code}).status_code == 429

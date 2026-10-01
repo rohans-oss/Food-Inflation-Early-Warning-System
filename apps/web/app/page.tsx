@@ -109,7 +109,7 @@ function Landing() {
               </a>
             </div>
             <p className="fade-up mt-4 text-xs text-muted" style={{ animationDelay: "320ms" }}>
-              The public demo runs on sample prices and simulated trucks.
+              The public demo runs on sample prices and demo transporters.
             </p>
           </div>
           <HeroIllustration />

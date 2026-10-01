@@ -124,7 +124,7 @@ async function loadTrips() {
   for (const t of trips) {
     const b = document.createElement("button");
     b.className = "trip secondary";
-    b.innerHTML = `<b>${t.vehicle}</b> → ${t.mandi} ${t.is_simulated ? '<span class="badge">Simulated</span>' : ""}<br>
+    b.innerHTML = `<b>${t.vehicle}</b> → ${t.mandi} <br>
       <span class="meta">${t.status} · ${t.load_tons} t · ${t.planned_distance_km ?? "?"} km</span>`;
     b.onclick = () => openTrip(t.id);
     $("trips").appendChild(b);
@@ -144,7 +144,9 @@ async function openTrip(id) {
 
 function render() {
   const t = current;
-  $("tTitle").innerHTML = `${t.vehicle} → ${t.mandi} ${t.is_simulated ? '<span class="badge">Simulated</span>' : ""}`;
+  $("tTitle").innerHTML = `${t.vehicle} → ${t.mandi} `;
+  $("codeBox").hidden = !(t.pickup_code && ["accepted", "in_progress"].includes(t.status));
+  if (t.pickup_code) $("pickupCode").textContent = t.pickup_code;
   $("tMeta").textContent = `Status: ${t.status} · load ${t.load_tons} t · planned ${t.planned_distance_km ?? "?"} km`
     + (t.route_source === "haversine" ? " (approximate route)" : "");
   $("consentBox").hidden = !["accepted", "in_progress"].includes(t.status);

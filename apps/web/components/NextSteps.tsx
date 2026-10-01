@@ -5,13 +5,13 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { ago, dateTime, day, inr, num, tons } from "@/lib/format";
 
-import { Button, Card, ErrorNote, ProvenanceBadge, SimBadge, useAction, useApi } from "./ui";
+import { Button, Card, ErrorNote, inputCls, ProvenanceBadge, useAction, useApi } from "./ui";
 
 const STEPS: [key: string, label: string, hint: string][] = [
   ["mandi_chosen", "Mandi chosen", "Pick one with Sell here"],
   ["transport_booked", "Transport booked", "Choose a transporter and time"],
   ["truck_assigned", "Truck confirmed", "The transporter assigns a truck"],
-  ["picked_up", "Picked up", "The driver scans your QR"],
+  ["picked_up", "Picked up", "Enter the driver's code"],
   ["at_mandi", "At the mandi", "Delivery QR scanned at the gate"],
   ["sold", "Weighed & sold", "The trader weighs and prices it"],
   ["paid", "Paid", "Payment recorded, you confirm"],
@@ -20,15 +20,17 @@ const STEPS: [key: string, label: string, hint: string][] = [
 /** The farmer's path after choosing a mandi: book a transporter for a pickup slot, follow the booking, then the
  * payment. Live tracking is the "Live vehicle" card on the lot page once a truck is assigned. */
 export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLot: number; onChanged: () => void }) {
-  const ns = useApi<any>(`/lots/${lotId}/next-steps`, { poll: 10000 });
+  const ns = useApi<any>(`/lots/${lotId}/next-steps`, { poll: 4000 });
   const lot = useApi<any>(`/lots/${lotId}`, { poll: 10000 });
   const act = useAction();
   const [open, setOpen] = useState<number | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   const d = ns.data;
   if (!d) return <ErrorNote error={ns.error} />;
   const r = d.route;
   const b = d.booking;
+  const p = d.pickup;
   const l = lot.data;
   const current = STEPS.findIndex(([k]) => !d.done[k]);
   const refresh = () => { ns.reload(); lot.reload(); onChanged(); };
@@ -81,7 +83,7 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
                   <div key={f.org_id} className={`rounded-xl border p-4 ${open === f.org_id ? "border-brand" : "border-line"}`}>
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                       <div className="min-w-48 flex-1">
-                        <p className="font-semibold">{f.name} <SimBadge on={f.is_simulated} /></p>
+                        <p className="font-semibold">{f.name}</p>
                         <p className="text-xs text-ink2">{f.fit} truck{f.fit === 1 ? "" : "s"} that fit {tons(tonsLot)} · {f.capacities_tons.map((c: number) => `${num(c, 1)} t`).join(", ") || "none"}</p>
                         {f.base && <p className="text-xs text-muted">Based in {f.base}{f.base_km_from_farm != null ? ` · about ${num(f.base_km_from_farm, 0)} km from your farm` : ""}</p>}
                         {f.drivers?.length > 0 && <p className="text-xs text-muted">Drivers: {f.drivers.join(", ")}</p>}
@@ -128,31 +130,54 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
             </div>
           )}
 
-          {/* 2. the booking */}
+          {/* 2. the booking: waiting -> confirmed (driver + truck) -> on the way -> handover with the driver's code */}
           {b && !["declined", "cancelled"].includes(b.status) && (
             <div className="rounded-xl border border-line p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold">{b.fleet} · pickup {b.pickup_local}</p>
                   <p className="text-sm text-ink2">Fare (est.) {inr(b.fare_estimate)} · {tons(b.tons)} to {b.mandi}</p>
-                  {b.status === "requested" && <p className="mt-1 text-sm">Waiting for the transporter to confirm and assign a truck.</p>}
-                  {b.trip && <p className="mt-1 text-sm"><b className="text-brand">✓ Confirmed</b> · truck {b.trip.vehicle}{b.trip.driver ? `, driver ${b.trip.driver}` : ""} <SimBadge on={b.trip.is_simulated} /></p>}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {b.status === "requested" && <Button variant="secondary" disabled={act.busy} onClick={() => post(`/bookings/${b.id}/cancel`)}>Cancel booking</Button>}
-                  {d.demo_mode && !d.done.picked_up && (
-                    <Button disabled={act.busy} onClick={() => post(`/lots/${lotId}/demo-trip`)} title="Public demo only">
-                      Run demo trip (simulated driver)
-                    </Button>
+                {b.status === "requested" && <Button variant="secondary" disabled={act.busy} onClick={() => post(`/bookings/${b.id}/cancel`)}>Cancel booking</Button>}
+              </div>
+              {b.status === "requested" && !p && (
+                <p className="mt-3 flex items-center gap-2 text-sm text-ink2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                  Waiting for {b.fleet} to confirm and assign a driver…
+                </p>
+              )}
+              {p && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <Info label="Confirmed by transporter" value={`✓ ${b.fleet.replace(" (demo)", "")}`} />
+                  <Info label="Driver" value={p.driver ?? "–"} sub={p.driver_phone ?? undefined} />
+                  <Info label="Truck" value={p.vehicle} sub={`${num(p.capacity_tons, 1)} t`} />
+                </div>
+              )}
+              {p && !p.picked_up && (
+                <div className="mt-4 rounded-lg border border-brand/40 bg-brand/5 p-4">
+                  <p className="font-semibold">
+                    {p.arrived ? `${p.driver ?? "The driver"} has reached your farm` : p.started ? "The truck is on the way to your farm" : "The driver will start the trip soon"}
+                  </p>
+                  <p className="mt-1 text-sm text-ink2">
+                    {p.arrived ? "Ask the driver for the 4-digit pickup code and enter it to hand over your load."
+                      : "Follow it on the map. When it arrives, ask the driver for the 4-digit pickup code and enter it here."}
+                  </p>
+                  {p.started && (
+                    <form className="mt-3 flex flex-wrap items-center gap-2"
+                      onSubmit={(e) => { e.preventDefault(); post(`/lots/${lotId}/confirm-pickup`, { code }); setCode(""); }}>
+                      <input className={`${inputCls} w-32 text-center font-mono text-lg tracking-[0.4em]`} inputMode="numeric" maxLength={4}
+                        placeholder="••••" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} aria-label="Pickup code" />
+                      <Button type="submit" disabled={act.busy || code.length !== 4}>Confirm pickup</Button>
+                      {p.code_tries_left < 5 && <span className="text-xs text-muted">{p.code_tries_left} tries left</span>}
+                    </form>
+                  )}
+                  {p.demo_code && p.started && (
+                    <p className="mt-3 text-xs text-muted">Demo: the driver tells you the code <b className="font-mono text-ink">{p.demo_code}</b></p>
                   )}
                 </div>
-              </div>
-              {d.demo_mode && !d.done.paid && (
-                <p className="mt-3 rounded-lg bg-page px-3 py-2 text-xs text-ink2">
-                  Public demo: nobody is really driving, so a <b>SIMULATED</b> transporter, driver and trader can run this trip for you
-                  right now (instead of at the booked time). It takes about two minutes; the truck is labelled Simulated, and you can
-                  follow it on the live map above.
-                </p>
+              )}
+              {p?.picked_up && !d.done.at_mandi && (
+                <p className="mt-3 text-sm"><b className="text-brand">✓ Load handed over</b> · on the way to {b.mandi}. Follow it on the live map.</p>
               )}
             </div>
           )}

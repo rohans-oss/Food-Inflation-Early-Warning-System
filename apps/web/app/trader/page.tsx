@@ -27,8 +27,8 @@ export default function Trader() {
   const incoming: any[] = (b?.incoming ?? []).map((i: any) => ({ ...i, ...(live[i.trip_id] ? {
     lat: live[i.trip_id].lat, lon: live[i.trip_id].lon, eta_at: live[i.trip_id].eta_at, remaining_km: live[i.trip_id].remaining_km } : {}) }));
   const markers = useMemo<MapMarker[]>(() => incoming.filter((i) => i.lat != null).map((i) => ({
-    id: i.trip_id, lat: i.lat, lon: i.lon, kind: i.is_simulated ? "vehicle-sim" : "vehicle", label: i.vehicle,
-    popup: `${i.vehicle} · ${i.tons} t · ETA ${time(i.eta_at)}${i.is_simulated ? " (Simulated)" : ""}`,
+    id: i.trip_id, lat: i.lat, lon: i.lon, kind: "vehicle", label: i.vehicle,
+    popup: `${i.vehicle} · ${i.tons} t · ETA ${time(i.eta_at)}`,
   })), [incoming]);
 
   const scanned = (tripId: number) => async (code: string) => {
@@ -55,7 +55,7 @@ export default function Trader() {
       {ok && <p role="status" className="rounded-lg border border-good/50 px-3 py-2 text-sm">{ok}</p>}
       {s && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label={t("inTransit")} value={tons(s.tons_in_transit)} sub={s.tons_simulated ? `${num(s.tons_simulated, 1)} t simulated` : undefined} />
+          <Stat label={t("inTransit")} value={tons(s.tons_in_transit)}  />
           <Stat label={t("expectedToday")} value={tons(s.expected_today_tons_total)} sub={`incl. ${tons(s.confirmed_today_tons)} already weighed`} />
           <Stat label={t("typicalDay")} value={s.typical_daily_tons != null ? tons(s.typical_daily_tons) : "–"}
             sub={<span className="inline-flex items-center gap-1">median of last 28 days <ProvenanceBadge p={s.typical_provenance} compact /></span>} />

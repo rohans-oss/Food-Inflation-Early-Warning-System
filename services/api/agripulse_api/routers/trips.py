@@ -1,5 +1,6 @@
 """Trips: assignment, the driver's lifecycle, QR chain of custody, GPS ingest, live views."""
 import asyncio
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -49,6 +50,8 @@ def trip_out(db: Session, t: Trip, viewer: User | None = None) -> dict:
     if viewer is not None and viewer.role == "driver" and viewer.id == t.driver_id:
         # The driver's phone shows this as a QR for the trader to scan at the mandi.
         out["delivery_qr_token"] = t.delivery_qr_token if t.delivery_scanned_at is None else None
+        # ...and the pickup code to tell the farmer (never sent to the farmer: it proves the driver is there)
+        out["pickup_code"] = t.pickup_code if t.pickup_scanned_at is None else None
     if viewer is not None and viewer.role in ("farmer", "fpo", "admin", "fleet_owner") and t.share_token:
         if t.share_expires_at and t.share_expires_at > datetime.now(timezone.utc):
             out["share_url"] = f"{get_settings().public_base_url}/track/{t.share_token}"
@@ -111,7 +114,7 @@ def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver
     t = Trip(
         shipment_id=sh.id, vehicle_id=v.id, driver_id=d.id, fleet_org_id=fleet_org, mandi_id=mandi.id,
         origin_lat=o_lat, origin_lon=o_lon, load_tons=round(tons, 3), is_simulated=v.is_simulated or sh.is_simulated,
-        pickup_qr_token=new_token(), delivery_qr_token=new_token(),
+        pickup_qr_token=new_token(), delivery_qr_token=new_token(), pickup_code=f"{secrets.randbelow(10000):04d}",
         planned_distance_km=r.distance_km, planned_duration_min=r.duration_min, route_geometry=r.geometry,
         route_source=r.source, remaining_km=r.distance_km,
     )
@@ -219,20 +222,29 @@ def scan_pickup(trip_id: int, body: ScanIn, db: Session = Depends(get_db), user:
         raise HTTPException(409, "Start the trip before scanning at pickup")
     if body.token != t.pickup_qr_token:
         raise HTTPException(400, "QR code does not match this trip")
-    if t.pickup_scanned_at is None:
-        now = datetime.now(timezone.utc)
-        t.pickup_scanned_at = now
-        add_event(db, t, "picked_up", now, t.last_lat, t.last_lon)
-        link = f"{get_settings().public_base_url}/track/{t.share_token}"
-        for lot in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
-            move(db, lot, "in_transit", user.id, trip_id=t.id, via="pickup_qr")
-            notify(db, lot.farmer, "picked_up", f"pickup:{t.id}:{lot.id}", lot=lot.id, vehicle=t.vehicle.registration,
-                   mandi=t.mandi.name, link=link)
-        for trader in mandi_traders(db, t.mandi_id):
-            notify(db, trader, "incoming_vehicle", f"incoming:{t.id}", vehicle=t.vehicle.registration,
-                   tons=t.load_tons, mandi=t.mandi.name, eta=trip_out(db, t)["eta_local"] or "pending")
+    record_pickup(db, t, user.id, via="pickup_qr")
     db.commit()
     return trip_out(db, t, user)
+
+
+def record_pickup(db: Session, t: Trip, actor_id: int | None, via: str, **extra) -> bool:
+    """The load is handed over at the farm (pickup QR scanned by the driver, or the driver's pickup code entered by the
+    farmer): picked_up event, lots in transit, farmer + mandi traders alerted. Idempotent; returns True the first time."""
+    if t.pickup_scanned_at is not None:
+        return False
+    now = datetime.now(timezone.utc)
+    t.pickup_scanned_at = now
+    add_event(db, t, "picked_up", now, t.last_lat or t.origin_lat, t.last_lon or t.origin_lon, via=via, **extra)
+    link = f"{get_settings().public_base_url}/track/{t.share_token}"
+    for lot in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
+        if lot.status == "grouped":
+            move(db, lot, "in_transit", actor_id, trip_id=t.id, via=via)
+            notify(db, lot.farmer, "picked_up", f"pickup:{t.id}:{lot.id}", lot=lot.id, vehicle=t.vehicle.registration,
+                   mandi=t.mandi.name, link=link)
+    for trader in mandi_traders(db, t.mandi_id):
+        notify(db, trader, "incoming_vehicle", f"incoming:{t.id}", vehicle=t.vehicle.registration,
+               tons=t.load_tons, mandi=t.mandi.name, eta=trip_out(db, t)["eta_local"] or "pending")
+    return True
 
 
 @router.post("/trips/{trip_id}/scan/delivery")

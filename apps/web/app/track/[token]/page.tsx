@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { MapView } from "@/components/MapView";
-import { Badge, StatusBadge } from "@/components/ui";
+import { StatusBadge } from "@/components/ui";
 import { api, wsUrl } from "@/lib/api";
 import { ago, num } from "@/lib/format";
 
@@ -52,7 +52,6 @@ export default function Track() {
         <>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge s={d.status} />
-            {d.is_simulated && <Badge kind="sim">Simulated vehicle</Badge>}
             <span className="text-sm text-ink2">Updated {ago(d.last_seen_at)}</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -61,7 +60,7 @@ export default function Track() {
           </div>
           {d.lat != null && d.lon != null ? (
             <MapView height="h-96" fitKey={`${d.lat},${d.lon}`} zoom={10} center={[d.lon, d.lat]}
-              markers={[{ id: "v", lat: d.lat, lon: d.lon, kind: d.is_simulated ? "vehicle-sim" : "vehicle", label: "Vehicle" }]} />
+              markers={[{ id: "v", lat: d.lat, lon: d.lon, kind: "vehicle", label: "Vehicle" }]} />
           ) : <p className="text-sm text-muted">Position is shown only while the trip is in progress.</p>}
           <ul className="text-sm">
             {d.lots.map((l) => <li key={l.lot_id} className="flex justify-between border-b border-line py-2"><span>Lot #{l.lot_id}</span><StatusBadge s={l.status} /></li>)}

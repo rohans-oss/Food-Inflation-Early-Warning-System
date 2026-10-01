@@ -35,7 +35,7 @@ export default function Receipt() {
       <article className="relative overflow-hidden rounded-2xl border border-line bg-white p-8 text-[#111] print:rounded-none print:border-0">
         {r.simulated && (
           <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
-            <span className="-rotate-12 text-7xl font-black tracking-widest text-critical/10">SIMULATED</span>
+            <span className="-rotate-12 text-7xl font-black tracking-widest text-ink/5">DEMO</span>
           </div>
         )}
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
@@ -49,7 +49,7 @@ export default function Receipt() {
           <div className="text-right text-sm">
             <p className="font-mono text-base font-semibold">{r.receipt_no}</p>
             <p className="text-[#555]">Issued {r.issued_local}</p>
-            {r.simulated && <p className="mt-1 inline-block rounded bg-critical/10 px-2 py-0.5 text-xs font-semibold text-critical">SIMULATED DEMO TRIP · not a real sale</p>}
+            {r.simulated && <p className="mt-1 inline-block rounded bg-page px-2 py-0.5 text-xs text-[#555]">Demo receipt · not a real sale</p>}
           </div>
         </header>
 

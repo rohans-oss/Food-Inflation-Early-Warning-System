@@ -288,7 +288,35 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
             "transport_requested_at": lot.transport_requested_at, "done": done,
             "can_book": user.role == "farmer" and lot.status == "registered" and mandi is not None,
             "can_request": user.role == "farmer" and lot.status == "registered" and mandi is not None and fpo is not None,
+            "pickup": _pickup_state(db, lot, trip),
             "demo_mode": get_settings().demo_mode}
+
+
+def _pickup_state(db: Session, lot: Lot, trip: Trip | None) -> dict | None:
+    """What the farmer needs at the farm: the confirmed driver + truck, whether it has arrived, and whether the
+    handover (driver's pickup code or QR) is done. In the public demo the demo driver's code is shown here, because
+    there is no real driver to tell it."""
+    from ..models import GeofenceEvent
+    from .bookings import OPEN, open_booking, start_demo
+
+    s = get_settings()
+    if s.demo_mode and lot.status in ("grouped", "in_transit", "at_mandi"):
+        b = open_booking(db, lot.id)
+        if b is not None and b.status in OPEN and b.shipment_id == lot.shipment_id:
+            start_demo(lot.id, b.id)  # resumes after a server restart; no-op while running
+    if trip is None:
+        return None
+    driver = db.get(User, trip.driver_id) if trip.driver_id else None
+    arrived = db.scalar(select(GeofenceEvent.id).where(GeofenceEvent.trip_id == trip.id,
+                                                       GeofenceEvent.event == "reached_pickup")) is not None
+    out = {"trip_id": trip.id, "status": trip.status, "driver": driver.full_name.replace(" (driver)", "") if driver else None,
+           "driver_phone": getattr(driver, "phone", None) if driver else None,
+           "vehicle": trip.vehicle.registration, "capacity_tons": trip.vehicle.capacity_tons,
+           "started": trip.status == "in_progress", "arrived": arrived, "picked_up": trip.pickup_scanned_at is not None,
+           "code_tries_left": max(0, 5 - (trip.pickup_code_failures or 0))}
+    if s.demo_mode and trip.pickup_scanned_at is None:
+        out["demo_code"] = trip.pickup_code
+    return out
 
 
 @router.post("/lots/{lot_id}/request-transport")

@@ -9,9 +9,9 @@
 
 Payments are RECORDED, never processed: no money moves through AgriPulse.
 """
-import asyncio
 import logging
 import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -168,6 +168,8 @@ def book(lot_id: int, body: BookIn, db: Session = Depends(get_db), user: User = 
         notify(db, owner, "booking_requested", f"booking:{b.id}", farmer=user.full_name, tons=f"{lot.quantity_tons:g}",
                mandi=mandi.name, time=slot["label"])
     db.commit()
+    if get_settings().demo_mode:  # the demo transporter answers on its own (it confirms, then drives to the farm)
+        start_demo(lot.id, b.id)
     return booking_out(db, b)
 
 
@@ -280,30 +282,40 @@ def payment_received(lot_id: int, db: Session = Depends(get_db), user: User = De
 # ------------------------------------------------------------------ public demo: SIMULATED trip autopilot
 
 
-DEMO_TASKS: dict[int, asyncio.Task] = {}
-DEMO_APPROACH_POINTS = 15  # truck driving from its depot to the farm
+DEMO_TASKS: dict[int, threading.Thread] = {}
+DEMO_APPROACH_POINTS = 15  # truck driving from its base to the farm
 DEMO_POINTS = 45  # farm -> mandi
-DEMO_TICK_S = 2.0  # ~2 min on screen in all
+DEMO_TICK_S = 2.0
+DEMO_CONFIRM_S = 6.0  # the demo transporter "thinks" before confirming
+DEMO_WAIT_FOR_CODE_S = 3 * 3600  # the truck waits at the farm until the farmer enters the driver's code
+
+
+def start_demo(lot_id: int, booking_id: int) -> bool:
+    """PUBLIC DEMO ONLY: the demo transporter + driver + trader handle this booking like real ones would, except that
+    the farmer still confirms the handover with the driver's pickup code. Returns False if already running."""
+    t = DEMO_TASKS.get(lot_id)
+    if t is not None and t.is_alive():
+        return False
+    DEMO_TASKS[lot_id] = threading.Thread(target=_autopilot, args=(lot_id, booking_id), name=f"demo-{lot_id}", daemon=True)
+    DEMO_TASKS[lot_id].start()
+    return True
 
 
 @router.post("/lots/{lot_id}/demo-trip", status_code=202)
-async def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
-    """PUBLIC DEMO ONLY (DEMO_MODE): a SIMULATED transporter, driver and trader run this lot's booked trip so a visitor
-    can watch it end to end: the truck drives to the farm, the pickup QR is scanned, it drives to the mandi, is scanned
-    in at the gate, weighed, and a simulated payment is recorded. Everything is flagged simulated; real deployments 404."""
+def demo_trip(lot_id: int, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
+    """PUBLIC DEMO ONLY (DEMO_MODE): (re)start the demo transporter for this lot's booking. Real deployments 404."""
     if not get_settings().demo_mode:
         raise HTTPException(404, "Not available")
     lot = get_scoped_lot(db, user, lot_id)
     b = open_booking(db, lot.id)
     if b is None or b.status not in OPEN:
         raise HTTPException(409, "Book a transporter first")
-    if lot_id in DEMO_TASKS and not DEMO_TASKS[lot_id].done():
-        return {"status": "running"}
-    DEMO_TASKS[lot_id] = asyncio.get_running_loop().create_task(_autopilot(lot_id, b.id))
-    return {"status": "started"}
+    return {"status": "started" if start_demo(lot_id, b.id) else "running"}
 
 
-async def _autopilot(lot_id: int, booking_id: int) -> None:
+def _autopilot(lot_id: int, booking_id: int) -> None:
+    import time
+
     from .. import db as dbmod
 
     def run(fn, *a):
@@ -311,19 +323,44 @@ async def _autopilot(lot_id: int, booking_id: int) -> None:
             return fn(db, *a)
 
     try:
-        trip_id, depot = await asyncio.to_thread(run, _demo_prepare, lot_id, booking_id)
-        for i in range(1, DEMO_APPROACH_POINTS + 1):
-            await asyncio.to_thread(run, _demo_approach, trip_id, depot, i / DEMO_APPROACH_POINTS)
-            await asyncio.sleep(DEMO_TICK_S)
-        await asyncio.sleep(3)  # loading at the farm
-        await asyncio.to_thread(run, _demo_pickup, trip_id)
+        if run(_demo_trip_id, booking_id) is None:
+            time.sleep(DEMO_CONFIRM_S)
+        trip_id, depot = run(_demo_prepare, lot_id, booking_id)
+        if not run(_demo_picked_up, trip_id):
+            if not run(_demo_at_farm, trip_id):
+                for i in range(1, DEMO_APPROACH_POINTS + 1):
+                    run(_demo_approach, trip_id, depot, i / DEMO_APPROACH_POINTS)
+                    time.sleep(DEMO_TICK_S)
+            waited = 0.0
+            while not run(_demo_picked_up, trip_id):  # the farmer enters the driver's code (POST /lots/{id}/confirm-pickup)
+                if waited > DEMO_WAIT_FOR_CODE_S:
+                    return
+                time.sleep(2)
+                waited += 2
+            time.sleep(2)
         for i in range(1, DEMO_POINTS + 1):
-            await asyncio.to_thread(run, _demo_step, trip_id, i / DEMO_POINTS)
-            await asyncio.sleep(DEMO_TICK_S)
-        await asyncio.sleep(3)
-        await asyncio.to_thread(run, _demo_finish, lot_id, trip_id)
+            run(_demo_step, trip_id, i / DEMO_POINTS)
+            time.sleep(DEMO_TICK_S)
+        time.sleep(3)
+        run(_demo_finish, lot_id, trip_id)
     except Exception:  # never take the API down; the visitor sees the trip stop
         log.exception("demo autopilot failed for lot %s", lot_id)
+
+
+def _demo_trip_id(db: Session, booking_id: int) -> int | None:
+    b = db.get(TransportBooking, booking_id)
+    return db.scalar(select(Trip.id).where(Trip.shipment_id == b.shipment_id, Trip.status.not_in(["declined", "cancelled"])))
+
+
+def _demo_picked_up(db: Session, trip_id: int) -> bool:
+    return db.get(Trip, trip_id).pickup_scanned_at is not None
+
+
+def _demo_at_farm(db: Session, trip_id: int) -> bool:
+    from ..models import GeofenceEvent
+
+    return db.scalar(select(GeofenceEvent.id).where(GeofenceEvent.trip_id == trip_id,
+                                                    GeofenceEvent.event == "reached_pickup")) is not None
 
 
 def _demo_prepare(db: Session, lot_id: int, booking_id: int) -> tuple[int, tuple[float, float]]:
@@ -392,21 +429,47 @@ def _demo_approach(db: Session, trip_id: int, depot: tuple[float, float], frac: 
 
 
 def _demo_pickup(db: Session, trip_id: int) -> None:
-    """The SIMULATED driver scans the farmer's pickup QR (same effects as POST /trips/{id}/scan/pickup)."""
-    from tracking.engine import add_event
+    """The demo driver scans the farmer's pickup QR (same effects as POST /trips/{id}/scan/pickup)."""
+    from .trips import record_pickup
 
-    t = db.get(Trip, trip_id)
-    now = datetime.now(timezone.utc)
-    if t.pickup_scanned_at is None:
-        t.pickup_scanned_at = now
-        add_event(db, t, "picked_up", now, t.last_lat or t.origin_lat, t.last_lon or t.origin_lon, source="demo_autopilot")
-        link = f"{get_settings().public_base_url}/track/{t.share_token}"
-        for x in db.scalars(select(Lot).where(Lot.shipment_id == t.shipment_id)):
-            if x.status == "grouped":
-                move(db, x, "in_transit", t.driver_id, trip_id=t.id, via="demo_autopilot")
-                notify(db, x.farmer, "picked_up", f"pickup:{t.id}:{x.id}", lot=x.id, vehicle=t.vehicle.registration,
-                       mandi=t.mandi.name, link=link)
+    record_pickup(db, db.get(Trip, trip_id), db.get(Trip, trip_id).driver_id, via="demo_autopilot")
     db.commit()
+
+
+# ------------------------------------------------------------------ farmer confirms the handover with the driver's code
+
+MAX_CODE_FAILURES = 5
+
+
+class CodeIn(BaseModel):
+    code: str = Field(min_length=4, max_length=6)
+
+
+@router.post("/lots/{lot_id}/confirm-pickup")
+def confirm_pickup(lot_id: int, body: CodeIn, db: Session = Depends(get_db), user: User = Depends(require("lots:create"))):
+    """At the farm the driver tells the farmer the trip's 4-digit pickup code; the farmer enters it here. A match proves
+    the right truck is at the farm and hands over the load (same effects as the driver scanning the pickup QR)."""
+    from .trips import record_pickup
+
+    lot = get_scoped_lot(db, user, lot_id)
+    trip = db.scalar(select(Trip).where(Trip.shipment_id == lot.shipment_id, Trip.status.not_in(["declined", "cancelled"]))
+                     .order_by(Trip.id.desc())) if lot.shipment_id else None
+    if trip is None:
+        raise HTTPException(409, "No truck has been assigned yet")
+    if trip.pickup_scanned_at is not None:
+        return lot_out(db, lot, user)
+    if trip.status != "in_progress":
+        raise HTTPException(409, "The driver has not started the trip yet")
+    if (trip.pickup_code_failures or 0) >= MAX_CODE_FAILURES:
+        raise HTTPException(429, "Too many wrong codes. Ask the driver to scan your pickup QR instead.")
+    if not trip.pickup_code or not secrets.compare_digest(body.code.strip(), trip.pickup_code):
+        trip.pickup_code_failures = (trip.pickup_code_failures or 0) + 1
+        db.commit()
+        left = MAX_CODE_FAILURES - trip.pickup_code_failures
+        raise HTTPException(400, f"That code does not match this truck. {left} tr{'y' if left == 1 else 'ies'} left.")
+    record_pickup(db, trip, user.id, via="pickup_code")
+    db.commit()
+    return lot_out(db, lot, user)
 
 
 def _demo_step(db: Session, trip_id: int, frac: float) -> None:

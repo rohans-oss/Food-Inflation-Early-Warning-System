@@ -28,8 +28,8 @@ export default function Fleet() {
   const markers = useMemo<MapMarker[]>(() => vehicles.filter((v) => v.active_trip).map((v) => {
     const p = live[v.active_trip.id] ?? v.active_trip;
     return p.lat == null ? null : {
-      id: v.id, lat: p.lat, lon: p.lon, kind: v.is_simulated ? "vehicle-sim" : "vehicle", label: v.registration,
-      popup: `${v.registration}${v.is_simulated ? " (Simulated)" : ""} → ${v.active_trip.mandi}, ETA ${time(p.eta_at)}`,
+      id: v.id, lat: p.lat, lon: p.lon, kind: "vehicle", label: v.registration,
+      popup: `${v.registration} → ${v.active_trip.mandi}, ETA ${time(p.eta_at)}`,
     } as MapMarker;
   }).filter(Boolean) as MapMarker[], [vehicles, live]);
 
@@ -54,7 +54,6 @@ export default function Fleet() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card title="Vehicles on the road">
           <MapView height="h-[28rem]" markers={markers} fitKey={markers.length} />
-          <p className="mt-2 text-xs text-muted">Dashed amber markers are simulated vehicles.</p>
         </Card>
         <Card title="Bookings to assign">
           {ov.data?.bookings_to_assign?.length === 0 && <p className="text-sm text-muted">No open bookings.</p>}

@@ -67,7 +67,7 @@ export default function Admin() {
           </Table>
         </Card>
         <Card title={t("simulator")} action={sim.data?.running ? <Badge kind="sim">Running · {sim.data.trips} trips</Badge> : <Badge>Stopped</Badge>}>
-          <p className="mb-3 text-sm text-ink2">Creates simulated trucks on real routes, fed through the same GPS pipeline as real phones. Every one is flagged <b>Simulated</b> everywhere it appears.</p>
+          <p className="mb-3 text-sm text-ink2">Creates simulated trucks on real routes, fed through the same GPS pipeline as real phones. They are kept apart from real trips in every report.</p>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Trips"><input className={`${inputCls} w-24`} type="number" min="1" max="100" value={simCfg.trips} onChange={(e) => setSimCfg({ ...simCfg, trips: e.target.value })} /></Field>
             <Field label="Speed-up ×"><input className={`${inputCls} w-24`} type="number" min="0.5" max="120" value={simCfg.speedup} onChange={(e) => setSimCfg({ ...simCfg, speedup: e.target.value })} /></Field>
@@ -278,7 +278,7 @@ function CompareRecommenders() {
       {out && (
         <>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            <SimBadge on label="Simulated lots and trucks" />
+            <SimBadge on label="Generated lots and trucks" />
             <ProvenanceBadge p={out.data_provenance} compact />
             <Badge>{out.distances}</Badge>
             <span className="text-ink2">{out.n_lots} lots, {out.tons_offered} t · {out.n_vehicles} trucks, {out.vehicle_capacity} t</span>

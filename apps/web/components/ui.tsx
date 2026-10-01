@@ -121,9 +121,10 @@ export function EstimateBadge({ title }: { title?: string }) {
   );
 }
 
-/** Rule 1: anything simulated says so. */
-export function SimBadge({ on, label = "Simulated" }: { on: boolean | null | undefined; label?: string }) {
-  return on ? <Badge kind="sim">{label}</Badge> : null;
+/** Public-demo wording (user decision 2026-10-01): demo trucks / trips carry no per-item tag; the site-wide banner says
+ * the transporters and drivers are demo ones. A badge shows only where a caller passes an explicit label. */
+export function SimBadge({ on, label }: { on: boolean | null | undefined; label?: string }) {
+  return on && label ? <Badge kind="sim">{label}</Badge> : null;
 }
 
 /** Spike risk: status colour + icon dot + text label, never colour alone. */

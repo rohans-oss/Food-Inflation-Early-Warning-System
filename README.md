@@ -733,3 +733,14 @@ Mysuru, each with its own drivers and trucks (2.5-16 t, `KA-DEMO-…`, simulated
 the farm, cheapest first; the fare counts the whole truck day (base -> farm -> mandi -> base). "Run demo trip" uses the
 chosen company's own truck and driver, starting from its base. Seeded by `seed.seed_demo_fleets`; base columns in
 migration 0018.
+
+## Booking confirmation and pickup code
+
+After the farmer books, the transporter confirms and assigns a driver and truck (demo: within a few seconds). The farmer
+sees the driver's name and the truck, follows it to the farm on the live map, and at the farm enters the 4-digit
+pickup code the driver tells them (`POST /lots/{id}/confirm-pickup`; 5 wrong tries lock it, the QR scan still works).
+Only then does the truck leave for the mandi. The driver app shows the code. In the public demo there is no real
+driver, so the demo driver's code is shown under the input.
+
+How to verify: farmer → lot → Sell here → Choose time → Book → wait for "Confirmed" → when the truck reaches the farm,
+enter the code shown → the truck heads to the mandi.

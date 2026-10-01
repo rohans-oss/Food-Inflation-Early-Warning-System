@@ -48,8 +48,8 @@ export function TripLive({ tripId }: { tripId: number }) {
       { id: "o", lat: trip.origin_lat, lon: trip.origin_lon, kind: "pickup", label: "Farm (pickup)", popup: "Farm (pickup)" },
     ];
     if (trip.mandi_lat != null) m.push({ id: "m", lat: trip.mandi_lat, lon: trip.mandi_lon, kind: "mandi", label: trip.mandi, popup: trip.mandi });
-    if (cur.lat != null) m.push({ id: "v", lat: cur.lat, lon: cur.lon, kind: trip.is_simulated ? "vehicle-sim" : "vehicle",
-      label: trip.vehicle, popup: `${trip.vehicle}${trip.is_simulated ? " (Simulated)" : ""}` });
+    if (cur.lat != null) m.push({ id: "v", lat: cur.lat, lon: cur.lon, kind: "vehicle",
+      label: trip.vehicle, popup: `${trip.vehicle}` });
     return m;
   }, [trip, cur.lat, cur.lon]);
 

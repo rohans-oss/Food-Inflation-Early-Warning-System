@@ -299,4 +299,12 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   (ProvenanceBadge, banner from `/data-status`), never unlabelled. API values, docs, studies and exported reports keep
   "synthetic" and the full rule-9 label. `DATA_MODE=demo` makes the demo image serve its baked sample database even when
   DATABASE_URL points at Postgres.
+- Pickup code (2026-10-01, user request): every trip gets a 4-digit `trips.pickup_code` at `make_trip`; only the driver
+  (and the driver app) sees it; the farmer enters it at `POST /lots/{id}/confirm-pickup` (5 wrong tries lock it; QR scan
+  stays the fallback). All handovers go through `routers.trips.record_pickup`. Public demo: booking starts the demo
+  transporter on its own (`bookings.start_demo`, thread; resumed from next-steps after restarts); its truck waits at the
+  farm for the farmer's code, and next-steps shows the demo driver's code (`pickup.demo_code`, demo_mode only).
+- Public-demo wording (2026-10-01, user decision): no per-item "Simulated" tag in the web UI (`SimBadge` renders only
+  with an explicit label); the banner says transporters/drivers/accounts are for demonstration; demo receipts say "Demo
+  receipt · not a real sale". `is_simulated` flags in data and APIs are unchanged and still drive every report.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.

@@ -14,9 +14,9 @@ export function DataBanner({ fallback }: { fallback: string }) {
     fetch(`${apiBase()}/data-status`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setS).catch(() => {});
   }, []);
   let text = fallback;
-  if (s?.mode === "demo") text = "Demo site: prices and forecasts are sample data, not live mandi rates. Trucks and accounts are simulated.";
+  if (s?.mode === "demo") text = "Demo site: prices and forecasts are sample data, not live mandi rates. Transporters, drivers and accounts are for demonstration.";
   if (s?.mode === "live") {
-    const sim = s.trucks === "simulated" ? " Trucks, drivers and demo accounts are simulated." : "";
+    const sim = s.trucks === "simulated" ? " Transporters, drivers and accounts are for demonstration." : "";
     text = s.price_feed === "connected"
       ? `Live data: real mandi prices from Agmarknet${s.latest_real_price_date ? ` (latest ${s.latest_real_price_date})` : ""}.${sim}`
       : s.price_feed === "no_key"
