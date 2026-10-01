@@ -117,8 +117,29 @@ $("loginForm").onsubmit = async (e) => {
 
 const fmtTime = (s) => (s ? new Date(s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "–");
 
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function loadRequests() {
+  const box = $("requests");
+  if (!box) return;
+  const reqs = await api("/driver/bookings");
+  box.innerHTML = reqs.length ? "<h2>New booking requests</h2>" : "";
+  for (const r of reqs) {
+    const d = document.createElement("div");
+    d.className = "card";
+    d.innerHTML = `<b>${esc(r.farmer)}</b> · ${esc(r.village || "farm")}${r.farmer_phone ? ` · <a href="tel:${esc(r.farmer_phone)}">${esc(r.farmer_phone)}</a>` : ""}<br>
+      <span class="meta">${esc(r.crop)} ${esc(r.tons)} t → ${esc(r.mandi)} · pickup ${esc(r.pickup_local)} · ~${esc(Math.round(r.road_km_approx))} km</span>`;
+    const b = document.createElement("button");
+    b.textContent = "Accept job";
+    b.onclick = async () => { b.disabled = true; try { await api(`/driver/bookings/${r.id}/accept`, { method: "POST" }); loadTrips(); } catch (e) { alert(e.message); b.disabled = false; } };
+    d.appendChild(b);
+    box.appendChild(d);
+  }
+}
+
 async function loadTrips() {
   show("listView");
+  loadRequests().catch(() => {});
   const trips = await api("/trips?status=assigned,accepted,in_progress,completed");
   $("trips").innerHTML = trips.length ? "" : '<p class="meta">No trips assigned yet.</p>';
   for (const t of trips) {
@@ -146,6 +167,9 @@ function render() {
   const t = current;
   $("tTitle").innerHTML = `${t.vehicle} → ${t.mandi} `;
   $("codeBox").hidden = !(t.pickup_code && ["accepted", "in_progress"].includes(t.status));
+  $("pickupBox").innerHTML = (t.pickups || []).map((p) => `<p><b>Pick up:</b> ${esc(p.farmer)}${p.village ? `, ${esc(p.village)}` : ""}
+    ${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}<br><span class="meta">${esc(p.crop)} ${esc(p.tons)} t ·
+    <a target="_blank" rel="noreferrer" href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=15/${p.lat}/${p.lon}">farm on the map</a></span></p>`).join("");
   if (t.pickup_code) $("pickupCode").textContent = t.pickup_code;
   $("tMeta").textContent = `Status: ${t.status} · load ${t.load_tons} t · planned ${t.planned_distance_km ?? "?"} km`
     + (t.route_source === "haversine" ? " (approximate route)" : "");

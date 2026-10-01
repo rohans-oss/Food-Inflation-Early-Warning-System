@@ -2,8 +2,8 @@
 
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
-import { Card, Note, Stat, StatusBadge, Table, Td, useApi } from "@/components/ui";
-import { apiBase } from "@/lib/api";
+import { Button, Card, ErrorNote, Note, Stat, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
+import { api, apiBase } from "@/lib/api";
 import { day, inr, num, time } from "@/lib/format";
 
 /** The driver's home: their record (trips, distance, tonnes, estimated earnings), current trips and history.
@@ -11,6 +11,12 @@ import { day, inr, num, time } from "@/lib/format";
 export default function Driver() {
   const trips = useApi<any[]>("/trips", { query: { status: "assigned,accepted,in_progress" }, poll: 15000 });
   const s = useApi<any>("/driver/summary", { poll: 30000 });
+  const reqs = useApi<any[]>("/driver/bookings", { poll: 8000 });
+  const act = useAction();
+  const accept = (id: number) => act.run(async () => {
+    await api(`/driver/bookings/${id}/accept`, { method: "POST" });
+    reqs.reload(); trips.reload(); s.reload();
+  });
   const pwa = `${apiBase()}/driver/`;
   const d = s.data;
   return (
@@ -24,15 +30,55 @@ export default function Driver() {
       {d && <p className="text-xs text-muted">Earnings are estimated from your fleet&apos;s rates: {inr(d.rates.trip_allowance)} per trip + {inr(d.rates.per_km)} per km.
         Your fleet owner pays you; AgriPulse does not move money.</p>}
 
-      <Card title="Current trips">
-        <Table head={["Trip", "Vehicle", "Mandi", "Load", "Status", "ETA"]} empty="No trip right now. New trips from your fleet owner appear here and in the driver app.">
-          {trips.data?.map((t) => (
-            <tr key={t.id}>
-              <Td>#{t.id}</Td><Td>{t.vehicle}</Td><Td>{t.mandi}</Td>
-              <Td>{num(t.load_tons, 1)} t</Td><Td><StatusBadge s={t.status} /></Td><Td>{time(t.eta_at)}</Td>
-            </tr>
+      <Card title={`New booking requests${reqs.data?.length ? ` (${reqs.data.length})` : ""}`}>
+        <p className="mb-3 text-xs text-muted">Farmers who booked your company. Take a job and you become its driver; the farmer is told at once.</p>
+        <ErrorNote error={act.error} />
+        {reqs.data?.length === 0 && <p className="text-sm text-muted">No requests waiting. New bookings for your company appear here.</p>}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {reqs.data?.map((r) => (
+            <div key={r.id} className="rounded-xl border border-line p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{r.farmer}</p>
+                  <p className="text-sm text-ink2">{r.village ?? "Farm"}{r.farmer_district ? `, ${r.farmer_district}` : ""}
+                    {r.farmer_phone && <> · <a className="underline" href={`tel:${r.farmer_phone}`}>{r.farmer_phone}</a></>}</p>
+                </div>
+                <Button disabled={act.busy} onClick={() => accept(r.id)}>Accept job</Button>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <dt className="text-muted">Produce</dt><dd>{r.crop} · {num(r.tons, 1)} t · {r.grade}</dd>
+                <dt className="text-muted">Pickup</dt><dd>{r.pickup_local}</dd>
+                <dt className="text-muted">Deliver to</dt><dd>{r.mandi}{r.mandi_district ? ` (${r.mandi_district})` : ""}</dd>
+                <dt className="text-muted">Distance</dt><dd>~{num(r.road_km_approx, 0)} km farm → mandi</dd>
+                <dt className="text-muted">Fare (est.)</dt><dd>{inr(r.fare_estimate)}</dd>
+              </dl>
+              <a className="mt-2 inline-block text-xs underline" target="_blank" rel="noreferrer"
+                href={`https://www.openstreetmap.org/?mlat=${r.pickup_lat}&mlon=${r.pickup_lon}#map=14/${r.pickup_lat}/${r.pickup_lon}`}>Farm location on the map</a>
+            </div>
           ))}
-        </Table>
+        </div>
+      </Card>
+
+      <Card title="Current trips">
+        {trips.data?.length === 0 && <p className="text-sm text-muted">No trip right now. Accept a request above, or wait for your fleet owner to assign one.</p>}
+        <div className="space-y-3">
+          {trips.data?.map((t) => (
+            <div key={t.id} className="rounded-xl border border-line p-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <b>Trip #{t.id}</b> · {t.vehicle} → {t.mandi} · {num(t.load_tons, 1)} t <StatusBadge s={t.status} />
+                {t.eta_at && <span className="text-muted">ETA {time(t.eta_at)}</span>}
+                <a href={pwa} className="ml-auto rounded-lg bg-brand px-3 py-1.5 font-medium text-brand-ink">Drive in the app</a>
+              </div>
+              {t.pickups?.map((p: any) => (
+                <p key={p.lot_id} className="mt-2 text-ink2">
+                  Pick up from <b className="text-ink">{p.farmer}</b>{p.village ? `, ${p.village}` : ""}{p.district ? ` (${p.district})` : ""}
+                  {p.phone && <> · <a className="underline" href={`tel:${p.phone}`}>{p.phone}</a></>} · {p.crop} {num(p.tons, 1)} t
+                  {p.pickup_at && <> · at {new Date(p.pickup_at).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })}</>}
+                </p>
+              ))}
+            </div>
+          ))}
+        </div>
       </Card>
 
       <Card title="Trip history">

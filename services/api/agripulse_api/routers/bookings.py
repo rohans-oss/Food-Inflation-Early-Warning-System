@@ -238,6 +238,56 @@ def on_trip_assigned(db: Session, shipment: Shipment, trip: Trip) -> None:
            vehicle=trip.vehicle.registration, time=_utc(b.pickup_at).astimezone(IST).strftime("%a %d %b, %I:%M %p"))
 
 
+# ------------------------------------------------------------------ drivers see their company's farmer bookings
+
+
+def _request_out(db: Session, b: TransportBooking) -> dict:
+    lot = db.get(Lot, b.lot_id)
+    mandi = db.get(Mandi, b.mandi_id)
+    from tracking.geo import haversine_km
+
+    return {**booking_out(db, b), "farmer_phone": lot.farmer.phone, "farmer_district": lot.farmer.district,
+            "village": lot.pickup_label or None, "crop": lot.crop, "grade": lot.grade,
+            "pickup_lat": lot.pickup_lat, "pickup_lon": lot.pickup_lon, "mandi_district": mandi.district,
+            "road_km_approx": round(haversine_km(lot.pickup_lat, lot.pickup_lon, mandi.lat, mandi.lon) * 1.3, 1)}
+
+
+@router.get("/driver/bookings")
+def driver_requests(db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
+    """Farmer bookings made with the driver's transport company that no truck has been assigned to yet."""
+    if not user.org_id:
+        return []
+    q = select(TransportBooking).where(TransportBooking.fleet_org_id == user.org_id, TransportBooking.status == "requested")
+    return [_request_out(db, b) for b in db.scalars(q.order_by(TransportBooking.pickup_at))]
+
+
+@router.post("/driver/bookings/{booking_id}/accept")
+def driver_accept(booking_id: int, db: Session = Depends(get_db), user: User = Depends(require("trips:drive"))):
+    """A driver of the booked company takes the job: their company's smallest free truck that fits is assigned, with
+    them as the driver, and the trip is accepted at once (the farmer gets the confirmation)."""
+    from .trips import make_trip, trip_out
+
+    b = db.get(TransportBooking, booking_id)
+    if b is None or b.fleet_org_id != user.org_id:
+        raise HTTPException(404, "Booking not found")
+    if b.status != "requested":
+        raise HTTPException(409, "Another driver or the fleet owner has already taken this booking")
+    if db.scalar(select(Trip.id).where(Trip.driver_id == user.id, Trip.status.in_(ACTIVE_TRIP))):
+        raise HTTPException(409, "Finish your current trip first")
+    load = sum(x.quantity_tons for x in db.get(Shipment, b.shipment_id).lots)
+    busy_v = set(db.scalars(select(Trip.vehicle_id).where(Trip.status.in_(ACTIVE_TRIP))))
+    v = db.scalar(select(Vehicle).where(Vehicle.org_id == user.org_id, Vehicle.capacity_tons >= load,
+                                        Vehicle.id.not_in(busy_v or {-1})).order_by(Vehicle.capacity_tons))
+    if v is None:
+        raise HTTPException(409, "No free truck in your company can carry this load right now")
+    trip = make_trip(db, user, b.shipment_id, v.id, user.id, via="driver_accepted")
+    move(db, trip, "accepted", user.id, via="driver_accepted")
+    db.commit()
+    if get_settings().demo_mode:  # demo company: its truck still needs the demo GPS to move
+        start_demo_shipment(b.shipment_id)
+    return trip_out(db, trip, user)
+
+
 # ------------------------------------------------------------------ payment (recorded, not processed)
 
 
@@ -322,7 +372,8 @@ DEMO_TASKS: dict[int, threading.Thread] = {}
 DEMO_APPROACH_POINTS = 15  # truck driving from its base to the farm
 DEMO_POINTS = 45  # farm -> mandi
 DEMO_TICK_S = 2.0
-DEMO_CONFIRM_S = 6.0  # the demo transporter "thinks" before confirming
+DEMO_CONFIRM_S = 6.0
+DEMO_HUMAN_WAIT_S = 120.0  # a demo company's booking waits this long for a person to accept it, then a demo driver does
 DEMO_WAIT_FOR_CODE_S = 3 * 3600  # the truck waits at the farm until the farmer enters the driver's code
 
 
@@ -379,8 +430,10 @@ def _autopilot(shipment_id: int, auto_pickup: bool = False, start_delay: float =
             return fn(db, *a)
 
     try:
-        if run(_demo_trip_id, shipment_id) is None:
-            time.sleep(DEMO_CONFIRM_S)
+        waited = 0.0
+        while not auto_pickup and run(_demo_trip_id, shipment_id) is None and waited < DEMO_HUMAN_WAIT_S:
+            time.sleep(3)  # a driver (or the fleet owner) of the demo company can take the job meanwhile
+            waited += 3
         trip_id, depot = run(_demo_prepare_shipment, shipment_id)
         if not run(_demo_picked_up, trip_id):
             if not run(_demo_at_farm, trip_id):

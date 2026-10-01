@@ -25,6 +25,21 @@ from ..security import decode_token, new_token
 router = APIRouter(tags=["trips & tracking"])
 
 
+def pickup_details(db: Session, t: Trip) -> list[dict]:
+    """Who and what the truck collects: farmer, phone, village / farm label, produce, tonnes, map point, booked time.
+    Shown to the trip's driver, its fleet and the FPO (they need it to do the pickup), never publicly."""
+    from ..models import TransportBooking
+
+    out = []
+    for lot in t.shipment.lots:
+        b = db.scalar(select(TransportBooking).where(TransportBooking.lot_id == lot.id).order_by(TransportBooking.id.desc()))
+        out.append({"lot_id": lot.id, "farmer": lot.farmer.full_name, "phone": lot.farmer.phone,
+                    "village": lot.pickup_label or None, "district": lot.farmer.district, "crop": lot.crop,
+                    "tons": lot.quantity_tons, "grade": lot.grade, "lat": lot.pickup_lat, "lon": lot.pickup_lon,
+                    "pickup_at": b.pickup_at if b else None})
+    return out
+
+
 def trip_out(db: Session, t: Trip, viewer: User | None = None) -> dict:
     driver = db.get(User, t.driver_id) if t.driver_id else None
     out = {
@@ -52,6 +67,8 @@ def trip_out(db: Session, t: Trip, viewer: User | None = None) -> dict:
         out["delivery_qr_token"] = t.delivery_qr_token if t.delivery_scanned_at is None else None
         # ...and the pickup code to tell the farmer (never sent to the farmer: it proves the driver is there)
         out["pickup_code"] = t.pickup_code if t.pickup_scanned_at is None else None
+    if viewer is not None and viewer.role in ("driver", "fleet_owner", "fpo", "admin") and t.shipment:
+        out["pickups"] = pickup_details(db, t)
     if viewer is not None and viewer.role in ("farmer", "fpo", "admin", "fleet_owner") and t.share_token:
         if t.share_expires_at and t.share_expires_at > datetime.now(timezone.utc):
             out["share_url"] = f"{get_settings().public_base_url}/track/{t.share_token}"

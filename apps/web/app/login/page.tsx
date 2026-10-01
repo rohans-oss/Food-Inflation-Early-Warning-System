@@ -14,7 +14,7 @@ import { useSession } from "@/lib/session";
 const DEMO = [
   ["Farmer", "farmer@demo.agripulse"],
   ["FPO / aggregator", "fpo@demo.agripulse"],
-  ["Driver", "driver@demo.agripulse"],
+  ["Driver · Hebbal Haulage", "driver@demo.agripulse"],
   ["Fleet owner", "fleet@demo.agripulse"],
   ["Mandi trader", "trader@demo.agripulse"],
   ["Bulk buyer", "buyer@demo.agripulse"],
@@ -22,6 +22,18 @@ const DEMO = [
   ["Lender / insurer", "lender@demo.agripulse"],
   // the public demo disables admin (docs/deployment.md), so it isn't offered there
   ...(process.env.NEXT_PUBLIC_DEMO_NOTICE ? [] : [["Admin", "admin@agripulse.local"]]),
+];
+
+// Each demo transport company's owner and first driver (seed.DEMO_FLEETS order: fleet, fleet2, fleet3, ...).
+const COMPANY_DEMO = [
+  ["Driver · Kolar Krishi Transport (Kolar)", "fleet2-driver1@demo.agripulse"],
+  ["Owner · Kolar Krishi Transport", "fleet2@demo.agripulse"],
+  ["Driver · Chintamani Goods Carriers", "fleet3-driver1@demo.agripulse"],
+  ["Driver · Mulbagal Fresh Movers", "fleet4-driver1@demo.agripulse"],
+  ["Driver · Chikkaballapur Roadlines", "fleet5-driver1@demo.agripulse"],
+  ["Driver · Hosakote Cold Chain", "fleet6-driver1@demo.agripulse"],
+  ["Driver · Tumakuru Tempo Service", "fleet7-driver1@demo.agripulse"],
+  ["Driver · Mysuru Agri Logistics", "fleet8-driver1@demo.agripulse"],
 ];
 
 export default function Login() {
@@ -86,6 +98,19 @@ export default function Login() {
             </li>
           ))}
         </ul>
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer font-medium">Demo drivers &amp; transport companies</summary>
+          <ul className="mt-2 grid gap-1">
+            {COMPANY_DEMO.map(([label, em]) => (
+              <li key={em}>
+                <button onClick={() => { setEmail(em); setPassword("agripulse-demo"); }}
+                  className="flex w-full justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-page">
+                  <span>{label}</span><span className="text-muted">{em}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </main>
   );

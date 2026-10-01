@@ -354,3 +354,32 @@ def test_driver_page_shows_trips_done_distance_and_estimated_earnings(client, as
     assert s["completed_month"] <= s["completed"] and len(s["history"]) == s["completed"]
     assert all(h["pay"] for h in s["history"]) and s["history"][0]["date"] >= s["history"][-1]["date"]
     assert client.get("/driver/summary", headers=as_role("farmer")).status_code == 403
+
+
+def test_the_companys_driver_sees_the_farmers_booking_with_details_and_takes_it(client, as_role, db):
+    """Farmer in Kolar books Kolar Krishi Transport to Kolar APMC; a Kolar Krishi driver sees the request (farmer, phone,
+    village, produce, time) and accepts it; the farmer's booking is confirmed with that driver."""
+    from tests.conftest import login
+
+    kolar = db.scalar(select(Mandi).where(Mandi.name == "Kolar APMC"))
+    reg = client.post("/auth/register", json={"email": "suma@farm.in", "password": "longenough", "full_name": "Suma",
+                                              "role": "farmer", "phone": "9876500011"}).json()
+    F = {"Authorization": f"Bearer {reg['access_token']}"}
+    lot = client.post("/lots", headers=F, json={"crop": "Tomato", "quantity_tons": 2, "pickup_label": "Munrandahalli",
+                                                "pickup_lat": 13.18, "pickup_lon": 78.15}).json()
+    client.post(f"/lots/{lot['id']}/preferred-mandi", headers=F, json={"mandi_id": kolar.id})
+    fleet = next(f for f in client.get(f"/lots/{lot['id']}/next-steps", headers=F).json()["fleets"] if f["name"] == "Kolar Krishi Transport (demo)")
+    slot = next(s for s in fleet["slots"] if s["free_trucks"] > 0)
+    b = client.post(f"/lots/{lot['id']}/bookings", headers=F, json={"fleet_org_id": fleet["org_id"], "pickup_at": slot["pickup_at"]}).json()
+    D = login(client, "fleet2-driver1@demo.agripulse")  # Manjunath, Kolar Krishi Transport
+    reqs = client.get("/driver/bookings", headers=D).json()
+    r = next(x for x in reqs if x["id"] == b["id"])
+    assert r["farmer"] == "Suma" and r["farmer_phone"] == "9876500011" and r["village"] == "Munrandahalli"
+    assert r["crop"] == "Tomato" and r["tons"] == 2 and r["mandi"] == "Kolar APMC"
+    assert client.get("/driver/bookings", headers=as_role("driver")).json() == [] or all(
+        x["id"] != b["id"] for x in client.get("/driver/bookings", headers=as_role("driver")).json())  # other company
+    t = client.post(f"/driver/bookings/{b['id']}/accept", headers=D).json()
+    assert t["status"] == "accepted" and t["pickups"][0]["farmer"] == "Suma" and t["pickups"][0]["village"] == "Munrandahalli"
+    assert client.post(f"/driver/bookings/{b['id']}/accept", headers=D).status_code == 409
+    ns = client.get(f"/lots/{lot['id']}/next-steps", headers=F).json()
+    assert ns["booking"]["status"] == "confirmed" and ns["pickup"]["driver"] == "Manjunath"

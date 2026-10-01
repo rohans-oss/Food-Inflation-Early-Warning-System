@@ -329,4 +329,8 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
 - Driver page (2026-10-01): `GET /driver/summary` (trips, km, tonnes, ESTIMATED earnings from config/driver_pay.toml,
   history). Demo driver history from `bookings.seed_driver_history` (once, dates set back); demo traffic includes a
   Hebbal truck so the demo driver has a live trip.
+- Driver jobs (2026-10-01): drivers see their company's open farmer bookings (`GET /driver/bookings`, farmer name,
+  phone, village, produce, time) and take one (`POST /driver/bookings/{id}/accept` → make_trip with them as driver, trip
+  accepted). `trip_out` adds `pickups` (farmer details) for the trip's driver / fleet / FPO. Demo companies wait
+  `DEMO_HUMAN_WAIT_S` for a person to accept before a demo driver does.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.
