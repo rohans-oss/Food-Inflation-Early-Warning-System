@@ -26,6 +26,7 @@ dependencies = [
   "mlflow-skinny>=3.0",
   "pyarrow>=15",  # V2 feature tables (parquet)  # V2 experiment tracking (client only; `pip install mlflow` adds the UI server)
   "ortools>=9.10",  # V3-0 optimizer (CP-SAT)
+  "pywebpush>=2.0",  # direct booking: Web Push to drivers' phones (VAPID)
 ]
 
 [project.optional-dependencies]

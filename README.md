@@ -777,3 +777,25 @@ for bookings made with demo companies / at mandis without a real manager. Sign-i
 
 How to verify: register a farmer and a mandi manager for Kolar APMC → farmer books a demo transporter to Kolar APMC →
 enter the pickup code → when the truck reaches the gate the manager weighs and records payment → the farmer sees it.
+
+## Direct farmer → driver booking (real-time)
+
+A third way to book, next to FPO → fleet → driver and farmer → transport company. A driver goes **online** for a
+district and the mandis they deliver to, with their own (real) truck. A farmer presses **Request a driver near you**;
+every matching online driver gets the request **at once**: over the existing `/ws/live` WebSocket (under a second while
+the app is open) and as a **Web Push** notification (reaches a locked Android phone, usually in 1–5 s). The first
+driver to accept gets the trip, which then follows the normal lifecycle from "accepted" (pickup code / QR, consent,
+GPS, geofences, delivery QR, weighing, payment). No matching driver → the farmer sees "No drivers are currently
+available for <mandi>" immediately; no answer in 5 minutes → expired; everyone declines → declined.
+
+Only real accounts and real trucks take part, so every direct trip is `is_simulated = false`; Admin → **Trips by
+booking channel** separates direct, company, FPO and demo-autopilot trips and shows how fast drivers saw each request.
+Web Push keys are generated once and kept in the database (or set `VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY`).
+
+How to verify: `pytest tests/test_direct_booking.py` (two real accounts: zero drivers, wrong mandi / district, stale
+phone vs push-enabled phone, live WebSocket delivery, push hand-off, first-accept-wins, decline, expiry, cancel, demo
+accounts and sample trucks refused, then pickup code + GPS on the same trip). On two phones: `docs/field-test.md`
+→ "Two phones: direct farmer → driver booking".
+
+Stubbed / known limits: push delivery time is up to Google/Apple (battery saver can delay it); the Android (Capacitor)
+app gets requests over the socket only (no push inside the WebView); requests expire lazily (on the next read).

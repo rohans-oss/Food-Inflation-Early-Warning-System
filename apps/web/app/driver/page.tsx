@@ -1,5 +1,6 @@
 "use client";
 
+import { DriverDirect } from "@/components/DriverDirect";
 import { QR } from "@/components/QR";
 import { Shell } from "@/components/Shell";
 import { Button, Card, ErrorNote, Note, Stat, StatusBadge, Table, Td, useAction, useApi } from "@/components/ui";
@@ -30,10 +31,12 @@ export default function Driver() {
       {d && <p className="text-xs text-muted">Earnings are estimated from your fleet&apos;s rates: {inr(d.rates.trip_allowance)} per trip + {inr(d.rates.per_km)} per km.
         Your fleet owner pays you; AgriPulse does not move money.</p>}
 
-      <Card title={`New booking requests${reqs.data?.length ? ` (${reqs.data.length})` : ""}`}>
-        <p className="mb-3 text-xs text-muted">Farmers who booked your company. Take a job and you become its driver; the farmer is told at once.</p>
+      <DriverDirect onAccepted={() => { trips.reload(); s.reload(); }} />
+
+      <Card title={`Bookings for your company${reqs.data?.length ? ` (${reqs.data.length})` : ""}`}>
+        <p className="mb-3 text-xs text-muted">Farmers who booked your transport company for a pickup time. Take a job and you become its driver; the farmer is told at once.</p>
         <ErrorNote error={act.error} />
-        {reqs.data?.length === 0 && <p className="text-sm text-muted">No requests waiting. New bookings for your company appear here.</p>}
+        {reqs.data?.length === 0 && <p className="text-sm text-muted">No company bookings waiting.</p>}
         <div className="grid gap-3 lg:grid-cols-2">
           {reqs.data?.map((r) => (
             <div key={r.id} className="rounded-xl border border-line p-4">

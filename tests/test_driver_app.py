@@ -209,3 +209,76 @@ def test_live_socket_uses_a_one_time_ticket_not_the_token(browser, server):
     urls = page.evaluate("window.__wsUrls")
     assert all("ticket=T1" in u and "token=" not in u for u in urls)
     assert any(c["path"] == "/auth/ws-ticket" and c["auth"] == "Bearer tok" for c in calls)
+
+
+# ------------------------------------------------------------------ direct farmer bookings in the phone app
+
+AVAIL = {"online": False, "matched_now": False, "district": "Kolar", "vehicle_id": None, "vehicle": None,
+         "mandi_ids": [], "last_seen_at": None, "push_subscribed": False, "stays_online_min": 10, "demo_account": False,
+         "districts": ["Bengaluru Urban", "Kolar"],
+         "mandis": [{"id": 1, "name": "Kolar APMC", "district": "Kolar"}, {"id": 2, "name": "Bangarpet APMC", "district": "Kolar"},
+                    {"id": 3, "name": "Binny Mill", "district": "Bengaluru Urban"}],
+         "vehicles": [{"id": 3, "registration": "KA07AB1234", "capacity_tons": 5}]}
+OFFER = {"request_id": 5, "offer_status": "notified", "request_status": "notified", "farmer": "Suma",
+         "village": "Munrandahalli", "farmer_district": "Kolar", "crop": "Tomato", "grade": "A", "tons": 2,
+         "pickup_lat": 13.18, "pickup_lon": 78.15, "mandi": "Kolar APMC", "mandi_district": "Kolar", "district": "Kolar",
+         "road_km": 24.6, "fare_estimate": 1800, "driver_pay_estimate": 548, "expires_at": "2099-01-01T00:00:00Z"}
+
+LIVE_WS_INIT = """
+window.__ws = [];
+window.WebSocket = class { constructor(u){ this.url = u; this.readyState = 1; window.__ws.push(this); } send(){} close(){} };
+window.__buzz = [];
+Object.defineProperty(navigator, 'vibrate', {value: (p) => { window.__buzz.push(p); return true; }});
+window.__live = (msg) => window.__ws.filter(w => w.url.includes('/ws/live')).forEach(w => w.onmessage && w.onmessage({data: JSON.stringify(msg)}));
+"""
+
+
+def test_driver_goes_online_and_a_request_pops_up_live_then_is_accepted(browser, server):
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    calls, state = [], {"avail": dict(AVAIL), "offers": []}
+
+    def api(route):
+        req = route.request
+        path = req.url.split("/api", 1)[1]
+        calls.append({"method": req.method, "path": path, "body": req.post_data})
+        if path.startswith("/trips?"):
+            return route.fulfill(json=[])
+        if path == "/driver/availability":
+            if req.method == "PUT":
+                b = json.loads(req.post_data)
+                state["avail"] = {**state["avail"], **b, "matched_now": b["online"]}
+            return route.fulfill(json=state["avail"])
+        if path == "/driver/requests":
+            return route.fulfill(json=state["offers"])
+        if path == "/driver/requests/5/accept":
+            state["offers"] = []
+            return route.fulfill(json={**TRIP, "id": 9, "status": "accepted", "consent_given_at": None, "pickup_scanned_at": None})
+        if path in ("/driver/bookings",):
+            return route.fulfill(json=[])
+        if path == "/auth/ws-ticket":
+            return route.fulfill(json={"ticket": "T1", "expires_in": 60})
+        return route.fulfill(json={**TRIP, "id": 9, "status": "accepted", "consent_given_at": None, "pickup_scanned_at": None})
+
+    page.route("**/api/**", api)
+    page.add_init_script(BASE_INIT + LIVE_WS_INIT)
+    page.goto(server + "/index.html")
+    page.wait_for_selector("#availBox:not([hidden])")
+    assert "Offline" in page.inner_text("#availBox")
+    page.check("#availBox .mandis input[value='1']")
+    page.click("#avOn")
+    page.wait_for_function("document.getElementById('availBox').innerText.includes('Online: farmers in Kolar')")
+    put = next(c for c in calls if c["method"] == "PUT")
+    assert json.loads(put["body"]) == {"online": True, "district": "Kolar", "mandi_ids": [1], "vehicle_id": 3}
+    page.wait_for_function("window.__wlHeld()")  # screen kept on while waiting for requests
+    page.wait_for_function("window.__ws.some(w => w.url.includes('/ws/live?ticket=T1'))")
+
+    state["offers"] = [OFFER]  # the farmer sends a request: the server pushes a message on the driver's channel
+    page.evaluate("window.__live({type: 'trip_request', request_id: 5})")
+    page.wait_for_selector(".req")
+    card = page.inner_text(".req")
+    assert "Suma" in card and "Tomato" in card and "Kolar APMC" in card and "~25 km" in card and "548" in card
+    assert page.evaluate("window.__buzz.length") == 1  # vibrated once for the new request
+    page.click(".req button:has-text('Accept')")
+    page.wait_for_selector("#tripView:not([hidden])")
+    assert any(c["path"] == "/driver/requests/5/accept" and c["method"] == "POST" for c in calls)

@@ -39,6 +39,9 @@ SEVERITY = {
     "booking_confirmed": "info",
     "booking_declined": "warning",
     "payment_recorded": "info",
+    "trip_request": "warning",
+    "driver_accepted": "info",
+    "no_driver": "warning",
 }
 LANGS = ("en", "kn", "hi")
 

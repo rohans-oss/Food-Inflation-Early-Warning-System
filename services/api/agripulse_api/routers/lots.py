@@ -268,6 +268,10 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
         fleets.sort(key=lambda f: (f["fit"] == 0, f["fare_estimate"] is None, f["fare_estimate"] or 0))
     fpo = db.get(Organization, lot.org_id) if lot.org_id else None
     trip = _trip_for_shipment(db, lot.shipment_id)
+    from .direct import expire_due, latest_request, request_out
+
+    expire_due(db)
+    dreq = latest_request(db, lot.id)
     booking = open_booking(db, lot.id)
     booking = booking if booking and (booking.shipment_id == lot.shipment_id or booking.status in ("declined", "cancelled")) else None
     done = {
@@ -280,11 +284,14 @@ def next_steps(lot_id: int, db: Session = Depends(get_db), user: User = Depends(
         "sold": lot.status == "delivered",
         "paid": lot.payout_status == "paid",
     }
-    return {"lot_id": lot.id, "mandi": {"id": mandi.id, "name": mandi.name} if mandi else None,
+    return {"lot_id": lot.id, "mandi": {"id": mandi.id, "name": mandi.name, "district": mandi.district} if mandi else None,
             "mandi_is_final": lot.shipment_id is not None, "route": route, "fleets": fleets,
             "fpo": {"id": fpo.id, "name": fpo.name} if fpo else None,
             "booking": booking_out(db, booking) if booking else None,
-            "via_fpo": lot.shipment_id is not None and (booking is None or booking.shipment_id != lot.shipment_id),
+            "driver_request": request_out(db, dreq) if dreq else None,
+            "via_fpo": lot.shipment_id is not None and (booking is None or booking.shipment_id != lot.shipment_id)
+            and not (trip is not None and trip.booking_channel == "direct"),
+            "can_request_driver": user.role == "farmer" and lot.status == "registered" and mandi is not None,
             "transport_requested_at": lot.transport_requested_at, "done": done,
             "can_book": user.role == "farmer" and lot.status == "registered" and mandi is not None,
             "can_request": user.role == "farmer" and lot.status == "registered" and mandi is not None and fpo is not None,
@@ -314,7 +321,7 @@ def _pickup_state(db: Session, lot: Lot, trip: Trip | None) -> dict | None:
            "vehicle": trip.vehicle.registration, "capacity_tons": trip.vehicle.capacity_tons,
            "started": trip.status == "in_progress", "arrived": arrived, "picked_up": trip.pickup_scanned_at is not None,
            "code_tries_left": max(0, 5 - (trip.pickup_code_failures or 0))}
-    if s.demo_mode and trip.pickup_scanned_at is None:
+    if s.demo_mode and trip.is_simulated and trip.pickup_scanned_at is None:  # never for a real driver's trip
         out["demo_code"] = trip.pickup_code
     return out
 

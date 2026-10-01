@@ -92,6 +92,8 @@ function endSession(path) {
 }
 function logout(serverPath = null) {
   stopTracking();
+  stopDirect();
+  if (serverPath) dropPush();  // this phone must not get the next account's trip requests
   if (serverPath) endSession(serverPath);
   token = null; refreshToken = null;
   localStorage.removeItem("ap_driver_token");
@@ -112,6 +114,7 @@ $("loginForm").onsubmit = async (e) => {
     if (r.user.role !== "driver") throw new Error("This app is for drivers. Use the web dashboard for other roles.");
     saveTokens(r);
     loadTrips();
+    enablePush(false);
   } catch (err) { $("loginErr").textContent = err.message; }
 };
 
@@ -140,6 +143,9 @@ async function loadRequests() {
 async function loadTrips() {
   show("listView");
   loadRequests().catch(() => {});
+  loadAvailability().catch(() => {});
+  loadDirect().catch(() => {});
+  openLive();
   const trips = await api("/trips?status=assigned,accepted,in_progress,completed");
   $("trips").innerHTML = trips.length ? "" : '<p class="meta">No trips assigned yet.</p>';
   for (const t of trips) {
@@ -326,6 +332,7 @@ function stopTracking() {
   if (ws) { ws.onclose = null; ws.close(); ws = null; }
   releaseScreen();
   $("trackingBar").hidden = true;
+  if (avail?.online) holdScreen(); // still online for direct bookings: keep the screen on for incoming requests
 }
 
 // The server refused points: the trip ended or consent was withdrawn elsewhere. Stop GPS now (privacy rule 4).
@@ -339,7 +346,7 @@ async function trackingRefused(tripId, why) {
 // Browser only. The browser drops the screen lock whenever the page is hidden, so it is re-requested every time
 // the page comes back (B-2 finding: the old code asked once, and after one phone call the screen went to sleep).
 async function holdScreen() {
-  if (NATIVE || tracking === null || wakeLock || document.visibilityState !== "visible") return;
+  if (NATIVE || (tracking === null && !avail?.online) || wakeLock || document.visibilityState !== "visible") return;
   try {
     wakeLock = await navigator.wakeLock?.request("screen");
     wakeLock?.addEventListener("release", () => { wakeLock = null; });
@@ -442,6 +449,241 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+
+// ------------------------------------------------------------ direct farmer bookings (real accounts, real phones)
+// The driver goes online for a district + mandis with their own truck. A farmer's request reaches this phone over the
+// /ws/live socket (instant while the app is open) and as a Web Push notification (when the screen is locked); the
+// 15-second poll of /driver/requests is the fallback AND the check-in that keeps the driver matched.
+let avail = null;
+let liveWs = null;
+let livePending = false;
+let directPoll = null;
+let directTick = null;
+const knownReqs = new Set();
+const POLL_MS = 15000;
+
+async function loadAvailability() {
+  const a = await api("/driver/availability");
+  if (!a || !Array.isArray(a.vehicles)) return;
+  avail = a;
+  renderAvailability();
+  syncOnline();
+}
+
+function renderAvailability(district) {
+  const a = avail;
+  const box = $("availBox");
+  box.hidden = false;
+  if (a.demo_account) {
+    box.innerHTML = '<p class="meta">Direct bookings from farmers are for real accounts. Sign up with your own driver account (your fleet owner adds your phone number) to receive them.</p>';
+    return;
+  }
+  const d = district ?? a.district ?? "";
+  const chosen = new Set(a.mandi_ids);
+  const names = a.mandis.filter((m) => chosen.has(m.id)).map((m) => m.name).join(", ");
+  const status = a.online
+    ? (a.matched_now ? `<p class="status on">● Online: farmers in ${esc(a.district)} sending to ${esc(names)} can book you</p>`
+                     : `<p class="status warn">● Online, but this phone hasn't checked in recently. Keep the app open${a.push_subscribed ? "" : " or turn on notifications"}.</p>`)
+    : '<p class="status off">○ Offline: you won\'t get direct bookings</p>';
+  const push = !("PushManager" in window) || NATIVE
+    ? '<p class="meta">This app can\'t show notifications on this phone: keep it open on screen while online.</p>'
+    : a.push_subscribed && Notification.permission === "granted"
+      ? `<p class="meta">🔔 Notifications on: requests reach this phone even when the screen is locked (you stay matched for ${Math.round(a.stays_online_min / 60)} h without opening the app).</p>`
+      : '<button id="pushBtn" class="secondary" type="button">🔔 Turn on notifications</button><p class="meta">So a request reaches you when the screen is locked.</p>';
+  box.innerHTML = `<h2 style="margin:0 0 6px;font-size:1.1rem">Direct bookings</h2>${status}
+    <label>District <select id="avDistrict"><option value="">Choose…</option>${a.districts.map((x) =>
+      `<option ${x === d ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
+    <div class="meta">Mandis you will deliver to</div>
+    <div class="mandis">${a.mandis.filter((m) => m.district === d).map((m) =>
+      `<label><input type="checkbox" value="${m.id}" ${chosen.has(m.id) ? "checked" : ""}> ${esc(m.name)}</label>`).join("") || '<span class="meta">Choose a district first</span>'}</div>
+    <label>Truck you are driving today <select id="avVehicle">${a.vehicles.length ? a.vehicles.map((v) =>
+      `<option value="${v.id}" ${v.id === a.vehicle_id ? "selected" : ""}>${esc(v.registration)} · ${esc(v.capacity_tons)} t</option>`).join("")
+      : '<option value="">No truck in your company yet</option>'}</select></label>
+    <div class="row">${a.online
+      ? '<button id="avSave" type="button">Save</button><button id="avOff" class="secondary" type="button">Go offline</button>'
+      : '<button id="avOn" type="button">Go online</button>'}</div>
+    <p id="avErr" class="err"></p>${push}`;
+  $("avDistrict").onchange = (e) => renderAvailability(e.target.value);
+  const save = async (online) => {
+    $("avErr").textContent = "";
+    const mandi_ids = [...box.querySelectorAll(".mandis input:checked")].map((i) => +i.value);
+    try {
+      avail = await api("/driver/availability", { method: "PUT", body: JSON.stringify({
+        online, district: $("avDistrict").value || null, mandi_ids, vehicle_id: +$("avVehicle").value || null }) });
+      renderAvailability();
+      syncOnline();
+      if (online) primeSound();
+    } catch (e) { $("avErr").textContent = e.message; }
+  };
+  if ($("avOn")) $("avOn").onclick = () => save(true);
+  if ($("avSave")) $("avSave").onclick = () => save(true);
+  if ($("avOff")) $("avOff").onclick = () => save(false);
+  if ($("pushBtn")) $("pushBtn").onclick = () => enablePush(true);
+}
+
+function syncOnline() {
+  if (avail?.online) {
+    if (!directPoll) directPoll = setInterval(() => loadDirect().catch(() => {}), POLL_MS);
+    holdScreen();
+    openLive();
+  } else {
+    clearInterval(directPoll); directPoll = null;
+    if (tracking === null) releaseScreen();
+  }
+}
+
+function stopDirect() {
+  clearInterval(directPoll); directPoll = null;
+  clearInterval(directTick); directTick = null;
+  avail = null;
+  if (liveWs) { liveWs.onclose = null; liveWs.close(); liveWs = null; }
+  $("availBox").hidden = true;
+  $("directReqs").innerHTML = "";
+}
+
+async function loadDirect() {
+  if (!token) return;
+  const list = await api("/driver/requests");
+  if (!Array.isArray(list)) return;
+  const box = $("directReqs");
+  let fresh = false;
+  box.innerHTML = "";
+  for (const r of list) {
+    if (!knownReqs.has(r.request_id)) { knownReqs.add(r.request_id); fresh = true; }
+    const d = document.createElement("div");
+    d.className = "card req";
+    d.innerHTML = `<h2>🚚 New trip request</h2>
+      <b>${esc(r.farmer)}</b>${r.village ? ` · ${esc(r.village)}` : ""}${r.farmer_district ? ` (${esc(r.farmer_district)})` : ""}
+      <dl><dt>Produce</dt><dd>${esc(r.crop)} · ${esc(r.tons)} t${r.grade ? ` · ${esc(r.grade)}` : ""}</dd>
+      <dt>Deliver to</dt><dd>${esc(r.mandi)} (${esc(r.mandi_district)})</dd>
+      <dt>Distance</dt><dd>~${esc(Math.round(r.road_km))} km farm → mandi</dd>
+      <dt>Your pay (est.)</dt><dd>₹${esc(Number(r.driver_pay_estimate).toLocaleString("en-IN"))}</dd>
+      <dt>Answer within</dt><dd class="countdown" data-exp="${esc(r.expires_at)}">–</dd></dl>
+      <a class="meta" target="_blank" rel="noreferrer" href="https://www.openstreetmap.org/?mlat=${esc(r.pickup_lat)}&mlon=${esc(r.pickup_lon)}#map=14/${esc(r.pickup_lat)}/${esc(r.pickup_lon)}">Farm location on the map</a>
+      <div class="row" style="margin-top:10px"></div><p class="err"></p>`;
+    const acc = document.createElement("button");
+    acc.textContent = "Accept";
+    const dec = document.createElement("button");
+    dec.textContent = "Decline";
+    dec.className = "secondary";
+    const err = d.querySelector(".err");
+    acc.onclick = async () => {
+      acc.disabled = dec.disabled = true;
+      try {
+        const trip = await api(`/driver/requests/${r.request_id}/accept`, { method: "POST" });
+        notice("Trip accepted. The farmer can see you now. Tick location sharing and start when you leave.");
+        await loadTrips();
+        openTrip(trip.id);
+      } catch (e) { err.textContent = e.message; loadDirect().catch(() => {}); }
+    };
+    dec.onclick = async () => {
+      acc.disabled = dec.disabled = true;
+      try { await api(`/driver/requests/${r.request_id}/decline`, { method: "POST" }); } catch (e) { err.textContent = e.message; }
+      loadDirect().catch(() => {});
+    };
+    d.querySelector(".row").append(acc, dec);
+    box.appendChild(d);
+  }
+  if (fresh) alertDriver(list[0]);
+  tickCountdowns();
+  if (list.length && !directTick) directTick = setInterval(tickCountdowns, 1000);
+  if (!list.length) { clearInterval(directTick); directTick = null; }
+}
+
+function tickCountdowns() {
+  let expired = false;
+  for (const el of document.querySelectorAll("[data-exp]")) {
+    const left = Math.max(0, Math.round((new Date(el.dataset.exp) - Date.now()) / 1000));
+    el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    if (left === 0) expired = true;
+  }
+  if (expired) loadDirect().catch(() => {});
+}
+
+// Sound + vibration for a new request. Browsers allow audio only after a tap, so "Go online" primes it.
+let audioCtx = null;
+function primeSound() {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume?.(); } catch { audioCtx = null; }
+}
+function alertDriver(r) {
+  try { navigator.vibrate?.([400, 200, 400, 200, 400]); } catch {}
+  try {
+    if (audioCtx) {
+      for (const [at, f] of [[0, 880], [0.25, 660], [0.5, 880]]) {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = f; o.connect(g); g.connect(audioCtx.destination);
+        g.gain.setValueAtTime(0.25, audioCtx.currentTime + at);
+        o.start(audioCtx.currentTime + at); o.stop(audioCtx.currentTime + at + 0.2);
+      }
+    }
+  } catch {}
+  if (r && document.visibilityState === "visible") notice(`New trip request: ${r.crop} ${r.tons} t → ${r.mandi}`);
+}
+
+// /ws/live: the server pushes "trip_request" / "trip_request_closed" on this driver's own channel.
+async function openLive() {
+  if (liveWs || livePending || !token) return;
+  livePending = true;
+  let ticket = null;
+  try { ticket = (await api("/auth/ws-ticket", { method: "POST" })).ticket; } catch { ticket = null; }
+  livePending = false;
+  if (!token || liveWs) return;
+  if (!ticket) { setTimeout(openLive, 10000); return; }
+  try { liveWs = new WebSocket(API.replace(/^http/, "ws") + `/ws/live?ticket=${encodeURIComponent(ticket)}`); }
+  catch { liveWs = null; setTimeout(openLive, 10000); return; }
+  liveWs.onmessage = (m) => {
+    let msg; try { msg = JSON.parse(m.data); } catch { return; }
+    if (msg.type === "trip_request" || msg.type === "trip_request_closed") loadDirect().catch(() => {});
+  };
+  liveWs.onclose = () => { liveWs = null; if (token) setTimeout(openLive, 5000); };
+}
+
+// Web Push: subscribe this phone (the API generates its VAPID key once). `ask` = the driver tapped the button.
+function b64urlToBytes(s) {
+  const pad = "=".repeat((4 - (s.length % 4)) % 4);
+  const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+async function enablePush(ask) {
+  if (NATIVE || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+  try {
+    if (ask && Notification.permission !== "granted") {
+      if (await Notification.requestPermission() !== "granted") {
+        notice("Notifications are blocked. Allow them in the browser's site settings, or keep this app open while online.", true);
+        return;
+      }
+    }
+    if (Notification.permission !== "granted") return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const { key } = await api("/push/vapid-public-key");
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(key) });
+    }
+    await api("/push/subscribe", { method: "POST", body: JSON.stringify(sub.toJSON()) });
+    if (ask) { notice("Notifications are on for trip requests."); loadAvailability().catch(() => {}); }
+  } catch (e) { if (ask) notice("Couldn't turn on notifications: " + e.message, true); }
+}
+function dropPush() {
+  if (!token || NATIVE || !("serviceWorker" in navigator)) return;
+  const t = token;
+  navigator.serviceWorker.ready.then((reg) => reg.pushManager?.getSubscription()).then((sub) => {
+    if (!sub) return;
+    fetch(API + "/push/unsubscribe", { method: "POST", keepalive: true, body: JSON.stringify({ endpoint: sub.endpoint }),
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + t } }).catch(() => {});
+  }).catch(() => {});
+}
+// back on screen (after a lock / a notification tap): fetch requests at once and re-take the screen lock
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !token) return;
+  if (avail?.online) { holdScreen(); loadDirect().catch(() => {}); openLive(); }
+});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type === "open_requests" && token) loadTrips().catch(() => {});
+  });
+}
+
 $("openSettings").onclick = () => BG?.openSettings();
 $("checkWeb").hidden = NATIVE;
 $("checkNative").hidden = !NATIVE;
@@ -449,4 +691,4 @@ $("footWeb").hidden = NATIVE;
 // The Android app serves these files itself; a service worker would only get in the way there.
 if (!NATIVE && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 netState();
-if (token) loadTrips().catch(() => show("loginView")); else show("loginView");
+if (token) { loadTrips().catch(() => show("loginView")); enablePush(false); } else show("loginView");

@@ -59,6 +59,18 @@
     "payment_recorded": {
       "title": "Payment recorded for lot #{lot}",
       "body": "Rs {amount} paid by {method} (ref {ref}). Please confirm on the lot page once you have received it."
+    },
+    "trip_request": {
+      "title": "New trip request: {crop} {tons} t to {mandi}",
+      "body": "{farmer} near {village} needs a truck to {mandi} (~{km} km). Open the driver app to accept or decline within 5 minutes."
+    },
+    "driver_accepted": {
+      "title": "Driver found for lot #{lot}",
+      "body": "{driver} ({vehicle}) accepted your trip to {mandi}. You can call them on {phone} and track the truck live once they start."
+    },
+    "no_driver": {
+      "title": "No driver for lot #{lot} yet",
+      "body": "{reason} You can try again, or book a transport company."
     }
   },
   "kn": {
@@ -113,6 +125,18 @@
     "payment_recorded": {
       "title": "ಲಾಟ್ #{lot}ಗೆ ಪಾವತಿ ದಾಖಲಾಗಿದೆ",
       "body": "{method} ಮೂಲಕ ರೂ {amount} ಪಾವತಿಸಲಾಗಿದೆ (ಉಲ್ಲೇಖ {ref}). ಹಣ ಬಂದ ನಂತರ ಲಾಟ್ ಪುಟದಲ್ಲಿ ದೃಢೀಕರಿಸಿ."
+    },
+    "trip_request": {
+      "title": "ಹೊಸ ಟ್ರಿಪ್ ವಿನಂತಿ: {crop} {tons} ಟನ್ {mandi}ಗೆ",
+      "body": "{village} ಬಳಿಯ {farmer} ಅವರಿಗೆ {mandi}ಗೆ (~{km} ಕಿ.ಮೀ) ಲಾರಿ ಬೇಕು. 5 ನಿಮಿಷಗಳಲ್ಲಿ ಒಪ್ಪಲು ಅಥವಾ ನಿರಾಕರಿಸಲು ಡ್ರೈವರ್ ಆಪ್ ತೆರೆಯಿರಿ."
+    },
+    "driver_accepted": {
+      "title": "ಲಾಟ್ #{lot}ಗೆ ಡ್ರೈವರ್ ಸಿಕ್ಕಿದ್ದಾರೆ",
+      "body": "{driver} ({vehicle}) ಅವರು {mandi}ಗೆ ನಿಮ್ಮ ಟ್ರಿಪ್ ಒಪ್ಪಿಕೊಂಡಿದ್ದಾರೆ. {phone}ಗೆ ಕರೆ ಮಾಡಬಹುದು; ಹೊರಟ ನಂತರ ಲಾರಿಯನ್ನು ಲೈವ್ ಟ್ರ್ಯಾಕ್ ಮಾಡಬಹುದು."
+    },
+    "no_driver": {
+      "title": "ಲಾಟ್ #{lot}ಗೆ ಇನ್ನೂ ಡ್ರೈವರ್ ಸಿಕ್ಕಿಲ್ಲ",
+      "body": "{reason} ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಸಾರಿಗೆ ಕಂಪನಿಯನ್ನು ಬುಕ್ ಮಾಡಿ."
     }
   },
   "hi": {
@@ -167,6 +191,18 @@
     "payment_recorded": {
       "title": "लॉट #{lot} का भुगतान दर्ज",
       "body": "{method} से रु {amount} का भुगतान (संदर्भ {ref})। पैसा मिलने पर लॉट पेज पर पुष्टि करें।"
+    },
+    "trip_request": {
+      "title": "नया ट्रिप अनुरोध: {crop} {tons} टन {mandi} तक",
+      "body": "{village} के पास {farmer} को {mandi} (~{km} किमी) के लिए ट्रक चाहिए। 5 मिनट के अंदर स्वीकार या मना करने के लिए ड्राइवर ऐप खोलें।"
+    },
+    "driver_accepted": {
+      "title": "लॉट #{lot} के लिए ड्राइवर मिल गया",
+      "body": "{driver} ({vehicle}) ने {mandi} तक आपकी ट्रिप स्वीकार की। आप उन्हें {phone} पर कॉल कर सकते हैं; शुरू होने पर ट्रक को लाइव ट्रैक करें।"
+    },
+    "no_driver": {
+      "title": "लॉट #{lot} के लिए अभी कोई ड्राइवर नहीं",
+      "body": "{reason} फिर से कोशिश करें या किसी ट्रांसपोर्ट कंपनी को बुक करें।"
     }
   },
   "_review": {
@@ -209,6 +245,15 @@
       },
       "payment_recorded": {
         "status": "machine"
+      },
+      "trip_request": {
+        "status": "machine"
+      },
+      "driver_accepted": {
+        "status": "machine"
+      },
+      "no_driver": {
+        "status": "machine"
       }
     },
     "hi": {
@@ -249,6 +294,15 @@
         "status": "machine"
       },
       "payment_recorded": {
+        "status": "machine"
+      },
+      "trip_request": {
+        "status": "machine"
+      },
+      "driver_accepted": {
+        "status": "machine"
+      },
+      "no_driver": {
         "status": "machine"
       }
     }

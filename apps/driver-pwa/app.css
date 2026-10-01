@@ -40,3 +40,16 @@ video { width: 100%; border-radius: 12px; margin: 8px 0; }
 .notice { background: #dcfce7; color: #14532d; border-radius: 10px; padding: 10px 12px; font-weight: 600; }
 .check { margin: 4px 0 0; padding-left: 20px; } .check li { margin: 6px 0; font-size: .92rem; }
 .notice.warn { background: #fef3c7; color: #92400e; }
+/* direct bookings: availability + live trip requests */
+select { width: 100%; padding: 12px; font-size: 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); }
+.mandis { display: grid; gap: 6px; margin: 6px 0 10px; }
+.mandis label { display: flex; gap: 10px; align-items: center; margin: 0; color: var(--fg); font-size: .95rem; }
+.status { font-weight: 700; margin: 0 0 8px; }
+.status.on { color: #15803d; } .status.off { color: var(--muted); } .status.warn { color: var(--warn); }
+.req { border: 2px solid var(--live); animation: glow 1.4s 3; }
+@keyframes glow { 50% { box-shadow: 0 0 0 6px rgba(220,38,38,.25); } }
+.req h2 { font-size: 1.1rem; margin: 0 0 6px; }
+.req dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0; font-size: .95rem; }
+.req dt { color: var(--muted); }
+.req .row button { flex: 1; }
+.countdown { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--live); }

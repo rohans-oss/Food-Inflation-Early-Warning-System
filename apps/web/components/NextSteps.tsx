@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { ago, dateTime, day, inr, num, tons } from "@/lib/format";
 
+import { DirectRequest } from "./DirectRequest";
 import { Button, Card, ErrorNote, inputCls, ProvenanceBadge, useAction, useApi } from "./ui";
 
 const STEPS: [key: string, label: string, hint: string][] = [
@@ -33,6 +34,10 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
   const p = d.pickup;
   const l = lot.data;
   const current = STEPS.findIndex(([k]) => !d.done[k]);
+  const dr = d.driver_request;
+  const drOpen = dr?.status === "notified";
+  const direct = dr?.status === "accepted" && dr.trip && d.mandi_is_final ? dr : null;
+  const companyOpen = b && !["declined", "cancelled"].includes(b.status);
   const refresh = () => { ns.reload(); lot.reload(); onChanged(); };
   const post = (path: string, body?: unknown) => act.run(async () => { await api(path, { method: "POST", body }); refresh(); });
 
@@ -71,11 +76,25 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
           </div>
 
           {/* 1. choose a transporter and a pickup time */}
-          {d.can_book && (!b || ["declined", "cancelled"].includes(b.status)) && (
+          {d.can_request_driver && !companyOpen && (
+            <DirectRequest lotId={lotId} mandi={d.mandi} request={dr} busy={act.busy} post={post} onLive={refresh} />
+          )}
+
+          {/* direct booking accepted: the driver, the truck, then the same handover as any trip */}
+          {direct && (
+            <div className="rounded-xl border border-line p-4">
+              <p className="font-semibold">Driver found · trip #{direct.trip.id}</p>
+              <p className="text-sm text-ink2">{tons(direct.load_tons)} to {direct.mandi} · ~{num(direct.estimated_km, 0)} km</p>
+              {p && <Handover p={p} lotId={lotId} code={code} setCode={setCode} post={post} busy={act.busy} mandi={direct.mandi}
+                done={d.done} confirmedBy="Accepted by the driver" confirmedValue="✓ Direct booking" />}
+            </div>
+          )}
+
+          {d.can_book && !drOpen && (!b || ["declined", "cancelled"].includes(b.status)) && (
             <div>
               {b && <p className="mb-3 rounded-lg border border-critical/40 px-3 py-2 text-sm text-critical">
                 Your booking with {b.fleet} was {b.status}{b.reason ? `: ${b.reason}` : ""}. Choose another transporter or time.</p>}
-              <h3 className="mb-1 font-semibold">Choose a transporter</h3>
+              <h3 className="mb-1 font-semibold">Or book a transport company</h3>
               {d.fleets.length > 1 && <p className="mb-2 text-xs text-muted">{d.fleets.length} transporters near your farm, cheapest first. The fare includes the truck&apos;s drive from its base to your farm and back.</p>}
               <div className="space-y-3">
                 {d.fleets.length === 0 && <p className="text-sm text-muted">No transporters have registered trucks yet.</p>}
@@ -146,39 +165,8 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
                   Waiting for {b.fleet} to confirm and assign a driver…
                 </p>
               )}
-              {p && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <Info label="Confirmed by transporter" value={`✓ ${b.fleet.replace(" (demo)", "")}`} />
-                  <Info label="Driver" value={p.driver ?? "–"} sub={p.driver_phone ?? undefined} />
-                  <Info label="Truck" value={p.vehicle} sub={`${num(p.capacity_tons, 1)} t`} />
-                </div>
-              )}
-              {p && !p.picked_up && (
-                <div className="mt-4 rounded-lg border border-brand/40 bg-brand/5 p-4">
-                  <p className="font-semibold">
-                    {p.arrived ? `${p.driver ?? "The driver"} has reached your farm` : p.started ? "The truck is on the way to your farm" : "The driver will start the trip soon"}
-                  </p>
-                  <p className="mt-1 text-sm text-ink2">
-                    {p.arrived ? "Ask the driver for the 4-digit pickup code and enter it to hand over your load."
-                      : "Follow it on the map. When it arrives, ask the driver for the 4-digit pickup code and enter it here."}
-                  </p>
-                  {p.started && (
-                    <form className="mt-3 flex flex-wrap items-center gap-2"
-                      onSubmit={(e) => { e.preventDefault(); post(`/lots/${lotId}/confirm-pickup`, { code }); setCode(""); }}>
-                      <input className={`${inputCls} w-32 text-center font-mono text-lg tracking-[0.4em]`} inputMode="numeric" maxLength={4}
-                        placeholder="••••" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} aria-label="Pickup code" />
-                      <Button type="submit" disabled={act.busy || code.length !== 4}>Confirm pickup</Button>
-                      {p.code_tries_left < 5 && <span className="text-xs text-muted">{p.code_tries_left} tries left</span>}
-                    </form>
-                  )}
-                  {p.demo_code && p.started && (
-                    <p className="mt-3 text-xs text-muted">Demo: the driver tells you the code <b className="font-mono text-ink">{p.demo_code}</b></p>
-                  )}
-                </div>
-              )}
-              {p?.picked_up && !d.done.at_mandi && (
-                <p className="mt-3 text-sm"><b className="text-brand">✓ Load handed over</b> · on the way to {b.mandi}. Follow it on the live map.</p>
-              )}
+              {p && <Handover p={p} lotId={lotId} code={code} setCode={setCode} post={post} busy={act.busy} mandi={b.mandi}
+                done={d.done} confirmedBy="Confirmed by transporter" confirmedValue={`✓ ${b.fleet.replace(" (demo)", "")}`} />}
             </div>
           )}
           {d.via_fpo && !b && <p className="text-sm">Your FPO has put this lot in a shipment. You&apos;ll get an alert when the truck is on its way.</p>}
@@ -213,6 +201,48 @@ export function NextSteps({ lotId, tonsLot, onChanged }: { lotId: number; tonsLo
         </div>
       )}
     </Card>
+  );
+}
+
+/** Driver + truck, then the handover at the farm (the driver's 4-digit code), shared by company and direct bookings. */
+function Handover({ p, lotId, code, setCode, post, busy, mandi, done, confirmedBy, confirmedValue }: {
+  p: any; lotId: number; code: string; setCode: (c: string) => void; post: (path: string, body?: unknown) => void;
+  busy: boolean; mandi: string; done: Record<string, boolean>; confirmedBy: string; confirmedValue: string;
+}) {
+  return (
+    <>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <Info label={confirmedBy} value={confirmedValue} />
+        <Info label="Driver" value={p.driver ?? "–"} sub={p.driver_phone ? <a className="underline" href={`tel:${p.driver_phone}`}>{p.driver_phone}</a> : undefined} />
+        <Info label="Truck" value={p.vehicle} sub={`${num(p.capacity_tons, 1)} t`} />
+      </div>
+      {!p.picked_up && (
+        <div className="mt-4 rounded-lg border border-brand/40 bg-brand/5 p-4">
+          <p className="font-semibold">
+            {p.arrived ? `${p.driver ?? "The driver"} has reached your farm` : p.started ? "The truck is on the way to your farm" : "The driver will start the trip soon"}
+          </p>
+          <p className="mt-1 text-sm text-ink2">
+            {p.arrived ? "Ask the driver for the 4-digit pickup code and enter it to hand over your load."
+              : "Follow it on the map. When it arrives, ask the driver for the 4-digit pickup code and enter it here."}
+          </p>
+          {p.started && (
+            <form className="mt-3 flex flex-wrap items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); post(`/lots/${lotId}/confirm-pickup`, { code }); setCode(""); }}>
+              <input className={`${inputCls} w-32 text-center font-mono text-lg tracking-[0.4em]`} inputMode="numeric" maxLength={4}
+                placeholder="••••" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} aria-label="Pickup code" />
+              <Button type="submit" disabled={busy || code.length !== 4}>Confirm pickup</Button>
+              {p.code_tries_left < 5 && <span className="text-xs text-muted">{p.code_tries_left} tries left</span>}
+            </form>
+          )}
+          {p.demo_code && p.started && (
+            <p className="mt-3 text-xs text-muted">Demo: the driver tells you the code <b className="font-mono text-ink">{p.demo_code}</b></p>
+          )}
+        </div>
+      )}
+      {p.picked_up && !done.at_mandi && (
+        <p className="mt-3 text-sm"><b className="text-brand">✓ Load handed over</b> · on the way to {mandi}. Follow it on the live map.</p>
+      )}
+    </>
   );
 }
 

@@ -334,3 +334,21 @@ geofence_events, mandis, prices, arrivals, weather, forecasts, alerts, data_sour
   accepted). `trip_out` adds `pickups` (farmer details) for the trip's driver / fleet / FPO. Demo companies wait
   `DEMO_HUMAN_WAIT_S` for a person to accept before a demo driver does.
 - Geofence: `reached_pickup` = truck at the farm before the pickup QR; `left_pickup_zone` fires only after pickup scan.
+- Direct booking (2026-10-01, user request; rules 30-34 below): `routers/direct.py`. Drivers go online via
+  `PUT /driver/availability` (district + mandis in `driver_availability(_mandis)`, a REAL truck of their company);
+  farmers `POST /lots/{id}/driver-request` -> `matching_drivers` (online, same district, serves the mandi, truck fits,
+  no active trip, seen within 10 min or 8 h with Web Push) -> `trip_request_offers` + `user:{id}` WebSocket message +
+  `webpush.send_to_user` + in-app alert. First accept wins (conditional UPDATE on `trip_requests.status`); the trip is
+  made by the existing make_shipment / make_trip(channel="direct") and moved to "accepted". Demo accounts and sample
+  trucks are refused, the autopilot skips `booking_channel == "direct"`. `trips.booking_channel` = fpo_fleet |
+  farmer_company | direct | demo (Admin `/admin/booking-channels`). VAPID keys: env or generated once into
+  app_settings (`webpush.vapid_keys`); tests replace `webpush.SENDER`. Requests expire lazily (`expire_due`).
+
+## Update: direct farmer-to-driver booking for real-world field testing
+30. This flow must work with REAL accounts, REAL district/mandi selection, and REAL phone GPS — not the simulator.
+    is_simulated must be false throughout this flow.
+31. Do not remove or break the existing FPO-mediated booking flow. This is an ADDITIONAL path.
+32. Real-time notification must reach the driver's phone while the app is open (and ideally backgrounded) within a
+    few seconds of the farmer's booking request — not require a manual refresh.
+33. Farmer and driver see one source of truth for the trip (same trip ID, same status) — no divergent local state.
+34. Plan first, wait for approval, then build.

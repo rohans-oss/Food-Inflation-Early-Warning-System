@@ -427,6 +427,8 @@ class Trip(Base):
     # Pre-V3 B-2: the driver's phone said location stopped (e.g. screen off in the browser app); cleared by the next fix
     tracking_paused_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     tracking_pause_reason: Mapped[str | None] = mapped_column(String(24))
+    # how the trip was booked: fpo_fleet | farmer_company | direct (farmer -> online driver) | demo (autopilot / sample)
+    booking_channel: Mapped[str | None] = mapped_column(String(16), index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     vehicle: Mapped[Vehicle] = relationship()
@@ -579,3 +581,81 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+# ------------------------------------------------------------------ direct farmer -> driver booking (field test)
+
+
+class DriverAvailability(Base):
+    """A driver's "online" switch for direct farmer bookings: the district they work in today, the truck they drive and
+    (in driver_availability_mandis) the mandis they will deliver to. Matched only while `online` and recently seen."""
+
+    __tablename__ = "driver_availability"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    online: Mapped[bool] = mapped_column(Boolean, default=False)
+    district: Mapped[str | None] = mapped_column(String(80))
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class DriverAvailabilityMandi(Base):
+    __tablename__ = "driver_availability_mandis"
+    user_id: Mapped[int] = mapped_column(ForeignKey("driver_availability.user_id"), primary_key=True)
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"), primary_key=True)
+
+
+class TripRequest(Base):
+    """A farmer asking online drivers for a truck (no FPO, no company booking). Every matching driver is offered it
+    (trip_request_offers); the first to accept gets it and the trip is created at "accepted".
+    status: requested -> notified -> accepted | declined | expired | cancelled ; requested -> no_drivers"""
+
+    __tablename__ = "trip_requests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lot_id: Mapped[int] = mapped_column(ForeignKey("lots.id"), index=True)
+    farmer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    district: Mapped[str] = mapped_column(String(80))
+    mandi_id: Mapped[int] = mapped_column(ForeignKey("mandis.id"))
+    load_tons: Mapped[float] = mapped_column(Float)
+    estimated_km: Mapped[float | None] = mapped_column(Float)
+    estimated_fare: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(12), default="requested", index=True)
+    reason: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    notified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    accepted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
+
+
+class TripRequestOffer(Base):
+    """One driver offered one request: when they were notified (websocket / push), saw it and answered."""
+
+    __tablename__ = "trip_request_offers"
+    __table_args__ = (UniqueConstraint("request_id", "driver_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("trip_requests.id"), index=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    status: Mapped[str] = mapped_column(String(12), default="notified")  # notified|seen|declined|accepted|withdrawn
+    push_sent: Mapped[int] = mapped_column(Integer, default=0)  # web-push messages handed to the push service
+    notified_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    responded_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class PushSubscription(Base):
+    """A browser's Web Push subscription (driver phones), so a request reaches a locked phone."""
+
+    __tablename__ = "push_subscriptions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text)
+    endpoint_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_ok_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    failures: Mapped[int] = mapped_column(Integer, default=0)

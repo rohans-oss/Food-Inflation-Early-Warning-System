@@ -61,6 +61,7 @@ def trip_out(db: Session, t: Trip, viewer: User | None = None) -> dict:
         "planned_duration_min": t.planned_duration_min,
         "route_source": t.route_source,
         "tracking_on": t.status == "in_progress" and t.consent_given_at is not None,
+        "booking_channel": t.booking_channel,
     }
     if viewer is not None and viewer.role == "driver" and viewer.id == t.driver_id:
         # The driver's phone shows this as a QR for the trader to scan at the mandi.
@@ -99,7 +100,8 @@ def assign_trip(body: TripIn, db: Session = Depends(get_db), user: User = Depend
     return trip_out(db, t, user)
 
 
-def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver_id: int, **audit) -> Trip:
+def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver_id: int, channel: str | None = None,
+              **audit) -> Trip:
     """Assign vehicle + driver to a booked shipment (no commit). Used by POST /trips and by accepting a V3-1
     return-load proposal, so both go through the same checks."""
     body = TripIn(shipment_id=shipment_id, vehicle_id=vehicle_id, driver_id=driver_id)
@@ -135,10 +137,15 @@ def make_trip(db: Session, user: User, shipment_id: int, vehicle_id: int, driver
         planned_distance_km=r.distance_km, planned_duration_min=r.duration_min, route_geometry=r.geometry,
         route_source=r.source, remaining_km=r.distance_km,
     )
+    from ..models import TransportBooking
+
+    t.booking_channel = channel or ("demo" if t.is_simulated else "farmer_company" if db.scalar(
+        select(TransportBooking.id).where(TransportBooking.shipment_id == sh.id)) else "fpo_fleet")
     db.add(t)
     db.flush()
     db.add(AuditLog(entity="trip", entity_id=t.id, from_state=None, to_state="assigned", actor_id=user.id,
-                    details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source, **audit}))
+                    details={"vehicle": v.registration, "driver_id": d.id, "route_source": r.source,
+                             "booking_channel": t.booking_channel, **audit}))
     from .bookings import on_trip_assigned  # a farmer's booking is confirmed by assigning its truck
 
     on_trip_assigned(db, sh, t)

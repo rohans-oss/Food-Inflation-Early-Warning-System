@@ -98,3 +98,59 @@ real-trip segment. Use two browser windows side by side (farmer | driver phone m
 | 2:45–3:00 | Admin | Freshness panel and the backtest table. "Walk-forward backtest against a naive baseline." If the model is still synthetic, **say so on camera**. |
 
 Rules for the video: any simulated truck on screen must show its **Simulated** badge; don't crop it out.
+
+## Two phones: direct farmer → driver booking (Kolar / Kolar APMC)
+
+The farmer books a driver directly (no FPO, no transport-company slot). Every driver who is **online** in the same
+district for that mandi gets the request on their phone within a second or two; the first to accept gets the trip,
+and from there it is the normal trip (pickup code, live GPS, delivery QR, weighing, payment). Everything in this flow
+is real: demo (`@demo.agripulse`) accounts and sample trucks are refused, every trip is `is_simulated = false`, and
+Admin lists it under the channel **Direct: farmer → online driver**.
+
+Addresses on the hosted site: web app `https://agripulse-demo.onrender.com`, driver phone app
+`https://agripulse-api-0ir4.onrender.com/driver/`. The free host sleeps when idle: open the web app a minute before
+you start and wait until it loads.
+
+### Once, before the test (≈10 min)
+
+| Who | Step |
+|---|---|
+| Fleet owner (either of you, on a laptop) | Sign up as **Fleet owner**, company name e.g. "Kolar Lorry Service", district **Kolar**. On the Fleet page, **Add driver** with the driver's name and **mobile number**. |
+| Driver (phone A) | Sign up as **Driver** with the **same mobile number**, district **Kolar**, your **truck number** and capacity. (Only numbers a fleet owner added can sign up.) |
+| Farmer (phone B) | Sign up as **Farmer** (anyone can). |
+
+### On the day
+
+| # | Phone | What to do | What you should see, and when |
+|---|---|---|---|
+| 1 | A (driver) | Open the driver app (`…/driver/`), sign in, **Add to Home Screen**, open it from the icon. Under **Direct bookings**: district **Kolar**, tick **Kolar APMC**, pick your truck, **Go online**. Tap **🔔 Turn on notifications** and allow. | Green line "● Online: farmers in Kolar sending to Kolar APMC can book you" and "🔔 Notifications on". |
+| 2 | B (farmer) | Web app → Farmer → register a lot (crop, tonnes no bigger than the truck, **Use my location** at the loading spot). In the mandi table press **Sell here** on **Kolar APMC**. | Next steps shows **Request a driver near you** with district Kolar and "**1 driver is online for Kolar APMC right now**". |
+| 3 | B | Press **Request a driver**. | "Asking 1 driver near you…" with a 5-minute countdown. |
+| 4 | A | Nothing: wait. | **Within 1–2 s** (app open): a red **New trip request** card with farmer, village, crop, tonnes, mandi, distance and your estimated pay; the phone vibrates. **Screen locked:** a system notification "New trip: …" usually within 1–5 s; tap it to open the app. |
+| 5 | A | Press **Accept** (or **Decline** to test that path: the farmer sees "Every driver who was asked said no"). | The trip opens with the farmer's name and phone and your **4-digit pickup code**. |
+| 6 | B | Nothing: wait. | **Within 1–2 s**: "Driver found · trip #N" with the driver's name, phone and truck number. |
+| 7 | A | Tick location sharing, **Start trip**, drive (or walk) to the farmer. Keep the app **on screen** (browser app) or use the Android app. | Red **TRACKING ON** bar on A. On B the truck moves on the live map with an ETA. |
+| 8 | A + B together | Driver tells the farmer the 4-digit code; the farmer types it under **Confirm pickup** (or the driver scans the pickup QR on the farmer's screen). | B: "✓ Load handed over"; the lot is in transit. |
+| 9 | — | From here it is the normal flow (geofence at the mandi, delivery QR, weighing, payment). | |
+
+Test the edge case too: with the driver **offline** (step 1 "Go offline"), the farmer's step 3 shows at once
+"No drivers are currently available for Kolar APMC (Kolar)." — nothing hangs.
+
+### What to write down
+
+- Admin → **Trips by booking channel** → *Latest direct requests*: "First seen" (seconds from sending to the driver's
+  phone fetching the request) and "Answered". Note them for app-open and screen-locked runs separately.
+- Whether the notification arrived with the screen locked, and after how long (phone model, Android version,
+  battery saver on/off).
+
+### Known limits (say them, don't hide them)
+
+- **Browser app, screen locked:** the live socket closes, so the request comes only through the Web Push
+  notification. Android Chrome usually delivers it in a few seconds; **battery saver can delay it** and nothing on our
+  side can force it. iPhone: only if the app was added to the Home Screen (iOS 16.4+).
+- **Without notifications** a driver stays matched for 10 minutes after the app last checked in (it checks in every
+  15 s while open); **with notifications** for 8 hours. Going offline is always one tap.
+- **GPS with the screen locked** still stops in the browser app (B-2); use the Android app for the drive, or keep the
+  screen on. The Android app is built in CI but not yet field-tested, so treat its numbers as the first measurement.
+- One request is offered to **every** matching driver at once; the first accept wins and the others see it disappear.
+  It expires after 5 minutes if nobody answers.

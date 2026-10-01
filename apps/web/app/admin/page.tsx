@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { BookingChannels } from "@/components/BookingChannels";
 import { ConnectedMandis } from "@/components/ConnectedMandis";
 import { MandiLocations } from "@/components/MandiLocations";
 import { ModuleStatus } from "@/components/ModuleStatus";
@@ -182,6 +183,8 @@ export default function Admin() {
           ))}
         </Table>
       </Card>
+
+      <BookingChannels />
 
       <Card title={t("connectedMandis")}>
         {mandiList.data && <ConnectedMandis mandis={mandiList.data.map((m) => ({ id: m.id, name: m.name }))} />}

@@ -401,6 +401,8 @@ def start_demo_shipment(shipment_id: int, auto_pickup: bool = False, start_delay
         sh = db.get(Shipment, shipment_id)
         if sh is None or not is_demo_org(db.get(Organization, sh.fleet_org_id) if sh.fleet_org_id else None):
             return False
+        if db.scalar(select(Trip.id).where(Trip.shipment_id == shipment_id, Trip.booking_channel == "direct")):
+            return False  # a direct farmer -> driver trip is driven by a real phone, never the autopilot
     DEMO_TASKS[shipment_id] = threading.Thread(target=_autopilot, args=(shipment_id, auto_pickup, start_delay),
                                                name=f"demo-sh-{shipment_id}", daemon=True)
     DEMO_TASKS[shipment_id].start()
@@ -508,6 +510,7 @@ def _demo_prepare_shipment(db: Session, shipment_id: int) -> tuple[int, tuple[fl
         sh.is_simulated = True
         trip = make_trip(db, owner, sh.id, v.id, driver.id, via="demo_autopilot")
     trip.is_simulated = True
+    trip.booking_channel = "demo"
     if trip.status == "assigned":
         move(db, trip, "accepted", trip.driver_id, via="demo_autopilot")
     trip.consent_given_at = trip.consent_given_at or now
